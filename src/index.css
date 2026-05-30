@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html { -webkit-tap-highlight-color: transparent; }
+  body { @apply bg-slate-50 text-slate-900 antialiased; }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-brand-700 text-white px-4 py-2.5 rounded-lg font-medium text-sm
+           active:bg-brand-900 disabled:opacity-50 disabled:cursor-not-allowed
+           transition-colors touch-manipulation;
+  }
+  .btn-secondary {
+    @apply bg-white text-brand-700 border border-brand-500 px-4 py-2.5 rounded-lg
+           font-medium text-sm active:bg-brand-50 transition-colors touch-manipulation;
+  }
+  .card {
+    @apply bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden;
+  }
+  .badge-paid    { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800; }
+  .badge-pending { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800; }
+  .badge-partial { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800; }
+  .badge-review  { @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800; }
+}
