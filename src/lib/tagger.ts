@@ -57,7 +57,11 @@ export interface TagResult {
   confidence: 'Auto' | 'REVIEW'
 }
 
-export function tagTransaction(description: string, crDr: string): TagResult {
+export function tagTransaction(
+  description: string,
+  crDr: string,
+  dynamicUpiMap: Record<string, string> = {},
+): TagResult {
   const upper = description.toUpperCase()
   const lower = description.toLowerCase()
   const isCorpus = /corpus/i.test(description)
@@ -65,40 +69,32 @@ export function tagTransaction(description: string, crDr: string): TagResult {
   // 1. Direct flat code match
   for (const flat of FLAT_CODES) {
     if (new RegExp(`(?<![A-Z0-9])${flat}(?![A-Z0-9])`).test(upper)) {
-      return {
-        flatCode: flat,
-        category: isCorpus ? 'Corpus' : 'Maintenance',
-        corpus: isCorpus ? 'YES' : 'NO',
-        confidence: 'Auto',
-      }
+      return { flatCode: flat, category: isCorpus ? 'Corpus' : 'Maintenance', corpus: isCorpus ? 'YES' : 'NO', confidence: 'Auto' }
     }
   }
 
-  // 2. UPI sender match
+  // 2. Dynamic UPI map (from residents table — highest priority after flat code)
+  for (const [sender, flat] of Object.entries(dynamicUpiMap)) {
+    if (lower.includes(sender.toLowerCase())) {
+      return { flatCode: flat, category: isCorpus ? 'Corpus' : 'Maintenance', corpus: isCorpus ? 'YES' : 'NO', confidence: 'Auto' }
+    }
+  }
+
+  // 3. Hardcoded UPI sender map (fallback)
   for (const [sender, flat] of Object.entries(UPI_SENDER_MAP)) {
     if (lower.includes(sender.toLowerCase())) {
-      return {
-        flatCode: flat,
-        category: isCorpus ? 'Corpus' : 'Maintenance',
-        corpus: isCorpus ? 'YES' : 'NO',
-        confidence: 'Auto',
-      }
+      return { flatCode: flat, category: isCorpus ? 'Corpus' : 'Maintenance', corpus: isCorpus ? 'YES' : 'NO', confidence: 'Auto' }
     }
   }
 
-  // 3. NEFT sender match
+  // 4. NEFT sender match
   for (const [sender, flat] of Object.entries(NEFT_SENDER_MAP)) {
     if (upper.includes(sender.toUpperCase())) {
-      return {
-        flatCode: flat,
-        category: isCorpus ? 'Corpus' : 'Maintenance',
-        corpus: isCorpus ? 'YES' : 'NO',
-        confidence: 'Auto',
-      }
+      return { flatCode: flat, category: isCorpus ? 'Corpus' : 'Maintenance', corpus: isCorpus ? 'YES' : 'NO', confidence: 'Auto' }
     }
   }
 
-  // 4. Expense patterns (DR only)
+  // 5. Expense patterns (DR only)
   if (crDr === 'DR') {
     for (const [pattern, label] of EXPENSE_PATTERNS) {
       if (pattern.test(description)) {
@@ -111,20 +107,34 @@ export function tagTransaction(description: string, crDr: string): TagResult {
 }
 
 // ── FISCAL HELPERS ────────────────────────────────────────────
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+// Bank PSV dates are DD/MM/YYYY — parse manually to avoid V8 treating them as MM/DD/YYYY
+function parseBankDate(dateStr: string): Date {
+  const [day, month, year] = dateStr.split('/')
+  return new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+}
+
+// Convert DD/MM/YYYY → YYYY-MM-DD for Postgres date columns
+export function bankDateToISO(dateStr: string): string {
+  if (!dateStr) return ''
+  const [day, month, year] = dateStr.split('/')
+  return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
+}
+
 export function getFiscalLabel(dateStr: string): string {
-  const d = new Date(dateStr)
-  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-  return `${months[d.getMonth()]}-${String(d.getFullYear()).slice(-2)}`
+  const d = parseBankDate(dateStr)
+  return `${MONTHS[d.getMonth()]}-${String(d.getFullYear()).slice(-2)}`
 }
 
 export function getFiscalYear(dateStr: string): number {
-  const d = new Date(dateStr)
+  const d = parseBankDate(dateStr)
   return d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1
 }
 
 export function getFiscalMonth(dateStr: string): string {
-  const d = new Date(dateStr)
-  return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]
+  const d = parseBankDate(dateStr)
+  return MONTHS[d.getMonth()]
 }
 
 // ── PIPE FILE PARSER ──────────────────────────────────────────
