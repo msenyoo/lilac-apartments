@@ -55,6 +55,8 @@ export interface CorpusPlan {
   pre_payments: number
   planned_budget: { category: string; budget: number }[]
   status: 'active' | 'completed' | 'cancelled'
+  start_fiscal_year: number | null
+  end_fiscal_year: number | null
   created_at: string
 }
 
@@ -164,6 +166,10 @@ export interface CorpusEntry {
   block: string
   flat_type: string
   corpus_target: number
+  pre_payment: number
+  plan_name: string
+  start_fiscal_year: number
+  end_fiscal_year: number
   collected: number
   balance: number
   pct_paid: number
