@@ -257,33 +257,33 @@ SELECT
   COALESCE(SUM(t.amount) FILTER (
     WHERE t.corpus = 'YES' AND t.cr_dr = 'CR'
       AND t.row_type != 'VOIDED'
-      AND t.fiscal_year BETWEEN cp.start_fiscal_year AND cp.end_fiscal_year
+      AND t.fiscal_year <= cp.end_fiscal_year
   ), 0)                                                   AS collected,
   cpf.target_amount - COALESCE(SUM(t.amount) FILTER (
     WHERE t.corpus = 'YES' AND t.cr_dr = 'CR'
       AND t.row_type != 'VOIDED'
-      AND t.fiscal_year BETWEEN cp.start_fiscal_year AND cp.end_fiscal_year
+      AND t.fiscal_year <= cp.end_fiscal_year
   ), 0)                                                   AS balance,
   ROUND(COALESCE(SUM(t.amount) FILTER (
     WHERE t.corpus = 'YES' AND t.cr_dr = 'CR'
       AND t.row_type != 'VOIDED'
-      AND t.fiscal_year BETWEEN cp.start_fiscal_year AND cp.end_fiscal_year
+      AND t.fiscal_year <= cp.end_fiscal_year
   ), 0) * 100.0 / NULLIF(cpf.target_amount, 0), 1)       AS pct_paid,
   MAX(t.value_date) FILTER (
     WHERE t.corpus = 'YES' AND t.cr_dr = 'CR'
       AND t.row_type != 'VOIDED'
-      AND t.fiscal_year BETWEEN cp.start_fiscal_year AND cp.end_fiscal_year
+      AND t.fiscal_year <= cp.end_fiscal_year
   )                                                       AS last_payment_date,
   CASE
     WHEN COALESCE(SUM(t.amount) FILTER (
       WHERE t.corpus = 'YES' AND t.cr_dr = 'CR'
         AND t.row_type != 'VOIDED'
-        AND t.fiscal_year BETWEEN cp.start_fiscal_year AND cp.end_fiscal_year
+        AND t.fiscal_year <= cp.end_fiscal_year
     ), 0) >= cpf.target_amount THEN 'Done'
     WHEN COALESCE(SUM(t.amount) FILTER (
       WHERE t.corpus = 'YES' AND t.cr_dr = 'CR'
         AND t.row_type != 'VOIDED'
-        AND t.fiscal_year BETWEEN cp.start_fiscal_year AND cp.end_fiscal_year
+        AND t.fiscal_year <= cp.end_fiscal_year
     ), 0) > 0 THEN 'Partial'
     ELSE 'Pending'
   END                                                     AS status
