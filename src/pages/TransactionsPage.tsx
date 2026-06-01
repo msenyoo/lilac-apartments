@@ -559,6 +559,100 @@ function ReviewItem({ item, flats, onSaved }: { item: ReviewEntry; flats: any[];
   )
 }
 
+// ── EDIT MODAL ────────────────────────────────────────────────
+function EditModal({ txn, flats, onClose, onSaved }: {
+  txn: Transaction; flats: any[]; onClose: () => void; onSaved: (updated: Transaction) => void
+}) {
+  const isFlat = (code: string) => FLAT_CODES.includes(code)
+
+  const [flatCode, setFlatCode] = useState(txn.flat_code ?? '')
+  const [category, setCategory] = useState(txn.category ?? '')
+  const [corpus,   setCorpus]   = useState<'YES' | 'NO'>(txn.corpus ?? 'NO')
+  const [saving,   setSaving]   = useState(false)
+
+  function handleFlatChange(val: string) {
+    setFlatCode(val)
+    if (!isFlat(val)) { setCategory(val); setCorpus('NO') }
+    else if (category === 'Corpus') setCorpus('YES')
+    else { setCategory('Maintenance'); setCorpus('NO') }
+  }
+
+  function handleCategoryChange(val: string) {
+    setCategory(val)
+    setCorpus(val === 'Corpus' ? 'YES' : 'NO')
+  }
+
+  async function handleSave() {
+    setSaving(true)
+    const flatId = flats.find(f => f.code === flatCode)?.id ?? null
+    const resolvedCategory = isFlat(flatCode) ? category : flatCode
+    const { error } = await supabase.from('transactions').update({
+      flat_code: flatCode,
+      flat_id: flatId,
+      category: resolvedCategory,
+      corpus,
+    }).eq('id', txn.id)
+    setSaving(false)
+    if (!error) onSaved({ ...txn, flat_code: flatCode, flat_id: flatId, category: resolvedCategory, corpus })
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+        <div className="flex items-center justify-between p-5 border-b border-slate-100">
+          <div>
+            <h3 className="font-semibold">Edit transaction</h3>
+            <p className="text-sm text-slate-500 mt-0.5">{txn.value_date} · {formatINR(txn.amount)}</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100"><X size={18} /></button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          <p className="text-xs text-slate-400 truncate">{txn.description}</p>
+
+          <div>
+            <label className="text-sm text-slate-600 block mb-1.5">Flat / Category</label>
+            <select value={flatCode} onChange={e => handleFlatChange(e.target.value)}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
+              <option value="">— Select —</option>
+              <optgroup label="Flats">{FLAT_CODES.map(f => <option key={f} value={f}>{f}</option>)}</optgroup>
+              <optgroup label="Expenses">{EXPENSE_CATS.map(c => <option key={c} value={c}>{c}</option>)}</optgroup>
+            </select>
+          </div>
+
+          {isFlat(flatCode) && (
+            <div>
+              <label className="text-sm text-slate-600 block mb-1.5">Type</label>
+              <select value={category} onChange={e => handleCategoryChange(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
+                <option value="Maintenance">Maintenance</option>
+                <option value="Corpus">Corpus</option>
+              </select>
+            </div>
+          )}
+
+          {!isFlat(flatCode) && txn.cr_dr === 'DR' && (
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" checked={corpus === 'YES'} onChange={e => setCorpus(e.target.checked ? 'YES' : 'NO')}
+                className="w-4 h-4 rounded" />
+              <span className="text-slate-700">Corpus expenditure</span>
+              <span className="text-xs text-slate-400">(from corpus fund)</span>
+            </label>
+          )}
+
+          <div className="flex gap-2 pt-1">
+            <button onClick={handleSave} disabled={saving || !flatCode}
+              className="btn-primary flex-1 disabled:opacity-50">
+              {saving ? 'Saving…' : 'Save changes'}
+            </button>
+            <button onClick={onClose} className="btn-secondary px-4">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── SPLIT MODAL ───────────────────────────────────────────────
 interface SplitRow { flatCode: string; category: string; corpus: 'YES' | 'NO'; amount: string }
 
@@ -723,6 +817,7 @@ function AllTransactionsTab() {
   const [confirmVoid, setConfirmVoid] = useState(false)
   const [voiding, setVoiding]       = useState(false)
   const [togglingCorpus, setTogglingCorpus] = useState(false)
+  const [showEdit, setShowEdit]     = useState(false)
 
   const effectiveStart = mode === 'fy' ? fy.start : mode === 'custom' ? appliedStart : null
   const effectiveEnd   = mode === 'fy' ? fy.end   : mode === 'custom' ? appliedEnd   : null
@@ -919,7 +1014,13 @@ function AllTransactionsTab() {
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {selectedTxn.row_type !== 'VOIDED' && (
-              <button onClick={() => { setShowSplit(true); setConfirmVoid(false) }}
+              <button onClick={() => { setShowEdit(true); setShowSplit(false); setConfirmVoid(false) }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-brand-500 text-brand-600 text-sm font-medium hover:bg-brand-50">
+                Edit
+              </button>
+            )}
+            {selectedTxn.row_type !== 'VOIDED' && (
+              <button onClick={() => { setShowSplit(true); setShowEdit(false); setConfirmVoid(false) }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-sm font-medium hover:bg-slate-50">
                 <Scissors size={13} /> Split
               </button>
@@ -958,6 +1059,15 @@ function AllTransactionsTab() {
             </button>
           </div>
         </div>
+      )}
+
+      {showEdit && selectedTxn && (
+        <EditModal
+          txn={selectedTxn}
+          flats={flats ?? []}
+          onClose={() => setShowEdit(false)}
+          onSaved={(updated) => { setSelectedTxn(updated); setShowEdit(false); qc.invalidateQueries() }}
+        />
       )}
 
       {isLoading ? (
