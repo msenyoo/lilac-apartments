@@ -722,6 +722,7 @@ function AllTransactionsTab() {
   const [showSplit, setShowSplit]   = useState(false)
   const [confirmVoid, setConfirmVoid] = useState(false)
   const [voiding, setVoiding]       = useState(false)
+  const [togglingCorpus, setTogglingCorpus] = useState(false)
 
   const effectiveStart = mode === 'fy' ? fy.start : mode === 'custom' ? appliedStart : null
   const effectiveEnd   = mode === 'fy' ? fy.end   : mode === 'custom' ? appliedEnd   : null
@@ -746,6 +747,16 @@ function AllTransactionsTab() {
       return data ?? []
     },
   })
+
+  async function handleToggleCorpus() {
+    if (!selectedTxn) return
+    setTogglingCorpus(true)
+    const newVal = selectedTxn.corpus === 'YES' ? 'NO' : 'YES'
+    await supabase.from('transactions').update({ corpus: newVal }).eq('id', selectedTxn.id)
+    setSelectedTxn({ ...selectedTxn, corpus: newVal })
+    setTogglingCorpus(false)
+    qc.invalidateQueries()
+  }
 
   async function handleVoid() {
     if (!selectedTxn) return
@@ -911,6 +922,16 @@ function AllTransactionsTab() {
               <button onClick={() => { setShowSplit(true); setConfirmVoid(false) }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-sm font-medium hover:bg-slate-50">
                 <Scissors size={13} /> Split
+              </button>
+            )}
+            {selectedTxn.cr_dr === 'DR' && selectedTxn.row_type !== 'VOIDED' && (
+              <button onClick={handleToggleCorpus} disabled={togglingCorpus}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium disabled:opacity-50 ${
+                  selectedTxn.corpus === 'YES'
+                    ? 'bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100'
+                    : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'
+                }`}>
+                {selectedTxn.corpus === 'YES' ? '★ Corpus' : '☆ Corpus'}
               </button>
             )}
             {selectedTxn.row_type !== 'VOIDED' && !confirmVoid && (
