@@ -54,9 +54,15 @@ export default function CorpusPage() {
   })
 
   const totalCollected = corpus?.reduce((s, c) => s + c.collected, 0) ?? 0
-  const totalTarget    = activePlan?.total_target ?? corpus?.reduce((s, c) => s + c.corpus_target, 0) ?? 0
+  const totalTarget    = corpus?.reduce((s, c) => s + c.corpus_target, 0) ?? activePlan?.total_target ?? 0
   const pct = totalTarget > 0 ? Math.round(totalCollected * 100 / totalTarget) : 0
   const totalSpent = expenditures?.reduce((s, e: any) => s + e.amount, 0) ?? 0
+
+  // Derive plan period label from first corpus entry (all share same plan)
+  const firstEntry = corpus?.[0]
+  const planPeriod = firstEntry
+    ? `FY ${firstEntry.start_fiscal_year}-${String(firstEntry.start_fiscal_year + 1).slice(-2)} – FY ${firstEntry.end_fiscal_year}-${String(firstEntry.end_fiscal_year + 1).slice(-2)}`
+    : null
 
   return (
     <div className="space-y-4">
@@ -64,7 +70,8 @@ export default function CorpusPage() {
         <div>
           <h2 className="text-xl font-semibold">Corpus fund</h2>
           <p className="text-sm text-slate-500 mt-0.5">
-            {activePlan ? activePlan.name : 'One-time corpus collection'}
+            {firstEntry?.plan_name ?? activePlan?.name ?? '—'}
+            {planPeriod ? ` · ${planPeriod}` : ''}
             {activePlan?.description ? ` · ${activePlan.description}` : ''}
           </p>
         </div>
@@ -169,7 +176,6 @@ function PlanGrid({ planFlats, corpus }: { planFlats: any[]; corpus: CorpusEntry
   const rows = planFlats.map((pf: any) => {
     const c = corpusMap.get(pf.flat?.code ?? '')
     const collected = c?.collected ?? 0
-    const remaining = pf.target_amount - pf.pre_payment - collected
     return {
       flat_code:    pf.flat?.code ?? '',
       bhk_type:     pf.flat?.bhk_type ?? '',
@@ -179,7 +185,7 @@ function PlanGrid({ planFlats, corpus }: { planFlats: any[]; corpus: CorpusEntry
       inst_2:       pf.installment_2,
       inst_3:       pf.installment_3,
       collected,
-      remaining:    Math.max(0, remaining),
+      remaining:    Math.max(0, pf.target_amount - collected),
     }
   })
 
