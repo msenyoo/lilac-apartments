@@ -193,7 +193,8 @@ ON CONFLICT (key) DO NOTHING;
 
 
 -- ── 6. v_dues_tracker (date-based current FY, carry-forward) ──
-CREATE OR REPLACE VIEW public.v_dues_tracker AS
+DROP VIEW IF EXISTS public.v_dues_tracker;
+CREATE VIEW public.v_dues_tracker AS
 WITH settings AS (
   SELECT
     CASE WHEN EXTRACT(MONTH FROM CURRENT_DATE) >= 4
@@ -239,7 +240,8 @@ ORDER BY f.code;
 
 
 -- ── 7. v_corpus_tracker (plan-scoped) ────────────────────────
-CREATE OR REPLACE VIEW public.v_corpus_tracker AS
+DROP VIEW IF EXISTS public.v_corpus_tracker;
+CREATE VIEW public.v_corpus_tracker AS
 SELECT
   f.code                                                  AS flat_code,
   f.block,
