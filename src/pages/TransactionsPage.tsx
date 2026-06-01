@@ -5,7 +5,7 @@ import { AgGridReact } from 'ag-grid-react'
 import type { ColDef } from 'ag-grid-community'
 import {
   Upload as UploadIcon, CheckCircle, AlertTriangle, FileText,
-  X, Plus, Trash2, Scissors, RefreshCw, Download,
+  X, Plus, Trash2, Scissors, RefreshCw, Download, Copy,
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { supabase, Transaction, ReviewEntry } from '@/lib/supabase'
@@ -560,20 +560,27 @@ function ReviewItem({ item, flats, onSaved }: { item: ReviewEntry; flats: any[];
 }
 
 // ── EDIT MODAL ────────────────────────────────────────────────
-function EditModal({ txn, flats, onClose, onSaved }: {
-  txn: Transaction; flats: any[]; onClose: () => void; onSaved: (updated: Transaction) => void
+function EditModal({ txn, flats, onClose, onSaved, onSplit, onVoided }: {
+  txn: Transaction
+  flats: any[]
+  onClose: () => void
+  onSaved: (updated: Transaction) => void
+  onSplit: () => void
+  onVoided: () => void
 }) {
   const isFlat = (code: string) => FLAT_CODES.includes(code)
 
-  const [flatCode, setFlatCode] = useState(txn.flat_code ?? '')
-  const [category, setCategory] = useState(txn.category ?? '')
-  const [corpus,   setCorpus]   = useState<'YES' | 'NO'>(txn.corpus ?? 'NO')
-  const [saving,   setSaving]   = useState(false)
+  const [flatCode,     setFlatCode]     = useState(txn.flat_code ?? '')
+  const [category,     setCategory]     = useState(txn.category ?? '')
+  const [corpus,       setCorpus]       = useState<'YES' | 'NO'>(txn.corpus ?? 'NO')
+  const [saving,       setSaving]       = useState(false)
+  const [copied,       setCopied]       = useState(false)
+  const [confirmVoid,  setConfirmVoid]  = useState(false)
+  const [voiding,      setVoiding]      = useState(false)
 
   function handleFlatChange(val: string) {
     setFlatCode(val)
-    if (!isFlat(val)) { setCategory(val); setCorpus('NO') }
-    else if (category === 'Corpus') setCorpus('YES')
+    if (!isFlat(val)) { setCategory(val) }
     else { setCategory('Maintenance'); setCorpus('NO') }
   }
 
@@ -582,18 +589,28 @@ function EditModal({ txn, flats, onClose, onSaved }: {
     setCorpus(val === 'Corpus' ? 'YES' : 'NO')
   }
 
+  function handleCopy() {
+    navigator.clipboard.writeText(txn.description)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
   async function handleSave() {
     setSaving(true)
     const flatId = flats.find(f => f.code === flatCode)?.id ?? null
     const resolvedCategory = isFlat(flatCode) ? category : flatCode
     const { error } = await supabase.from('transactions').update({
-      flat_code: flatCode,
-      flat_id: flatId,
-      category: resolvedCategory,
-      corpus,
+      flat_code: flatCode, flat_id: flatId, category: resolvedCategory, corpus,
     }).eq('id', txn.id)
     setSaving(false)
     if (!error) onSaved({ ...txn, flat_code: flatCode, flat_id: flatId, category: resolvedCategory, corpus })
+  }
+
+  async function handleVoid() {
+    setVoiding(true)
+    await supabase.from('transactions').update({ row_type: 'VOIDED' }).eq('id', txn.id)
+    setVoiding(false)
+    onVoided()
   }
 
   return (
@@ -608,7 +625,18 @@ function EditModal({ txn, flats, onClose, onSaved }: {
         </div>
 
         <div className="p-5 space-y-4">
-          <p className="text-xs text-slate-400 truncate">{txn.description}</p>
+          {/* Full description + copy */}
+          <div className="bg-slate-50 rounded-lg p-3">
+            <p className="text-xs text-slate-600 break-words">{txn.description}</p>
+            <button onClick={handleCopy}
+              className="flex items-center gap-1 mt-2 text-xs text-slate-400 hover:text-slate-600 transition-colors">
+              {copied
+                ? <CheckCircle size={11} className="text-green-600" />
+                : <Copy size={11} />
+              }
+              <span>{copied ? 'Copied!' : 'Copy'}</span>
+            </button>
+          </div>
 
           <div>
             <label className="text-sm text-slate-600 block mb-1.5">Flat / Category</label>
@@ -631,12 +659,12 @@ function EditModal({ txn, flats, onClose, onSaved }: {
             </div>
           )}
 
-          {!isFlat(flatCode) && txn.cr_dr === 'DR' && (
+          {!isFlat(flatCode) && (
             <label className="flex items-center gap-2 text-sm cursor-pointer">
               <input type="checkbox" checked={corpus === 'YES'} onChange={e => setCorpus(e.target.checked ? 'YES' : 'NO')}
                 className="w-4 h-4 rounded" />
-              <span className="text-slate-700">Corpus expenditure</span>
-              <span className="text-xs text-slate-400">(from corpus fund)</span>
+              <span className="text-slate-700">Corpus {txn.cr_dr === 'DR' ? 'expenditure' : 'collection'}</span>
+              <span className="text-xs text-slate-400">{txn.cr_dr === 'DR' ? '(from corpus fund)' : '(corpus)'}</span>
             </label>
           )}
 
@@ -646,6 +674,34 @@ function EditModal({ txn, flats, onClose, onSaved }: {
               {saving ? 'Saving…' : 'Save changes'}
             </button>
             <button onClick={onClose} className="btn-secondary px-4">Cancel</button>
+          </div>
+
+          {/* Secondary actions */}
+          <div className="border-t border-slate-100 pt-3 flex gap-2">
+            {txn.cr_dr === 'CR' && (
+              <button onClick={onSplit}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 text-sm text-slate-600 hover:bg-slate-50 flex-1 justify-center">
+                <Scissors size={13} /> Split
+              </button>
+            )}
+            {!confirmVoid ? (
+              <button onClick={() => setConfirmVoid(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-300 text-red-600 text-sm hover:bg-red-50 flex-1 justify-center">
+                <Trash2 size={13} /> Void
+              </button>
+            ) : (
+              <div className="flex items-center gap-2 flex-1">
+                <span className="text-xs text-red-600 font-medium flex-1">Void this?</span>
+                <button onClick={handleVoid} disabled={voiding}
+                  className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50">
+                  {voiding ? 'Voiding…' : 'Yes, void'}
+                </button>
+                <button onClick={() => setConfirmVoid(false)}
+                  className="px-3 py-1.5 rounded-lg border border-slate-300 text-sm hover:bg-slate-50">
+                  No
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -813,11 +869,8 @@ function AllTransactionsTab() {
   const [appliedStart, setApplied]  = useState<string | null>(null)
   const [appliedEnd, setAppliedEnd] = useState<string | null>(null)
   const [selectedTxn, setSelectedTxn] = useState<Transaction | null>(null)
-  const [showSplit, setShowSplit]   = useState(false)
-  const [confirmVoid, setConfirmVoid] = useState(false)
-  const [voiding, setVoiding]       = useState(false)
-  const [togglingCorpus, setTogglingCorpus] = useState(false)
-  const [showEdit, setShowEdit]     = useState(false)
+  const [showEdit, setShowEdit]       = useState(false)
+  const [showSplit, setShowSplit]     = useState(false)
 
   const effectiveStart = mode === 'fy' ? fy.start : mode === 'custom' ? appliedStart : null
   const effectiveEnd   = mode === 'fy' ? fy.end   : mode === 'custom' ? appliedEnd   : null
@@ -842,24 +895,6 @@ function AllTransactionsTab() {
       return data ?? []
     },
   })
-
-  async function handleToggleCorpus() {
-    if (!selectedTxn) return
-    setTogglingCorpus(true)
-    const newVal = selectedTxn.corpus === 'YES' ? 'NO' : 'YES'
-    await supabase.from('transactions').update({ corpus: newVal }).eq('id', selectedTxn.id)
-    setSelectedTxn({ ...selectedTxn, corpus: newVal })
-    setTogglingCorpus(false)
-    qc.invalidateQueries()
-  }
-
-  async function handleVoid() {
-    if (!selectedTxn) return
-    setVoiding(true)
-    await supabase.from('transactions').update({ row_type: 'VOIDED' }).eq('id', selectedTxn.id)
-    setVoiding(false); setConfirmVoid(false); setSelectedTxn(null)
-    qc.invalidateQueries({ queryKey: ['all-transactions'] })
-  }
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['all-transactions', effectiveStart, effectiveEnd],
@@ -1008,52 +1043,21 @@ function AllTransactionsTab() {
             <span className="text-slate-600">{selectedTxn.value_date}</span>
             <span className="mx-1.5 text-slate-400">·</span>
             <span className="text-slate-500">{selectedTxn.category}</span>
+            {selectedTxn.corpus === 'YES' && (
+              <span className="ml-2 px-1.5 py-0.5 rounded text-xs font-bold bg-purple-100 text-purple-700">Corpus</span>
+            )}
             {selectedTxn.row_type !== 'Normal' && (
               <span className="ml-2 px-1.5 py-0.5 rounded text-xs font-bold bg-slate-200 text-slate-600">{selectedTxn.row_type}</span>
             )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {selectedTxn.row_type !== 'VOIDED' && (
-              <button onClick={() => { setShowEdit(true); setShowSplit(false); setConfirmVoid(false) }}
+              <button onClick={() => setShowEdit(true)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-brand-500 text-brand-600 text-sm font-medium hover:bg-brand-50">
                 Edit
               </button>
             )}
-            {selectedTxn.row_type !== 'VOIDED' && (
-              <button onClick={() => { setShowSplit(true); setShowEdit(false); setConfirmVoid(false) }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-sm font-medium hover:bg-slate-50">
-                <Scissors size={13} /> Split
-              </button>
-            )}
-            {selectedTxn.cr_dr === 'DR' && selectedTxn.row_type !== 'VOIDED' && (
-              <button onClick={handleToggleCorpus} disabled={togglingCorpus}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium disabled:opacity-50 ${
-                  selectedTxn.corpus === 'YES'
-                    ? 'bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100'
-                    : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'
-                }`}>
-                {selectedTxn.corpus === 'YES' ? '★ Corpus' : '☆ Corpus'}
-              </button>
-            )}
-            {selectedTxn.row_type !== 'VOIDED' && !confirmVoid && (
-              <button onClick={() => setConfirmVoid(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-red-300 text-red-600 text-sm font-medium hover:bg-red-50">
-                <Trash2 size={13} /> Void
-              </button>
-            )}
-            {confirmVoid && (
-              <>
-                <span className="text-xs text-red-600 font-medium">Void this transaction?</span>
-                <button onClick={handleVoid} disabled={voiding}
-                  className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50">
-                  {voiding ? 'Voiding…' : 'Confirm'}
-                </button>
-                <button onClick={() => setConfirmVoid(false)} className="px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-sm hover:bg-slate-50">
-                  Cancel
-                </button>
-              </>
-            )}
-            <button onClick={() => { setSelectedTxn(null); setConfirmVoid(false) }}
+            <button onClick={() => setSelectedTxn(null)}
               className="p-1.5 rounded-lg hover:bg-blue-100 text-slate-500">
               <X size={14} />
             </button>
@@ -1067,6 +1071,8 @@ function AllTransactionsTab() {
           flats={flats ?? []}
           onClose={() => setShowEdit(false)}
           onSaved={(updated) => { setSelectedTxn(updated); setShowEdit(false); qc.invalidateQueries() }}
+          onSplit={() => { setShowEdit(false); setShowSplit(true) }}
+          onVoided={() => { setShowEdit(false); setSelectedTxn(null); qc.invalidateQueries({ queryKey: ['all-transactions'] }) }}
         />
       )}
 
@@ -1086,7 +1092,7 @@ function AllTransactionsTab() {
             onRowClicked={e => {
               if (!e.data) return
               setSelectedTxn(prev => prev?.id === e.data.id ? null : e.data)
-              setConfirmVoid(false)
+              setShowEdit(false)
             }}
             getRowStyle={(params: any) => {
               if (params.data?.id === selectedTxn?.id) return { background: '#eff6ff', opacity: 1, textDecoration: 'none' }
