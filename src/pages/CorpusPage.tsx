@@ -1,7 +1,9 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AgGridReact } from 'ag-grid-react'
 import type { ColDef } from 'ag-grid-community'
+import { Download } from 'lucide-react'
+import * as XLSX from 'xlsx'
 import { supabase, CorpusEntry, CorpusPlan } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
 
@@ -131,6 +133,8 @@ function SummaryCard({ label, value, color, bg }: { label: string; value: string
 }
 
 function CollectionGrid({ corpus, isLoading }: { corpus: CorpusEntry[]; isLoading: boolean }) {
+  const gridRef = useRef<AgGridReact>(null)
+
   const colDefs = useMemo((): ColDef<any>[] => [
     { field: 'flat_code',         headerName: 'Flat',     width: 90 },
     { field: 'corpus_target',     headerName: 'Target',   width: 120, type: 'numericColumn',
@@ -157,20 +161,44 @@ function CollectionGrid({ corpus, isLoading }: { corpus: CorpusEntry[]; isLoadin
     { field: 'last_payment_date', headerName: 'Last Payment', width: 130 },
   ], [])
 
+  function handleExport() {
+    const rows: any[] = []
+    gridRef.current?.api?.forEachNodeAfterFilterAndSort(node => { if (node.data) rows.push(node.data) })
+    const exportRows = (rows.length > 0 ? rows : corpus).map(r => ({
+      Flat: r.flat_code, Target: r.corpus_target, Collected: r.collected,
+      Balance: Math.max(0, r.balance), '% Paid': r.pct_paid?.toFixed(1),
+      Status: r.status, 'Last Payment': r.last_payment_date,
+    }))
+    const ws = XLSX.utils.json_to_sheet(exportRows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Corpus Collection')
+    XLSX.writeFile(wb, 'Corpus_Collection.xlsx')
+  }
+
   if (isLoading) return <div className="card h-64 animate-pulse bg-slate-100" />
 
   return (
-    <div className="rounded-xl overflow-hidden border border-slate-200" style={{ height: 480 }}>
-      <AgGridReact
-        rowData={corpus}
-        columnDefs={colDefs}
-        defaultColDef={{ sortable: true, resizable: true, filter: true, floatingFilter: true }}
-      />
+    <div className="space-y-2">
+      <div className="flex justify-end">
+        <button onClick={handleExport} disabled={!corpus.length}
+          className="flex items-center gap-1.5 text-sm text-brand-700 hover:text-brand-900 disabled:opacity-40">
+          <Download size={14} /> Export
+        </button>
+      </div>
+      <div className="rounded-xl overflow-hidden border border-slate-200" style={{ height: 480 }}>
+        <AgGridReact
+          ref={gridRef}
+          rowData={corpus}
+          columnDefs={colDefs}
+          defaultColDef={{ sortable: true, resizable: true, filter: true, floatingFilter: true }}
+        />
+      </div>
     </div>
   )
 }
 
 function PlanGrid({ planFlats, corpus }: { planFlats: any[]; corpus: CorpusEntry[] }) {
+  const gridRef = useRef<AgGridReact>(null)
   const corpusMap = new Map(corpus.map(c => [c.flat_code, c]))
 
   const rows = planFlats.map((pf: any) => {
@@ -191,7 +219,6 @@ function PlanGrid({ planFlats, corpus }: { planFlats: any[]; corpus: CorpusEntry
 
   const colDefs = useMemo((): ColDef<any>[] => [
     { field: 'flat_code',   headerName: 'Flat',       width: 90 },
-    { field: 'bhk_type',    headerName: 'BHK',        width: 120, filter: true },
     { field: 'target',      headerName: 'Target',     width: 110, type: 'numericColumn', valueFormatter: (p: any) => formatINR(p.value) },
     { field: 'pre_payment', headerName: 'Pre-paid',   width: 110, type: 'numericColumn', valueFormatter: (p: any) => p.value > 0 ? formatINR(p.value) : '—' },
     { field: 'inst_1',      headerName: 'Inst 1',     width: 100, type: 'numericColumn', valueFormatter: (p: any) => formatINR(p.value) },
@@ -207,15 +234,36 @@ function PlanGrid({ planFlats, corpus }: { planFlats: any[]; corpus: CorpusEntry
     },
   ], [])
 
+  function handleExport() {
+    const exportRows = (rows).map(r => ({
+      Flat: r.flat_code, BHK: r.bhk_type, Target: r.target,
+      'Pre-paid': r.pre_payment, 'Inst 1': r.inst_1, 'Inst 2': r.inst_2, 'Inst 3': r.inst_3,
+      Collected: r.collected, Remaining: r.remaining,
+    }))
+    const ws = XLSX.utils.json_to_sheet(exportRows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Corpus Plan')
+    XLSX.writeFile(wb, 'Corpus_Plan.xlsx')
+  }
+
   if (!rows.length) return <p className="text-sm text-slate-400 card p-6 text-center">No plan data available</p>
 
   return (
-    <div className="rounded-xl overflow-hidden border border-slate-200" style={{ height: 480 }}>
-      <AgGridReact
-        rowData={rows}
-        columnDefs={colDefs}
-        defaultColDef={{ sortable: true, resizable: true, filter: true, floatingFilter: true }}
-      />
+    <div className="space-y-2">
+      <div className="flex justify-end">
+        <button onClick={handleExport}
+          className="flex items-center gap-1.5 text-sm text-brand-700 hover:text-brand-900">
+          <Download size={14} /> Export
+        </button>
+      </div>
+      <div className="rounded-xl overflow-hidden border border-slate-200" style={{ height: 480 }}>
+        <AgGridReact
+          ref={gridRef}
+          rowData={rows}
+          columnDefs={colDefs}
+          defaultColDef={{ sortable: true, resizable: true, filter: true, floatingFilter: true }}
+        />
+      </div>
     </div>
   )
 }

@@ -1,14 +1,16 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AgGridReact } from 'ag-grid-react'
 import type { ColDef } from 'ag-grid-community'
-import { X, TrendingDown } from 'lucide-react'
+import { X, TrendingDown, Download } from 'lucide-react'
+import * as XLSX from 'xlsx'
 import { supabase, DuesEntry, Transaction } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
 
 
 export default function DuesPage() {
   const [selectedFlat, setSelectedFlat] = useState<DuesEntry | null>(null)
+  const gridRef = useRef<AgGridReact>(null)
 
   const { data: settings } = useQuery({
     queryKey: ['app-settings'],
@@ -42,19 +44,17 @@ export default function DuesPage() {
   }
 
   const colDefs = useMemo((): ColDef<any>[] => [
-    { field: 'flat_code',    headerName: 'Flat',       width: 90 },
-    { field: 'block',        headerName: 'Block',      width: 80, filter: true },
-    { field: 'bhk_type',     headerName: 'BHK',        width: 110, filter: true },
-    { field: 'maintenance_amt', headerName: 'Rate/mo', width: 110, type: 'numericColumn',
+    { field: 'flat_code',       headerName: 'Flat',     width: 90 },
+    { field: 'maintenance_amt', headerName: 'Rate/mo',  width: 110, type: 'numericColumn',
       valueFormatter: (p: any) => formatINR(p.value),
     },
-    { field: 'annual_due',   headerName: sameYear ? 'Annual Due' : 'Total Due', width: 120, type: 'numericColumn',
+    { field: 'annual_due',   headerName: sameYear ? 'Due to date' : 'Total Due', width: 120, type: 'numericColumn',
       valueFormatter: (p: any) => formatINR(p.value),
     },
-    { field: 'collected_fy', headerName: sameYear ? 'Collected' : 'Collected (all FY)', width: 140, type: 'numericColumn',
+    { field: 'collected_fy', headerName: 'Collected', width: 120, type: 'numericColumn',
       valueFormatter: (p: any) => formatINR(p.value),
     },
-    { field: 'pending',      headerName: 'Pending',    width: 120, type: 'numericColumn',
+    { field: 'pending',      headerName: 'Pending',   width: 120, type: 'numericColumn',
       valueFormatter: (p: any) => p.value > 0 ? formatINR(p.value) : '—',
       cellStyle: (p: any) => p.value > 0 ? { color: '#dc2626', fontWeight: 600 } : { color: '#16a34a', fontWeight: 400 },
     },
@@ -66,7 +66,25 @@ export default function DuesPage() {
         }`}>{p.value}</span>
       ),
     },
-  ], [])
+  ], [sameYear])
+
+  function handleExport() {
+    const rows: any[] = []
+    gridRef.current?.api?.forEachNodeAfterFilterAndSort(node => { if (node.data) rows.push(node.data) })
+    const exportRows = (rows.length > 0 ? rows : data ?? []).map(r => ({
+      Flat: r.flat_code, Block: r.block, BHK: r.bhk_type,
+      'Rate/mo': r.maintenance_amt,
+      'Due to date': r.annual_due,
+      Collected: r.collected_fy,
+      Pending: r.pending,
+      Status: r.status,
+    }))
+    const ws = XLSX.utils.json_to_sheet(exportRows)
+    ws['!cols'] = [8, 8, 12, 12, 14, 12, 12, 10].map(w => ({ wch: w }))
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Dues')
+    XLSX.writeFile(wb, `Dues_${fyLabel.replace(/[^a-z0-9]/gi, '_')}.xlsx`)
+  }
 
   return (
     <div className="space-y-4">
@@ -75,6 +93,10 @@ export default function DuesPage() {
           <h2 className="text-xl font-semibold">Dues tracker</h2>
           <p className="text-sm text-slate-500 mt-0.5">{fyLabel} maintenance outstanding{!sameYear && ' (carry-forward)'}</p>
         </div>
+        <button onClick={handleExport} disabled={!data?.length}
+          className="flex items-center gap-1.5 text-sm text-brand-700 hover:text-brand-900 disabled:opacity-40">
+          <Download size={14} /> Export
+        </button>
       </div>
 
       {/* Summary cards */}
@@ -93,6 +115,7 @@ export default function DuesPage() {
           ) : (
             <div className="rounded-xl overflow-hidden border border-slate-200" style={{ height: 520 }}>
               <AgGridReact
+                ref={gridRef}
                 rowData={data ?? []}
                 columnDefs={colDefs}
                 defaultColDef={{ sortable: true, resizable: true, filter: true, floatingFilter: true }}
@@ -143,7 +166,10 @@ function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat
     <div className="w-72 shrink-0 space-y-3">
       <div className="card p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold">{flat.flat_code} — {flat.bhk_type}</h3>
+          <div>
+            <h3 className="font-semibold">{flat.flat_code} — {flat.bhk_type}</h3>
+            <p className="text-xs text-slate-400 mt-0.5">Block {flat.block}</p>
+          </div>
           <button onClick={onClose} className="p-1 rounded hover:bg-slate-100"><X size={15} /></button>
         </div>
 
