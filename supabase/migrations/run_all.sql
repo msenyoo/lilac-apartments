@@ -101,6 +101,10 @@ CREATE TABLE IF NOT EXISTS public.corpus_plan_flats (
   UNIQUE(plan_id, flat_id)
 );
 
+-- Unique constraint prevents duplicate plans on re-run
+ALTER TABLE public.corpus_plans
+  ADD CONSTRAINT IF NOT EXISTS corpus_plans_name_unique UNIQUE (name);
+
 -- Seed Corpus 2025 plan (skip if already exists)
 WITH plan AS (
   INSERT INTO public.corpus_plans
@@ -112,7 +116,7 @@ WITH plan AS (
     '[{"category":"Civil","budget":250000},{"category":"Painting","budget":1700000},{"category":"Buffer","budget":50000}]',
     'active', 2025, 2026
   )
-  ON CONFLICT DO NOTHING
+  ON CONFLICT (name) DO NOTHING
   RETURNING id
 )
 INSERT INTO public.corpus_plan_flats
@@ -254,36 +258,38 @@ SELECT
   cp.name                                                 AS plan_name,
   cp.start_fiscal_year,
   cp.end_fiscal_year,
-  COALESCE(SUM(t.amount) FILTER (
+  -- collected = pre_payment (collected before plan started, not a transaction) +
+  --            corpus CRs within the plan period
+  cpf.pre_payment + COALESCE(SUM(t.amount) FILTER (
     WHERE t.corpus = 'YES' AND t.cr_dr = 'CR'
       AND t.row_type != 'VOIDED'
-      AND t.fiscal_year <= cp.end_fiscal_year
+      AND t.fiscal_year BETWEEN cp.start_fiscal_year AND cp.end_fiscal_year
   ), 0)                                                   AS collected,
-  cpf.target_amount - COALESCE(SUM(t.amount) FILTER (
+  cpf.target_amount - cpf.pre_payment - COALESCE(SUM(t.amount) FILTER (
     WHERE t.corpus = 'YES' AND t.cr_dr = 'CR'
       AND t.row_type != 'VOIDED'
-      AND t.fiscal_year <= cp.end_fiscal_year
+      AND t.fiscal_year BETWEEN cp.start_fiscal_year AND cp.end_fiscal_year
   ), 0)                                                   AS balance,
-  ROUND(COALESCE(SUM(t.amount) FILTER (
+  ROUND((cpf.pre_payment + COALESCE(SUM(t.amount) FILTER (
     WHERE t.corpus = 'YES' AND t.cr_dr = 'CR'
       AND t.row_type != 'VOIDED'
-      AND t.fiscal_year <= cp.end_fiscal_year
-  ), 0) * 100.0 / NULLIF(cpf.target_amount, 0), 1)       AS pct_paid,
+      AND t.fiscal_year BETWEEN cp.start_fiscal_year AND cp.end_fiscal_year
+  ), 0)) * 100.0 / NULLIF(cpf.target_amount, 0), 1)      AS pct_paid,
   MAX(t.value_date) FILTER (
     WHERE t.corpus = 'YES' AND t.cr_dr = 'CR'
       AND t.row_type != 'VOIDED'
-      AND t.fiscal_year <= cp.end_fiscal_year
+      AND t.fiscal_year BETWEEN cp.start_fiscal_year AND cp.end_fiscal_year
   )                                                       AS last_payment_date,
   CASE
-    WHEN COALESCE(SUM(t.amount) FILTER (
+    WHEN cpf.pre_payment + COALESCE(SUM(t.amount) FILTER (
       WHERE t.corpus = 'YES' AND t.cr_dr = 'CR'
         AND t.row_type != 'VOIDED'
-        AND t.fiscal_year <= cp.end_fiscal_year
+        AND t.fiscal_year BETWEEN cp.start_fiscal_year AND cp.end_fiscal_year
     ), 0) >= cpf.target_amount THEN 'Done'
-    WHEN COALESCE(SUM(t.amount) FILTER (
+    WHEN cpf.pre_payment + COALESCE(SUM(t.amount) FILTER (
       WHERE t.corpus = 'YES' AND t.cr_dr = 'CR'
         AND t.row_type != 'VOIDED'
-        AND t.fiscal_year <= cp.end_fiscal_year
+        AND t.fiscal_year BETWEEN cp.start_fiscal_year AND cp.end_fiscal_year
     ), 0) > 0 THEN 'Partial'
     ELSE 'Pending'
   END                                                     AS status
