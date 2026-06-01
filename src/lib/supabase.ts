@@ -1,37 +1,73 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl  = import.meta.env.VITE_SUPABASE_URL  as string
-const supabaseKey  = import.meta.env.VITE_SUPABASE_ANON_KEY as string
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL  as string
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
 
 export const supabase = createClient(supabaseUrl, supabaseKey)
 
-export type Database = {
-  public: {
-    Tables: {
-      flats:        { Row: Flat }
-      transactions: { Row: Transaction }
-      uploads:      { Row: Upload }
-      split_refs:   { Row: SplitRef }
-      profiles:     { Row: Profile }
-    }
-    Views: {
-      v_monthly_collection: { Row: MonthlyCollection }
-      v_dues_tracker:       { Row: DuesEntry }
-      v_corpus_tracker:     { Row: CorpusEntry }
-      v_expenses:           { Row: ExpenseEntry }
-      v_monthly_summary:    { Row: MonthlySummary }
-      v_review_queue:       { Row: ReviewEntry }
-    }
-  }
-}
+// ── TABLE TYPES ───────────────────────────────────────────────
 
 export interface Flat {
   id: string
   code: string
   block: string
   flat_type: string
+  bhk_type: string | null
+  has_private_terrace: boolean
   maintenance_amt: number
   corpus_target: number
+  flat_notes: string | null
+}
+
+export interface Resident {
+  id: string
+  flat_id: string
+  name: string
+  type: 'Owner' | 'Tenant'
+  phone: string | null
+  email: string | null
+  upi_ids: string[]
+  moved_in: string | null
+  moved_out: string | null
+  is_active: boolean
+  notes: string | null
+  created_at: string
+  updated_at: string
+  flat?: Flat
+}
+
+export interface MaintenanceRateHistory {
+  id: string
+  flat_id: string
+  monthly_rate: number
+  effective_from: string
+  effective_to: string | null
+  notes: string | null
+  created_at: string
+  created_by: string | null
+}
+
+export interface CorpusPlan {
+  id: string
+  name: string
+  description: string | null
+  total_target: number
+  pre_payments: number
+  planned_budget: { category: string; budget: number }[]
+  status: 'active' | 'completed' | 'cancelled'
+  created_at: string
+}
+
+export interface CorpusPlanFlat {
+  id: string
+  plan_id: string
+  flat_id: string
+  target_amount: number
+  pre_payment: number
+  installment_1: number | null
+  installment_2: number | null
+  installment_3: number | null
+  flat?: Flat
 }
 
 export interface Transaction {
@@ -91,6 +127,14 @@ export interface Profile {
   created_at: string
 }
 
+export interface AppSetting {
+  key: string
+  value: string
+  updated_at: string
+}
+
+// ── VIEW TYPES ────────────────────────────────────────────────
+
 export interface MonthlyCollection {
   flat_code: string
   block: string
@@ -105,8 +149,11 @@ export interface DuesEntry {
   flat_code: string
   block: string
   flat_type: string
+  bhk_type: string | null
   maintenance_amt: number
-  collected_fy2627: number
+  fiscal_year: number
+  start_fiscal_year: number
+  collected_fy: number
   annual_due: number
   pending: number
   status: 'Clear' | 'Partial' | 'Due'

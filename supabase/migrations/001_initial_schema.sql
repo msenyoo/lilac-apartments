@@ -93,26 +93,33 @@ create index if not exists idx_txns_txn_id        on public.transactions(txn_id)
 -- Monthly maintenance collection per flat per month
 create or replace view public.v_monthly_collection as
 select
-  f.code                as flat_code,
+  f.code            as flat_code,
   f.block,
   f.flat_type,
   f.maintenance_amt,
-  t.fiscal_label,
-  t.fiscal_year,
-  coalesce(sum(t.amount) filter (
-    where t.cr_dr = 'CR'
-    and t.category = 'Maintenance'
-    and t.row_type != 'VOIDED'
-  ), 0) as collected
+  periods.fiscal_label,
+  periods.fiscal_year,
+  coalesce(agg.collected, 0) as collected
 from public.flats f
-cross join (select distinct fiscal_label, fiscal_year from public.transactions) t
-left join public.transactions t2
-  on t2.flat_code = f.code
-  and t2.fiscal_label = t.fiscal_label
-  and t2.cr_dr = 'CR'
-  and t2.category = 'Maintenance'
-  and t2.row_type != 'VOIDED'
-group by f.code, f.block, f.flat_type, f.maintenance_amt, t.fiscal_label, t.fiscal_year;
+cross join (
+  select distinct fiscal_label, fiscal_year
+  from public.transactions
+) periods
+left join (
+  select
+    flat_code,
+    fiscal_label,
+    fiscal_year,
+    sum(amount) as collected
+  from public.transactions
+  where cr_dr = 'CR'
+    and category = 'Maintenance'
+    and row_type != 'VOIDED'
+  group by flat_code, fiscal_label, fiscal_year
+) agg
+  on agg.flat_code = f.code
+  and agg.fiscal_label = periods.fiscal_label
+  and agg.fiscal_year = periods.fiscal_year;
 
 -- Dues tracker — FY 2026-27
 create or replace view public.v_dues_tracker as

@@ -3,13 +3,14 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import Layout from '@/components/layout/Layout'
-import LoginPage from '@/pages/LoginPage'
-import DashboardPage from '@/pages/DashboardPage'
-import UploadPage from '@/pages/UploadPage'
-import ReviewPage from '@/pages/ReviewPage'
-import ReportPage from '@/pages/ReportPage'
-import DuesPage from '@/pages/DuesPage'
-import CorpusPage from '@/pages/CorpusPage'
+import LoginPage       from '@/pages/LoginPage'
+import DashboardPage   from '@/pages/DashboardPage'
+import TransactionsPage from '@/pages/TransactionsPage'
+import DuesPage        from '@/pages/DuesPage'
+import CorpusPage      from '@/pages/CorpusPage'
+import ReportPage      from '@/pages/ReportPage'
+import FlatsPage       from '@/pages/FlatsPage'
+import SettingsPage    from '@/pages/SettingsPage'
 
 export default function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined)
@@ -22,7 +23,7 @@ export default function App() {
 
   if (session === undefined) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="w-8 h-8 border-4 border-brand-500 border-t-transparent rounded-full animate-spin" />
       </div>
     )
@@ -31,16 +32,21 @@ export default function App() {
   if (!session) return <LoginPage />
 
   return (
-    <BrowserRouter>
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
         <Route path="/" element={<Layout />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route path="dashboard" element={<DashboardPage />} />
-          <Route path="upload"    element={<UploadPage />} />
-          <Route path="review"    element={<ReviewPage />} />
-          <Route path="dues"      element={<DuesPage />} />
-          <Route path="corpus"    element={<CorpusPage />} />
-          <Route path="report"    element={<ReportPage />} />
+          <Route path="dashboard"    element={<DashboardPage />} />
+          <Route path="transactions" element={<TransactionsPage />} />
+          <Route path="dues"         element={<DuesPage />} />
+          <Route path="corpus"       element={<CorpusPage />} />
+          <Route path="reports"      element={<ReportPage />} />
+          <Route path="flats"        element={<FlatsPage />} />
+          <Route path="settings"     element={<SettingsPage />} />
+          {/* Legacy redirects */}
+          <Route path="upload"       element={<Navigate to="/transactions" replace />} />
+          <Route path="review"       element={<Navigate to="/transactions?tab=review" replace />} />
+          <Route path="report"       element={<Navigate to="/reports" replace />} />
         </Route>
       </Routes>
     </BrowserRouter>

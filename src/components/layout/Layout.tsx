@@ -1,19 +1,29 @@
-import { Outlet, NavLink, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Upload, AlertCircle, IndianRupee, Building2, FileText, LogOut } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
+import {
+  LayoutDashboard, ArrowUpFromLine, ClipboardList, IndianRupee,
+  Building2, FileText, LogOut, Menu, X, Settings, ChevronRight,
+} from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useQuery } from '@tanstack/react-query'
 
-const navItems = [
-  { to: '/dashboard', icon: LayoutDashboard, label: 'Home' },
-  { to: '/upload',    icon: Upload,          label: 'Upload' },
-  { to: '/review',    icon: AlertCircle,     label: 'Review' },
-  { to: '/dues',      icon: IndianRupee,     label: 'Dues' },
-  { to: '/corpus',    icon: Building2,       label: 'Corpus' },
-  { to: '/report',    icon: FileText,        label: 'Report' },
+const NAV = [
+  { to: '/dashboard',    icon: LayoutDashboard,  label: 'Dashboard' },
+  { to: '/transactions', icon: ArrowUpFromLine,   label: 'Transactions', badge: 'review' },
+  { to: '/dues',         icon: IndianRupee,       label: 'Dues' },
+  { to: '/corpus',       icon: Building2,         label: 'Corpus' },
+  { to: '/reports',      icon: FileText,          label: 'Reports' },
+  { to: '/flats',        icon: ClipboardList,     label: 'Flats & Residents' },
+  { to: '/settings',     icon: Settings,          label: 'Settings' },
 ]
 
 export default function Layout() {
-  const navigate = useNavigate()
+  const navigate  = useNavigate()
+  const location  = useLocation()
+  const [open, setOpen] = useState(false)
+
+  // Close drawer on route change (mobile)
+  useEffect(() => { setOpen(false) }, [location.pathname])
 
   const { data: reviewCount } = useQuery({
     queryKey: ['review-count'],
@@ -31,49 +41,135 @@ export default function Layout() {
     navigate('/')
   }
 
-  return (
-    <div className="min-h-screen flex flex-col max-w-lg mx-auto">
-      {/* Top bar */}
-      <header className="bg-brand-700 text-white px-4 py-3 flex items-center justify-between sticky top-0 z-10 safe-top">
-        <div>
-          <h1 className="font-semibold text-base leading-tight">Lilac Apartments</h1>
-          <p className="text-xs text-blue-200">Rajakil Pakkam</p>
+  const sidebar = (
+    <aside className="flex flex-col h-full bg-slate-900 text-slate-100 w-60 shrink-0">
+      {/* Logo */}
+      <div className="flex items-center gap-3 px-4 py-5 border-b border-slate-700">
+        <div className="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center shrink-0">
+          <Building2 size={16} className="text-white" />
         </div>
-        <button onClick={handleLogout} className="p-2 rounded-lg active:bg-brand-900">
-          <LogOut size={18} />
-        </button>
-      </header>
-
-      {/* Page content */}
-      <main className="flex-1 overflow-y-auto pb-20">
-        <Outlet />
-      </main>
-
-      {/* Bottom nav */}
-      <nav className="fixed bottom-0 left-0 right-0 max-w-lg mx-auto bg-white border-t border-slate-200 safe-bottom z-10">
-        <div className="grid grid-cols-6">
-          {navItems.map(({ to, icon: Icon, label }) => (
-            <NavLink
-              key={to}
-              to={to}
-              className={({ isActive }) =>
-                `flex flex-col items-center justify-center py-2 gap-0.5 relative touch-manipulation
-                 ${isActive ? 'text-brand-700' : 'text-slate-400'}`
-              }
-            >
-              <div className="relative">
-                <Icon size={20} strokeWidth={1.75} />
-                {label === 'Review' && reviewCount && reviewCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] rounded-full w-4 h-4 flex items-center justify-center font-bold">
-                    {reviewCount > 9 ? '9+' : reviewCount}
-                  </span>
-                )}
-              </div>
-              <span className="text-[10px] font-medium">{label}</span>
-            </NavLink>
-          ))}
+        <div className="min-w-0">
+          <p className="text-sm font-semibold leading-tight truncate">Lilac Apartments</p>
+          <p className="text-xs text-slate-400 truncate">Rajakil Pakkam</p>
         </div>
+      </div>
+
+      {/* Nav */}
+      <nav className="flex-1 overflow-y-auto py-3 space-y-0.5 px-2">
+        {NAV.map(({ to, icon: Icon, label, badge }) => (
+          <NavLink
+            key={to}
+            to={to}
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors relative
+               ${isActive
+                 ? 'bg-brand-600 text-white'
+                 : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`
+            }
+          >
+            <Icon size={17} strokeWidth={1.75} className="shrink-0" />
+            <span className="flex-1">{label}</span>
+            {badge === 'review' && reviewCount && reviewCount > 0 && (
+              <span className="bg-red-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 min-w-[20px] text-center">
+                {reviewCount > 99 ? '99+' : reviewCount}
+              </span>
+            )}
+          </NavLink>
+        ))}
       </nav>
+
+      {/* Logout */}
+      <div className="border-t border-slate-700 p-3">
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400
+                     hover:bg-slate-800 hover:text-white transition-colors"
+        >
+          <LogOut size={17} strokeWidth={1.75} />
+          <span>Sign out</span>
+        </button>
+      </div>
+    </aside>
+  )
+
+  return (
+    <div className="flex h-screen bg-slate-50 overflow-hidden">
+
+      {/* Desktop sidebar — always visible on lg+ */}
+      <div className="hidden lg:flex lg:flex-col lg:shrink-0">
+        {sidebar}
+      </div>
+
+      {/* Mobile sidebar — drawer overlay */}
+      {open && (
+        <div className="fixed inset-0 z-50 flex lg:hidden">
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => setOpen(false)}
+          />
+          <div className="relative flex flex-col h-full shadow-2xl">
+            {sidebar}
+          </div>
+          <button
+            onClick={() => setOpen(false)}
+            className="absolute top-4 left-[244px] z-10 p-1.5 rounded-lg bg-slate-800 text-white"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
+      {/* Main content */}
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+        {/* Top bar (mobile: shows hamburger; desktop: shows breadcrumb) */}
+        <header className="bg-white border-b border-slate-200 px-4 h-14 flex items-center justify-between shrink-0 lg:px-6">
+          <button
+            className="lg:hidden p-1.5 rounded-lg text-slate-600 hover:bg-slate-100"
+            onClick={() => setOpen(true)}
+          >
+            <Menu size={20} />
+          </button>
+
+          {/* Breadcrumb / current page title — desktop */}
+          <div className="hidden lg:flex items-center gap-1.5 text-sm text-slate-500">
+            <span className="text-slate-400">Lilac Apartments</span>
+            <ChevronRight size={14} className="text-slate-300" />
+            <span className="text-slate-700 font-medium">
+              {NAV.find(n => location.pathname.startsWith(n.to))?.label ?? 'Page'}
+            </span>
+          </div>
+
+          {/* Mobile: center logo text */}
+          <div className="lg:hidden absolute left-1/2 -translate-x-1/2 text-sm font-semibold text-slate-800">
+            Lilac Apartments
+          </div>
+
+          {/* Right slot: logout on mobile */}
+          <button
+            onClick={handleLogout}
+            className="lg:hidden p-1.5 rounded-lg text-slate-600 hover:bg-slate-100"
+          >
+            <LogOut size={18} />
+          </button>
+
+          {/* Desktop right: review badge quick link */}
+          <div className="hidden lg:flex items-center gap-3">
+            {reviewCount && reviewCount > 0 ? (
+              <NavLink to="/transactions" className="flex items-center gap-1.5 text-sm text-orange-600 font-medium hover:text-orange-700">
+                <ClipboardList size={15} />
+                <span>{reviewCount} pending review</span>
+              </NavLink>
+            ) : null}
+          </div>
+        </header>
+
+        {/* Scrollable page content */}
+        <main className="flex-1 overflow-y-auto">
+          <div className="p-4 lg:p-6 max-w-screen-2xl mx-auto">
+            <Outlet />
+          </div>
+        </main>
+      </div>
     </div>
   )
 }
