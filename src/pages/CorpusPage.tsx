@@ -94,7 +94,7 @@ export default function CorpusPage() {
           <span className="font-semibold">{pct}%</span>
         </div>
         <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
-          <div className="h-full bg-brand-600 rounded-full transition-all" style={{ width: `${Math.min(pct, 100)}%` }} />
+          <div className="h-3 bg-brand-600 rounded-full transition-all" style={{ width: `${Math.min(pct, 100)}%` }} />
         </div>
         <div className="flex justify-between mt-1.5 text-xs text-slate-400">
           <span>{formatINR(totalCollected)} collected</span>
@@ -329,7 +329,7 @@ function FlatCorpusPanel({ flat, onClose }: { flat: CorpusEntry; onClose: () => 
 
         <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
           <div
-            className={`h-full rounded-full transition-all ${flat.status === 'Done' ? 'bg-green-500' : flat.status === 'Partial' ? 'bg-amber-400' : 'bg-slate-300'}`}
+            className={`h-2 rounded-full transition-all ${flat.status === 'Done' ? 'bg-green-500' : flat.status === 'Partial' ? 'bg-amber-400' : 'bg-slate-300'}`}
             style={{ width: `${Math.min(100, flat.pct_paid ?? 0)}%` }}
           />
         </div>
