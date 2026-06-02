@@ -197,7 +197,7 @@ function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat
         {/* Progress bar */}
         <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
           <div
-            className={`h-full rounded-full transition-all ${flat.status === 'Clear' ? 'bg-green-500' : flat.status === 'Partial' ? 'bg-amber-400' : 'bg-red-400'}`}
+            className={`h-2 rounded-full transition-all ${flat.status === 'Clear' ? 'bg-green-500' : flat.status === 'Partial' ? 'bg-amber-400' : 'bg-red-400'}`}
             style={{ width: `${Math.min(100, (flat.collected_fy / flat.annual_due) * 100)}%` }}
           />
         </div>
