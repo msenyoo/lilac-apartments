@@ -2,7 +2,7 @@ import { useState, useMemo, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AgGridReact } from 'ag-grid-react'
 import type { ColDef } from 'ag-grid-community'
-import { Download } from 'lucide-react'
+import { Download, X, TrendingDown } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { supabase, CorpusEntry, CorpusPlan } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
@@ -134,6 +134,7 @@ function SummaryCard({ label, value, color, bg }: { label: string; value: string
 
 function CollectionGrid({ corpus, isLoading }: { corpus: CorpusEntry[]; isLoading: boolean }) {
   const gridRef = useRef<AgGridReact>(null)
+  const [selectedFlat, setSelectedFlat] = useState<CorpusEntry | null>(null)
 
   const colDefs = useMemo((): ColDef<any>[] => [
     { field: 'flat_code',         headerName: 'Flat',     width: 90 },
@@ -185,13 +186,23 @@ function CollectionGrid({ corpus, isLoading }: { corpus: CorpusEntry[]; isLoadin
           <Download size={14} /> Export
         </button>
       </div>
-      <div className="rounded-xl overflow-hidden border border-slate-200" style={{ height: 480 }}>
-        <AgGridReact
-          ref={gridRef}
-          rowData={corpus}
-          columnDefs={colDefs}
-          defaultColDef={{ sortable: true, resizable: true, filter: true, floatingFilter: true }}
-        />
+      <div className="flex gap-4">
+        <div className="flex-1 min-w-0">
+          <div className="rounded-xl overflow-hidden border border-slate-200" style={{ height: 480 }}>
+            <AgGridReact
+              ref={gridRef}
+              rowData={corpus}
+              columnDefs={colDefs}
+              defaultColDef={{ sortable: true, resizable: true, filter: true, floatingFilter: true }}
+              rowSelection={{ mode: 'singleRow' }}
+              onRowClicked={e => setSelectedFlat(e.data)}
+              getRowStyle={(p: any) => p.data?.flat_code === selectedFlat?.flat_code ? { background: '#eff6ff' } : undefined}
+            />
+          </div>
+        </div>
+        {selectedFlat && (
+          <FlatCorpusPanel flat={selectedFlat} onClose={() => setSelectedFlat(null)} />
+        )}
       </div>
     </div>
   )
@@ -263,6 +274,86 @@ function PlanGrid({ planFlats, corpus }: { planFlats: any[]; corpus: CorpusEntry
           columnDefs={colDefs}
           defaultColDef={{ sortable: true, resizable: true, filter: true, floatingFilter: true }}
         />
+      </div>
+    </div>
+  )
+}
+
+function FlatCorpusPanel({ flat, onClose }: { flat: CorpusEntry; onClose: () => void }) {
+  const { data: payments } = useQuery({
+    queryKey: ['flat-corpus-payments', flat.flat_code, flat.start_fiscal_year, flat.end_fiscal_year],
+    queryFn: async () => {
+      const { data } = await supabase.from('transactions')
+        .select('*')
+        .eq('flat_code', flat.flat_code)
+        .gte('fiscal_year', flat.start_fiscal_year)
+        .lte('fiscal_year', flat.end_fiscal_year)
+        .eq('cr_dr', 'CR')
+        .eq('corpus', 'YES')
+        .neq('row_type', 'VOIDED')
+        .order('value_date')
+      return data ?? []
+    },
+  })
+
+  return (
+    <div className="w-72 shrink-0 space-y-3">
+      <div className="card p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold">{flat.flat_code}</h3>
+          <button onClick={onClose} className="p-1 rounded hover:bg-slate-100"><X size={15} /></button>
+        </div>
+
+        <div className="space-y-1.5 text-sm">
+          <div className="flex justify-between">
+            <span className="text-slate-500">Target</span>
+            <span className="font-medium">{formatINR(flat.corpus_target)}</span>
+          </div>
+          {flat.pre_payment > 0 && (
+            <div className="flex justify-between">
+              <span className="text-slate-500">Pre-payment</span>
+              <span className="font-medium text-green-700">{formatINR(flat.pre_payment)}</span>
+            </div>
+          )}
+          <div className="flex justify-between">
+            <span className="text-slate-500">Collected</span>
+            <span className="font-medium text-green-700">{formatINR(flat.collected)}</span>
+          </div>
+          <div className="flex justify-between border-t border-slate-100 pt-1.5">
+            <span className="text-slate-500">Balance</span>
+            <span className={`font-semibold ${flat.balance <= 0 ? 'text-green-600' : 'text-amber-600'}`}>
+              {flat.balance <= 0 ? '✓ Done' : formatINR(flat.balance)}
+            </span>
+          </div>
+        </div>
+
+        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all ${flat.status === 'Done' ? 'bg-green-500' : flat.status === 'Partial' ? 'bg-amber-400' : 'bg-slate-300'}`}
+            style={{ width: `${Math.min(100, flat.pct_paid ?? 0)}%` }}
+          />
+        </div>
+      </div>
+
+      <div className="card p-4">
+        <h4 className="font-medium text-sm mb-3 flex items-center gap-1.5">
+          <TrendingDown size={14} className="text-slate-400" /> Payment history
+        </h4>
+        {!payments?.length ? (
+          <p className="text-sm text-slate-400">No payments yet</p>
+        ) : (
+          <div className="space-y-2">
+            {payments.map((p: any) => (
+              <div key={p.id} className="flex justify-between text-sm">
+                <div>
+                  <p className="font-medium">{p.fiscal_label}</p>
+                  <p className="text-xs text-slate-400">{p.value_date}</p>
+                </div>
+                <p className="font-semibold text-green-700">{formatINR(p.amount)}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
