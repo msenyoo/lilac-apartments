@@ -65,7 +65,9 @@ WHERE cpf.installment_3 IS NOT NULL
 ON CONFLICT DO NOTHING;
 
 -- 5. Rewrite v_corpus_tracker: multi-plan aware, carry-forward in effective target
-CREATE OR REPLACE VIEW public.v_corpus_tracker AS
+-- Drop and recreate because column list changes (PostgreSQL forbids renaming via REPLACE)
+DROP VIEW IF EXISTS public.v_corpus_tracker;
+CREATE VIEW public.v_corpus_tracker AS
 SELECT
   f.code                                                              AS flat_code,
   f.block,

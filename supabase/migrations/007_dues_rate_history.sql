@@ -1,7 +1,8 @@
 -- 007: Rewrite v_dues_tracker to use maintenance_rate_history
 -- Rate changes now affect due calculations (forward-only from effective_from date)
 
-CREATE OR REPLACE VIEW public.v_dues_tracker AS
+DROP VIEW IF EXISTS public.v_dues_tracker;
+CREATE VIEW public.v_dues_tracker AS
 WITH settings AS (
   SELECT
     (SELECT value::integer FROM public.app_settings WHERE key = 'dues_start_fiscal_year') AS start_fy
