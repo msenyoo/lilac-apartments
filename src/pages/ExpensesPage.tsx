@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm, useFieldArray, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Plus, Trash2, Download, Receipt, Users, Building, X } from 'lucide-react'
+import { Plus, Trash2, Download, Receipt, Users, Building, X, GitMerge, CheckCircle2 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
@@ -99,7 +99,7 @@ const STATUS_STYLE: Record<string, string> = {
 // ── Page ──────────────────────────────────────────────────────
 
 export default function ExpensesPage() {
-  const [tab, setTab] = useState<'daybook' | 'vendors' | 'staff'>('daybook')
+  const [tab, setTab] = useState<'daybook' | 'reconcile' | 'vendors' | 'staff'>('daybook')
   const [addOpen, setAddOpen] = useState(false)
 
   return (
@@ -107,7 +107,7 @@ export default function ExpensesPage() {
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h2 className="text-xl font-semibold">Expenses</h2>
-          <p className="text-sm text-slate-500 mt-0.5">Day book · Vendors · Staff</p>
+          <p className="text-sm text-slate-500 mt-0.5">Day book · Reconcile · Vendors · Staff</p>
         </div>
         <Button onClick={() => setAddOpen(true)} className="flex items-center gap-2">
           <Plus size={16} /> Add Expense
@@ -117,9 +117,10 @@ export default function ExpensesPage() {
       {/* Tabs */}
       <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
         {([
-          { key: 'daybook', label: 'Day Book',    icon: Receipt },
-          { key: 'vendors', label: 'Vendors',     icon: Building },
-          { key: 'staff',   label: 'Staff',       icon: Users },
+          { key: 'daybook',   label: 'Day Book',   icon: Receipt },
+          { key: 'reconcile', label: 'Reconcile',  icon: GitMerge },
+          { key: 'vendors',   label: 'Vendors',    icon: Building },
+          { key: 'staff',     label: 'Staff',      icon: Users },
         ] as { key: typeof tab; label: string; icon: any }[]).map(({ key, label, icon: Icon }) => (
           <button key={key} onClick={() => setTab(key)}
             className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
@@ -130,9 +131,10 @@ export default function ExpensesPage() {
         ))}
       </div>
 
-      {tab === 'daybook' && <DayBook />}
-      {tab === 'vendors' && <VendorsTab />}
-      {tab === 'staff'   && <StaffTab />}
+      {tab === 'daybook'   && <DayBook />}
+      {tab === 'reconcile' && <ReconcileTab />}
+      {tab === 'vendors'   && <VendorsTab />}
+      {tab === 'staff'     && <StaffTab />}
 
       <AddExpenseDialog open={addOpen} onClose={() => setAddOpen(false)} />
     </div>
@@ -769,6 +771,248 @@ function AddExpenseDialog({ open, onClose }: { open: boolean; onClose: () => voi
         </form>
       </DialogContent>
     </Dialog>
+  )
+}
+
+// ── Reconcile tab ─────────────────────────────────────────────
+
+interface UnreconciledExpense {
+  id: string; expense_date: string; description: string; amount: number
+  payment_mode: string; voucher_no: string | null; payee_name_raw: string | null
+  reference_no: string | null
+}
+interface UnmatchedDR {
+  id: string; value_date: string; description: string; amount: number
+  txn_id: string | null; category: string | null
+}
+
+function ReconcileTab() {
+  const qc = useQueryClient()
+  const [selectedExpenseId, setSelectedExpenseId] = useState<string | null>(null)
+  const [selectedTxnId,     setSelectedTxnId]     = useState<string | null>(null)
+
+  const { data: expenses = [], isLoading: loadingExp } = useQuery({
+    queryKey: ['unreconciled-expenses'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('expenses')
+        .select('id,expense_date,description,amount,payment_mode,voucher_no,payee_name_raw,reference_no')
+        .neq('payment_mode', 'Cash')
+        .is('transaction_id', null)
+        .order('expense_date', { ascending: false })
+      return (data ?? []) as UnreconciledExpense[]
+    },
+  })
+
+  const { data: bankDRs = [], isLoading: loadingDR } = useQuery({
+    queryKey: ['unmatched-bank-drs'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('transactions')
+        .select('id,value_date,description,amount,txn_id,category')
+        .eq('cr_dr', 'DR')
+        .neq('row_type', 'VOIDED')
+        .is('expense_id', null)
+        .order('value_date', { ascending: false })
+      return (data ?? []) as UnmatchedDR[]
+    },
+  })
+
+  const selExp = expenses.find(e => e.id === selectedExpenseId)
+  const selTxn = bankDRs.find(t => t.id === selectedTxnId)
+  const amountMatch = selExp && selTxn && selExp.amount === selTxn.amount
+  const canMatch    = !!selExp && !!selTxn
+
+  const matchMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedExpenseId || !selectedTxnId) return
+      const now = new Date().toISOString()
+      const [{ error: e1 }, { error: e2 }] = await Promise.all([
+        supabase.from('expenses')
+          .update({ transaction_id: selectedTxnId, reconciled_at: now })
+          .eq('id', selectedExpenseId),
+        supabase.from('transactions')
+          .update({ expense_id: selectedExpenseId })
+          .eq('id', selectedTxnId),
+      ])
+      if (e1) throw e1
+      if (e2) throw e2
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['unreconciled-expenses'] })
+      qc.invalidateQueries({ queryKey: ['unmatched-bank-drs'] })
+      qc.invalidateQueries({ queryKey: ['expenses'] })
+      setSelectedExpenseId(null)
+      setSelectedTxnId(null)
+    },
+  })
+
+  const loading = loadingExp || loadingDR
+
+  return (
+    <div className="space-y-4">
+      {/* Summary strip */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className={`card p-4 ${expenses.length > 0 ? 'bg-amber-50' : 'bg-green-50'}`}>
+          <p className="text-xs text-slate-500 mb-1">Unreconciled expenses</p>
+          <p className={`text-2xl font-bold ${expenses.length > 0 ? 'text-amber-600' : 'text-green-600'}`}>
+            {expenses.length}
+          </p>
+          {expenses.length > 0 && (
+            <p className="text-xs text-amber-600 mt-0.5">
+              {formatINR(expenses.reduce((s, e) => s + e.amount, 0))}
+            </p>
+          )}
+        </div>
+        <div className="card p-4 bg-white">
+          <p className="text-xs text-slate-500 mb-1">Unmatched bank DRs</p>
+          <p className="text-2xl font-bold text-slate-700">{bankDRs.length}</p>
+          {bankDRs.length > 0 && (
+            <p className="text-xs text-slate-400 mt-0.5">
+              {formatINR(bankDRs.reduce((s, t) => s + t.amount, 0))}
+            </p>
+          )}
+        </div>
+        {canMatch && (
+          <div className={`card p-4 ${amountMatch ? 'bg-green-50 border border-green-200' : 'bg-orange-50 border border-orange-200'}`}>
+            <p className="text-xs text-slate-500 mb-1">Selected match</p>
+            <p className="text-sm font-medium text-slate-700">
+              {formatINR(selExp!.amount)} ↔ {formatINR(selTxn!.amount)}
+            </p>
+            {!amountMatch && (
+              <p className="text-xs text-orange-600 mt-0.5">
+                Diff: {formatINR(Math.abs(selExp!.amount - selTxn!.amount))}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Action bar */}
+      {canMatch && (
+        <div className="flex items-center gap-3 p-3 rounded-xl bg-violet-50 border border-violet-200">
+          <div className="flex-1 text-sm text-slate-700">
+            <span className="font-medium">{selExp!.voucher_no ?? selExp!.description.slice(0, 30)}</span>
+            <span className="text-slate-400 mx-2">↔</span>
+            <span className="font-medium">{selTxn!.txn_id ?? selTxn!.description.slice(0, 30)}</span>
+          </div>
+          {!amountMatch && (
+            <span className="text-xs text-orange-600 font-medium shrink-0">Amount mismatch</span>
+          )}
+          <Button
+            size="sm"
+            onClick={() => matchMutation.mutate()}
+            disabled={matchMutation.isPending}
+            className="shrink-0"
+          >
+            <CheckCircle2 size={14} className="mr-1.5" />
+            {matchMutation.isPending ? 'Matching…' : 'Match'}
+          </Button>
+          <button
+            onClick={() => { setSelectedExpenseId(null); setSelectedTxnId(null) }}
+            className="text-slate-400 hover:text-slate-600 shrink-0"
+          >
+            <X size={15} />
+          </button>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="grid lg:grid-cols-2 gap-4">
+          <div className="card h-64 animate-pulse bg-slate-100" />
+          <div className="card h-64 animate-pulse bg-slate-100" />
+        </div>
+      ) : (
+        <div className="grid lg:grid-cols-2 gap-4">
+          {/* Left: unreconciled expenses */}
+          <div className="card">
+            <div className="px-4 py-3 border-b border-slate-100 bg-slate-50 rounded-t-xl">
+              <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+                Unreconciled expenses ({expenses.length})
+              </p>
+              <p className="text-xs text-slate-400 mt-0.5">Select one to match with a bank DR</p>
+            </div>
+            {expenses.length === 0 ? (
+              <p className="px-4 py-8 text-sm text-slate-400 text-center">All expenses reconciled ✓</p>
+            ) : (
+              <div className="divide-y divide-slate-100 max-h-[480px] overflow-y-auto">
+                {expenses.map(e => (
+                  <button
+                    key={e.id}
+                    onClick={() => setSelectedExpenseId(id => id === e.id ? null : e.id)}
+                    className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 text-left transition-colors ${
+                      selectedExpenseId === e.id ? 'bg-violet-50 border-l-2 border-violet-500' : ''
+                    }`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <p className="text-sm font-medium text-slate-800 truncate">{e.description}</p>
+                        <p className="text-sm font-bold text-slate-800 shrink-0">{formatINR(e.amount)}</p>
+                      </div>
+                      <div className="flex gap-2 mt-0.5">
+                        <span className="text-xs text-slate-400">{e.expense_date}</span>
+                        {e.voucher_no && <span className="text-xs text-slate-400">{e.voucher_no}</span>}
+                        <span className="text-xs text-slate-400">{e.payment_mode}</span>
+                        {e.reference_no && <span className="text-xs text-slate-400 truncate">{e.reference_no}</span>}
+                      </div>
+                    </div>
+                    {selectedExpenseId === e.id && (
+                      <CheckCircle2 size={16} className="text-violet-500 shrink-0" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Right: unmatched bank DRs */}
+          <div className="card">
+            <div className="px-4 py-3 border-b border-slate-100 bg-slate-50 rounded-t-xl">
+              <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+                Unmatched bank DRs ({bankDRs.length})
+              </p>
+              <p className="text-xs text-slate-400 mt-0.5">Select one to match with an expense</p>
+            </div>
+            {bankDRs.length === 0 ? (
+              <p className="px-4 py-8 text-sm text-slate-400 text-center">No unmatched bank debits</p>
+            ) : (
+              <div className="divide-y divide-slate-100 max-h-[480px] overflow-y-auto">
+                {bankDRs.map(t => (
+                  <button
+                    key={t.id}
+                    onClick={() => setSelectedTxnId(id => id === t.id ? null : t.id)}
+                    className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 text-left transition-colors ${
+                      selectedTxnId === t.id ? 'bg-violet-50 border-l-2 border-violet-500' : ''
+                    }`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <p className="text-sm font-medium text-slate-800 truncate">{t.description}</p>
+                        <p className="text-sm font-bold text-red-600 shrink-0">{formatINR(t.amount)}</p>
+                      </div>
+                      <div className="flex gap-2 mt-0.5">
+                        <span className="text-xs text-slate-400">{t.value_date}</span>
+                        {t.txn_id && <span className="text-xs text-slate-400">{t.txn_id}</span>}
+                        {t.category && <span className="text-xs text-slate-400">{t.category}</span>}
+                      </div>
+                    </div>
+                    {selectedTxnId === t.id && (
+                      <CheckCircle2 size={16} className="text-violet-500 shrink-0" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {matchMutation.isError && (
+        <p className="text-sm text-red-500">
+          Match failed: {(matchMutation.error as Error)?.message}
+        </p>
+      )}
+    </div>
   )
 }
 
