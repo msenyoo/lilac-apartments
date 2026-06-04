@@ -11,6 +11,7 @@ import CorpusPage      from '@/pages/CorpusPage'
 import ReportPage      from '@/pages/ReportPage'
 import FlatsPage       from '@/pages/FlatsPage'
 import SettingsPage    from '@/pages/SettingsPage'
+import ExpensesPage    from '@/pages/ExpensesPage'
 
 export default function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined)
@@ -40,6 +41,7 @@ export default function App() {
           <Route path="transactions" element={<TransactionsPage />} />
           <Route path="dues"         element={<DuesPage />} />
           <Route path="corpus"       element={<CorpusPage />} />
+          <Route path="expenses"     element={<ExpensesPage />} />
           <Route path="reports"      element={<ReportPage />} />
           <Route path="flats"        element={<FlatsPage />} />
           <Route path="settings"     element={<SettingsPage />} />
