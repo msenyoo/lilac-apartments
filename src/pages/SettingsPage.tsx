@@ -2,18 +2,21 @@ import { useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
-import { Save, RefreshCw, Plus } from 'lucide-react'
+import { Save, RefreshCw, Plus, Pencil, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
 
 const FY_OPTIONS = ['2022','2023','2024','2025','2026','2027','2028']
 function fyLabel(y: string) { return `FY ${y}-${String(parseInt(y) + 1).slice(-2)}` }
 
-type SettingsTab = 'general' | 'rates' | 'imports'
+type SettingsTab = 'general' | 'rates' | 'categories' | 'imports'
 
 export default function SettingsPage() {
   const [tab, setTab] = useState<SettingsTab>('general')
@@ -28,9 +31,10 @@ export default function SettingsPage() {
       {/* Tabs */}
       <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
         {([
-          { key: 'general', label: 'General' },
-          { key: 'rates',   label: 'Maintenance Rates' },
-          { key: 'imports', label: 'Import History' },
+          { key: 'general',     label: 'General' },
+          { key: 'rates',       label: 'Maintenance Rates' },
+          { key: 'categories',  label: 'Expense Categories' },
+          { key: 'imports',     label: 'Import History' },
         ] as { key: SettingsTab; label: string }[]).map(({ key, label }) => (
           <button key={key} onClick={() => setTab(key)}
             className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
@@ -41,9 +45,10 @@ export default function SettingsPage() {
         ))}
       </div>
 
-      {tab === 'general' && <GeneralSettings />}
-      {tab === 'rates'   && <RateHistorySettings />}
-      {tab === 'imports' && <UploadHistorySection />}
+      {tab === 'general'    && <GeneralSettings />}
+      {tab === 'rates'      && <RateHistorySettings />}
+      {tab === 'categories' && <CategoriesSettings />}
+      {tab === 'imports'    && <UploadHistorySection />}
     </div>
   )
 }
@@ -61,17 +66,23 @@ function GeneralSettings() {
     },
   })
 
-  const [duesStartFY, setDuesStartFY] = useState('')
+  const [duesStartFY,    setDuesStartFY]    = useState('')
+  const [collectionUpi,  setCollectionUpi]  = useState('')
+  const [collectionBank, setCollectionBank] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved,  setSaved]  = useState(false)
 
-  const currentStartFY = settings?.dues_start_fiscal_year ?? '2025'
-  const workingStartFY = duesStartFY || currentStartFY
+  const currentStartFY    = settings?.dues_start_fiscal_year ?? '2025'
+  const workingStartFY    = duesStartFY    || currentStartFY
+  const workingUpi        = collectionUpi  !== '' ? collectionUpi  : (settings?.collection_upi  ?? '')
+  const workingBank       = collectionBank !== '' ? collectionBank : (settings?.collection_bank ?? '')
 
   async function handleSave() {
     setSaving(true)
     await supabase.from('app_settings').upsert([
-      { key: 'dues_start_fiscal_year', value: workingStartFY, updated_at: new Date().toISOString() },
+      { key: 'dues_start_fiscal_year', value: workingStartFY,  updated_at: new Date().toISOString() },
+      { key: 'collection_upi',         value: workingUpi,      updated_at: new Date().toISOString() },
+      { key: 'collection_bank',        value: workingBank,     updated_at: new Date().toISOString() },
     ])
     qc.invalidateQueries()
     setSaving(false); setSaved(true)
@@ -93,6 +104,34 @@ function GeneralSettings() {
             {FY_OPTIONS.map(y => <option key={y} value={y}>{fyLabel(y)}</option>)}
           </select>
         </div>
+      </div>
+
+      <div className="card p-5 space-y-4">
+        <h3 className="font-semibold">Collection payment details</h3>
+        <p className="text-xs text-slate-400 -mt-2">Used in WhatsApp reminder messages sent to residents</p>
+        <div className="space-y-3 max-w-md">
+          <div>
+            <label className="text-sm text-slate-600 block mb-1">UPI ID</label>
+            <Input
+              value={workingUpi}
+              onChange={e => setCollectionUpi(e.target.value)}
+              placeholder="e.g. lilacapts@upi"
+              className="text-sm"
+            />
+          </div>
+          <div>
+            <label className="text-sm text-slate-600 block mb-1">Bank transfer details</label>
+            <Input
+              value={workingBank}
+              onChange={e => setCollectionBank(e.target.value)}
+              placeholder="e.g. A/c: 1234567890, IFSC: HDFC0001234, Name: Lilac Apt Association"
+              className="text-sm"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="flex">
         <button onClick={handleSave} disabled={saving || isLoading}
           className="btn-primary flex items-center gap-2">
           {saving ? <RefreshCw size={15} className="animate-spin" /> : <Save size={15} />}
@@ -394,6 +433,221 @@ function AddRateChangeDialog({ open, onClose, flats, currentRates, onSuccess }: 
           <Button variant="outline" onClick={() => { reset(); onClose() }}>Cancel</Button>
           <Button onClick={handleSave} disabled={saving}>
             {saving ? 'Saving…' : `Apply to ${selectedFlatIds.length} flat${selectedFlatIds.length !== 1 ? 's' : ''}`}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ── Expense categories settings ───────────────────────────────
+
+interface ExpenseCategory {
+  id: string; name: string; budget_type: string
+  is_utility: boolean; unit_label: string | null; sort_order: number
+}
+
+function CategoriesSettings() {
+  const qc = useQueryClient()
+  const [editTarget, setEditTarget] = useState<ExpenseCategory | null>(null)
+  const [addOpen, setAddOpen]       = useState(false)
+
+  const { data: categories = [], isLoading } = useQuery({
+    queryKey: ['expense-categories-all'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('expense_categories')
+        .select('id, name, budget_type, is_utility, unit_label, sort_order')
+        .order('sort_order')
+      return (data ?? []) as ExpenseCategory[]
+    },
+  })
+
+  const maintenance = categories.filter(c => c.budget_type === 'Maintenance')
+  const corpus      = categories.filter(c => c.budget_type === 'Corpus')
+
+  async function toggleUtility(cat: ExpenseCategory) {
+    await supabase
+      .from('expense_categories')
+      .update({ is_utility: !cat.is_utility })
+      .eq('id', cat.id)
+    qc.invalidateQueries({ queryKey: ['expense-categories-all'] })
+    qc.invalidateQueries({ queryKey: ['utility-categories'] })
+    qc.invalidateQueries({ queryKey: ['expense-categories'] })
+  }
+
+  if (isLoading) return <div className="card h-40 animate-pulse bg-slate-100" />
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-slate-500">
+          Categories marked as utility appear in the Utility report tab with per-block tracking.
+        </p>
+        <Button size="sm" onClick={() => setAddOpen(true)} className="flex items-center gap-1.5 shrink-0">
+          <Plus size={14} /> Add Category
+        </Button>
+      </div>
+
+      {(['Maintenance', 'Corpus'] as const).map(budgetType => {
+        const rows = budgetType === 'Maintenance' ? maintenance : corpus
+        return (
+          <div key={budgetType} className="card overflow-hidden">
+            <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-100">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{budgetType}</p>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {rows.map(cat => (
+                <div key={cat.id} className="flex items-center gap-3 px-4 py-3">
+                  <span className="text-xs text-slate-400 w-6 shrink-0 text-right">{cat.sort_order}</span>
+                  <span className="flex-1 text-sm font-medium text-slate-800">{cat.name}</span>
+                  {cat.is_utility && cat.unit_label && (
+                    <span className="text-xs text-violet-600 bg-violet-50 px-2 py-0.5 rounded-full font-medium shrink-0">
+                      {cat.unit_label}
+                    </span>
+                  )}
+                  <button
+                    onClick={() => toggleUtility(cat)}
+                    title={cat.is_utility ? 'Shown in Utility report — click to remove' : 'Click to add to Utility report'}
+                    className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium transition-colors shrink-0 ${
+                      cat.is_utility
+                        ? 'bg-amber-100 text-amber-700 hover:bg-slate-100 hover:text-slate-500'
+                        : 'bg-slate-100 text-slate-400 hover:bg-amber-100 hover:text-amber-700'
+                    }`}
+                  >
+                    <Zap size={10} />
+                    {cat.is_utility ? 'Utility' : 'Not utility'}
+                  </button>
+                  <button
+                    onClick={() => setEditTarget(cat)}
+                    className="p-1 text-slate-400 hover:text-slate-700 transition-colors shrink-0"
+                  >
+                    <Pencil size={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })}
+
+      <AddEditCategoryDialog
+        key={editTarget?.id ?? 'new'}
+        open={addOpen || !!editTarget}
+        initial={editTarget}
+        onClose={() => { setAddOpen(false); setEditTarget(null) }}
+        onSuccess={() => {
+          qc.invalidateQueries({ queryKey: ['expense-categories-all'] })
+          qc.invalidateQueries({ queryKey: ['utility-categories'] })
+          qc.invalidateQueries({ queryKey: ['expense-categories'] })
+        }}
+      />
+    </div>
+  )
+}
+
+function AddEditCategoryDialog({ open, initial, onClose, onSuccess }: {
+  open: boolean
+  initial: ExpenseCategory | null
+  onClose: () => void
+  onSuccess: () => void
+}) {
+  const isEdit = !!initial
+  const [name,       setName]       = useState(initial?.name ?? '')
+  const [budgetType, setBudgetType] = useState(initial?.budget_type ?? 'Maintenance')
+  const [isUtility,  setIsUtility]  = useState(initial?.is_utility ?? false)
+  const [unitLabel,  setUnitLabel]  = useState(initial?.unit_label ?? '')
+  const [sortOrder,  setSortOrder]  = useState(String(initial?.sort_order ?? ''))
+  const [saving, setSaving] = useState(false)
+  const [err,    setErr]    = useState('')
+
+  async function handleSave() {
+    if (!name.trim()) return
+    setSaving(true); setErr('')
+    try {
+      const payload = {
+        name:        name.trim(),
+        budget_type: budgetType,
+        is_utility:  isUtility,
+        unit_label:  isUtility && unitLabel ? unitLabel : null,
+        sort_order:  sortOrder ? Number(sortOrder) : 99,
+      }
+      if (isEdit) {
+        const { error } = await supabase.from('expense_categories').update(payload).eq('id', initial!.id)
+        if (error) throw error
+      } else {
+        const { error } = await supabase.from('expense_categories').insert(payload)
+        if (error) throw error
+      }
+      onSuccess(); onClose()
+    } catch (e: any) { setErr(e.message) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!v) onClose() }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? 'Edit Category' : 'Add Category'}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <Label>Name *</Label>
+            <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Painting, EB (Electricity)" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <Label>Budget type</Label>
+              <Select value={budgetType} onValueChange={setBudgetType}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Maintenance">Maintenance</SelectItem>
+                  <SelectItem value="Corpus">Corpus</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>Sort order</Label>
+              <Input type="number" value={sortOrder} onChange={e => setSortOrder(e.target.value)} placeholder="99" />
+            </div>
+          </div>
+
+          <div className="space-y-3 p-3 rounded-lg bg-amber-50 border border-amber-100">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-800 flex items-center gap-1.5">
+                  <Zap size={13} className="text-amber-500" /> Utility category
+                </p>
+                <p className="text-xs text-slate-400 mt-0.5">Appears in Utility report tab with block-wise tracking</p>
+              </div>
+              <button
+                onClick={() => setIsUtility(u => !u)}
+                className={`relative w-10 h-5 rounded-full transition-colors ${isUtility ? 'bg-amber-500' : 'bg-slate-200'}`}
+              >
+                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${isUtility ? 'translate-x-5' : 'translate-x-0.5'}`} />
+              </button>
+            </div>
+
+            {isUtility && (
+              <div className="space-y-1">
+                <Label>Unit label</Label>
+                <Input
+                  value={unitLabel}
+                  onChange={e => setUnitLabel(e.target.value)}
+                  placeholder="kWh, trips, KL, L — leave blank for cost-only"
+                />
+                <p className="text-xs text-slate-400">Shown as column header when entering expense line items</p>
+              </div>
+            )}
+          </div>
+
+          {err && <p className="text-sm text-red-500">{err}</p>}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSave} disabled={!name.trim() || saving}>
+            {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Add Category'}
           </Button>
         </DialogFooter>
       </DialogContent>

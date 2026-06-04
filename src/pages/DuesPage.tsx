@@ -2,7 +2,7 @@ import { useState, useMemo, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AgGridReact } from 'ag-grid-react'
 import type { ColDef } from 'ag-grid-community'
-import { X, TrendingDown, Download } from 'lucide-react'
+import { X, TrendingDown, Download, MessageCircle, Check } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { supabase, DuesEntry, Transaction } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
@@ -146,6 +146,8 @@ function SummaryCard({ label, value, color, bg }: { label: string; value: string
 }
 
 function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat: DuesEntry; fiscalYear: number; startFiscalYear: number; onClose: () => void }) {
+  const [copied, setCopied] = useState(false)
+
   const { data: payments } = useQuery({
     queryKey: ['flat-payments', flat.flat_code, startFiscalYear, fiscalYear],
     queryFn: async () => {
@@ -161,6 +163,42 @@ function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat
       return (data ?? []) as Transaction[]
     },
   })
+
+  const { data: settings } = useQuery({
+    queryKey: ['app-settings'],
+    queryFn: async () => {
+      const { data } = await supabase.from('app_settings').select('*')
+      return Object.fromEntries((data ?? []).map((s: any) => [s.key, s.value]))
+    },
+  })
+
+  const fyLabel = `FY ${fiscalYear}-${String(fiscalYear + 1).slice(-2)}`
+
+  function buildReminderText() {
+    const lines = [
+      `Dear resident of ${flat.flat_code},`,
+      ``,
+      `Your maintenance dues of ${formatINR(flat.pending)} are pending for ${fyLabel}.`,
+      ``,
+      `Please make the payment at your earliest convenience.`,
+    ]
+    const upi  = settings?.collection_upi
+    const bank = settings?.collection_bank
+    if (upi || bank) {
+      lines.push(``)
+      lines.push(`Payment details:`)
+      if (upi)  lines.push(`  UPI: ${upi}`)
+      if (bank) lines.push(`  Bank transfer: ${bank}`)
+    }
+    lines.push(``, `— Lilac Apartment Association`)
+    return lines.join('\n')
+  }
+
+  async function handleCopyReminder() {
+    await navigator.clipboard.writeText(buildReminderText())
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2500)
+  }
 
   return (
     <div className="w-72 shrink-0 space-y-3">
@@ -201,6 +239,18 @@ function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat
             style={{ width: `${Math.min(100, (flat.collected_fy / flat.annual_due) * 100)}%` }}
           />
         </div>
+
+        {flat.pending > 0 && (
+          <button
+            onClick={handleCopyReminder}
+            className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-green-200 bg-green-50 text-green-700 text-sm font-medium hover:bg-green-100 transition-colors"
+          >
+            {copied
+              ? <><Check size={14} /> Copied!</>
+              : <><MessageCircle size={14} /> Copy WhatsApp reminder</>
+            }
+          </button>
+        )}
       </div>
 
       <div className="card p-4">

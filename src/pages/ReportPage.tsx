@@ -2,8 +2,10 @@ import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { formatINR, FLAT_CODES } from '@/lib/tagger'
-import { Share2, CheckCircle, AlertTriangle, Download } from 'lucide-react'
+import { Share2, CheckCircle, AlertTriangle, Download, FileText, Loader2, Zap } from 'lucide-react'
 import * as XLSX from 'xlsx'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+import type { DuesEntry } from '@/lib/supabase'
 
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
@@ -29,13 +31,54 @@ function getCurrentFy() {
   const now = new Date()
   const year = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
   return {
+    year,
     start: `${year}-04-01`,
     end:   `${year + 1}-03-31`,
     label: `FY ${year}-${String(year + 1).slice(-2)}`,
   }
 }
 
-type ReportTab = 'monthly' | 'flat'
+function getFyRange(year: number) {
+  return {
+    year,
+    start: `${year}-04-01`,
+    end:   `${year + 1}-03-31`,
+    label: `FY ${year}-${String(year + 1).slice(-2)}`,
+  }
+}
+
+function buildFiscalYears() {
+  const now = new Date()
+  const currentFyYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
+  const years = []
+  for (let y = 2022; y <= currentFyYear; y++) years.push(getFyRange(y))
+  return years.reverse()
+}
+
+const FISCAL_YEARS = buildFiscalYears()
+
+
+function triggerDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
+const BLOCK_COLORS: Record<string, string> = {
+  'Block-A': '#7c3aed',
+  'Block-B': '#2563eb',
+  'Block-C': '#059669',
+  'Block-D': '#d97706',
+  'Block-E': '#dc2626',
+  'Common':  '#64748b',
+}
+
+type ReportTab = 'monthly' | 'flat' | 'aging' | 'agm' | 'utility' | 'expenditure'
 
 export default function ReportPage() {
   const [tab, setTab] = useState<ReportTab>('monthly')
@@ -92,7 +135,6 @@ export default function ReportPage() {
   function handleExcelExport() {
     const wb = XLSX.utils.book_new()
 
-    // Sheet 1: Summary
     const summaryRows = [
       ['Lilac Apartment Association — Monthly Report', month],
       [],
@@ -105,14 +147,12 @@ export default function ReportPage() {
     ]
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryRows), 'Summary')
 
-    // Sheet 2: Collections by flat
     const collRows = [['Flat', 'Maintenance Rate', 'Collected', 'Status']]
     ;(flatsData ?? []).forEach((f: any) => {
       collRows.push([f.flat_code, f.maintenance_amt, f.collected, f.collected >= f.maintenance_amt ? 'Paid' : f.collected > 0 ? 'Partial' : 'Unpaid'])
     })
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(collRows), 'Collections')
 
-    // Sheet 3: Expenses
     const expRows = [['Category', 'Amount', 'Transactions']]
     ;(expenses ?? []).forEach((e: any) => expRows.push([e.category, e.total_amount, e.txn_count]))
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(expRows), 'Expenses')
@@ -125,15 +165,19 @@ export default function ReportPage() {
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <h2 className="text-xl font-semibold">Reports</h2>
-          <p className="text-sm text-slate-500 mt-0.5">Monthly summaries &amp; flat statements</p>
+          <p className="text-sm text-slate-500 mt-0.5">Monthly summaries, flat statements &amp; AGM reports</p>
         </div>
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
+      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit flex-wrap">
         {([
-          { key: 'monthly', label: 'Monthly summary' },
-          { key: 'flat',    label: 'Flat statement' },
+          { key: 'monthly',     label: 'Monthly summary' },
+          { key: 'flat',        label: 'Flat statement' },
+          { key: 'aging',       label: 'Dues aging' },
+          { key: 'agm',         label: 'AGM reports' },
+          { key: 'utility',     label: 'Utilities' },
+          { key: 'expenditure', label: 'Expenditure' },
         ] as { key: ReportTab; label: string }[]).map(({ key, label }) => (
           <button key={key} onClick={() => setTab(key)}
             className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors
@@ -143,99 +187,556 @@ export default function ReportPage() {
         ))}
       </div>
 
-      {tab === 'flat' && <FlatStatementTab />}
-      {tab === 'monthly' && <div className="space-y-4 max-w-3xl">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <p className="text-sm text-slate-500">Summary for committee &amp; residents</p>
+      {tab === 'flat'        && <FlatStatementTab />}
+      {tab === 'aging'       && <DuesAgingTab />}
+      {tab === 'agm'         && <AGMReportsTab />}
+      {tab === 'utility'     && <UtilityTab />}
+      {tab === 'expenditure' && <ExpenditureReportsTab />}
+      {tab === 'monthly' && (
+        <div className="space-y-4 max-w-3xl">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <p className="text-sm text-slate-500">Summary for committee &amp; residents</p>
+            <select value={month} onChange={e => setMonth(e.target.value)}
+              className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white">
+              {FISCAL_MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
+
+          {/* Summary card */}
+          <div className="card overflow-hidden">
+            <div className="px-5 py-4 text-white" style={{ background: 'linear-gradient(135deg, #1a3c5e, #2e75b6)' }}>
+              <p className="text-xs opacity-75 uppercase tracking-wide">The Lilac Apartment Association</p>
+              <p className="font-bold text-lg mt-0.5">Monthly Statement — {month}</p>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {[
+                { label: 'Maintenance collected', value: formatINR(summary?.maintenance_collected ?? 0) },
+                { label: 'Flats paid',            value: `${summary?.flats_paid ?? 0} of 44` },
+                { label: 'Total expenses',         value: formatINR(summary?.total_expenses ?? 0) },
+                { label: 'Corpus collected (total)', value: formatINR(totalCorpusCollected) },
+                { label: 'Corpus target (total)',  value: formatINR(totalCorpusTarget) },
+              ].map(({ label, value }) => (
+                <div key={label} className="flex justify-between px-5 py-3 text-sm">
+                  <span className="text-slate-500">{label}</span>
+                  <span className="font-semibold text-slate-800">{value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Expenses */}
+          {expenses && expenses.length > 0 && (
+            <div className="card">
+              <div className="px-5 py-3 border-b border-slate-100">
+                <h3 className="font-semibold text-sm">Expenses — {month}</h3>
+              </div>
+              {expenses.map((e: any) => (
+                <div key={e.category} className="flex justify-between px-5 py-2.5 border-b border-slate-50 text-sm">
+                  <span className="text-slate-600">{e.category}</span>
+                  <span className="font-semibold">{formatINR(e.total_amount)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Collections by flat */}
+          <div className="card">
+            <div className="px-5 py-3 border-b border-slate-100">
+              <h3 className="font-semibold text-sm">Collections by flat — {month}</h3>
+            </div>
+            <div className="divide-y divide-slate-50 max-h-64 overflow-y-auto">
+              {(flatsData ?? []).map((f: any) => (
+                <div key={f.flat_code} className="flex justify-between items-center px-5 py-2 text-sm">
+                  <span className="font-medium w-12">{f.flat_code}</span>
+                  <span className="text-slate-500 flex-1 px-2">{formatINR(f.maintenance_amt)}</span>
+                  <span className={f.collected > 0 ? 'font-semibold text-green-700' : 'text-slate-300'}>
+                    {f.collected > 0 ? formatINR(f.collected) : '—'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Pending */}
+          {unpaidFlats.length > 0 && (
+            <div className="card">
+              <div className="px-5 py-3 border-b border-slate-100 flex items-center gap-2">
+                <AlertTriangle size={15} className="text-amber-500" />
+                <h3 className="font-semibold text-sm">Pending maintenance — {month}</h3>
+              </div>
+              {unpaidFlats.map((f: any) => (
+                <div key={f.flat_code} className="flex justify-between px-5 py-2.5 border-b border-slate-50 text-sm">
+                  <span className="font-medium">{f.flat_code}</span>
+                  <span className="text-red-600 font-semibold">{formatINR(f.maintenance_amt - f.collected)} due</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Action buttons */}
+          <div className="flex gap-2 flex-wrap">
+            <button onClick={handleShare} className="btn-primary flex items-center gap-2 flex-1 justify-center">
+              {shared ? <><CheckCircle size={15} /> Copied!</> : <><Share2 size={15} /> Share with residents</>}
+            </button>
+            <button onClick={handleExcelExport} className="btn-secondary flex items-center gap-2">
+              <Download size={15} /> Export Excel
+            </button>
+          </div>
         </div>
-        <select value={month} onChange={e => setMonth(e.target.value)}
-          className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white">
-          {FISCAL_MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
+      )}
+    </div>
+  )
+}
+
+// ── DUES AGING TAB ────────────────────────────────────────────
+
+function DuesAgingTab() {
+  const fy = getCurrentFy()
+  const [selectedFyYear, setSelectedFyYear] = useState(fy.year)
+  const selectedFy = getFyRange(selectedFyYear)
+  const [generating, setGenerating] = useState(false)
+
+  const { data: dues, isLoading } = useQuery({
+    queryKey: ['dues-aging', selectedFyYear],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('v_dues_tracker')
+        .select('*')
+        .eq('fiscal_year', selectedFyYear)
+        .gt('pending', 0)
+        .order('pending', { ascending: false })
+      return (data ?? []) as DuesEntry[]
+    },
+  })
+
+  const totalPending = (dues ?? []).reduce((s, r) => s + r.pending, 0)
+
+  function handleExcel() {
+    if (!dues?.length) return
+    const wb = XLSX.utils.book_new()
+    const rows: any[][] = [
+      [`Lilac Apartment Association — Defaulters List — ${selectedFy.label}`],
+      [],
+      ['Flat', 'Block', 'Annual Due', 'Collected', 'Pending', 'Status'],
+      ...(dues ?? []).map(r => [r.flat_code, r.block, r.annual_due, r.collected_fy, r.pending, r.status]),
+      [],
+      ['', '', '', 'TOTAL PENDING', totalPending, ''],
+    ]
+    const ws = XLSX.utils.aoa_to_sheet(rows)
+    ws['!cols'] = [10, 8, 14, 14, 14, 10].map(w => ({ wch: w }))
+    XLSX.utils.book_append_sheet(wb, ws, 'Defaulters')
+    XLSX.writeFile(wb, `Defaulters_${selectedFy.label.replace(/\s/g, '_')}.xlsx`)
+  }
+
+  async function handlePdf() {
+    if (!dues?.length) return
+    setGenerating(true)
+    try {
+      const [{ pdf }, { DefaultersListDoc }] = await Promise.all([
+        import('@react-pdf/renderer'),
+        import('@/components/reports/AgmPdfDocs'),
+      ])
+      const generated = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+      const blob = await pdf(
+        <DefaultersListDoc rows={dues} fyLabel={selectedFy.label} generated={generated} />
+      ).toBlob()
+      triggerDownload(blob, `Defaulters_${selectedFy.label.replace(/\s/g, '_')}.pdf`)
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Controls */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <select
+          value={selectedFyYear}
+          onChange={e => setSelectedFyYear(Number(e.target.value))}
+          className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white"
+        >
+          {FISCAL_YEARS.map(f => <option key={f.year} value={f.year}>{f.label}</option>)}
         </select>
-      </div>
 
-      {/* Summary card */}
-      <div className="card overflow-hidden">
-        <div className="px-5 py-4 text-white" style={{ background: 'linear-gradient(135deg, #1a3c5e, #2e75b6)' }}>
-          <p className="text-xs opacity-75 uppercase tracking-wide">The Lilac Apartment Association</p>
-          <p className="font-bold text-lg mt-0.5">Monthly Statement — {month}</p>
-        </div>
-        <div className="divide-y divide-slate-100">
-          {[
-            { label: 'Maintenance collected', value: formatINR(summary?.maintenance_collected ?? 0) },
-            { label: 'Flats paid',            value: `${summary?.flats_paid ?? 0} of 44` },
-            { label: 'Total expenses',         value: formatINR(summary?.total_expenses ?? 0) },
-            { label: 'Corpus collected (total)', value: formatINR(totalCorpusCollected) },
-            { label: 'Corpus target (total)',  value: formatINR(totalCorpusTarget) },
-          ].map(({ label, value }) => (
-            <div key={label} className="flex justify-between px-5 py-3 text-sm">
-              <span className="text-slate-500">{label}</span>
-              <span className="font-semibold text-slate-800">{value}</span>
-            </div>
-          ))}
+        <div className="ml-auto flex items-center gap-2">
+          <button onClick={handleExcel} disabled={!dues?.length}
+            className="flex items-center gap-1.5 text-sm text-violet-700 hover:text-violet-900 disabled:opacity-40">
+            <Download size={14} /> Export Excel
+          </button>
+          <button onClick={handlePdf} disabled={!dues?.length || generating}
+            className="btn-primary flex items-center gap-2 py-1.5 px-3 text-sm">
+            {generating
+              ? <><Loader2 size={14} className="animate-spin" /> Generating…</>
+              : <><FileText size={14} /> Download PDF</>
+            }
+          </button>
         </div>
       </div>
 
-      {/* Expenses */}
-      {expenses && expenses.length > 0 && (
-        <div className="card">
-          <div className="px-5 py-3 border-b border-slate-100">
-            <h3 className="font-semibold text-sm">Expenses — {month}</h3>
-          </div>
-          {expenses.map((e: any) => (
-            <div key={e.category} className="flex justify-between px-5 py-2.5 border-b border-slate-50 text-sm">
-              <span className="text-slate-600">{e.category}</span>
-              <span className="font-semibold">{formatINR(e.total_amount)}</span>
-            </div>
-          ))}
+      {/* Summary strip */}
+      {!isLoading && dues !== undefined && (
+        <div className={`flex items-center gap-3 p-3 rounded-lg border text-sm ${dues.length > 0 ? 'bg-red-50 border-red-100' : 'bg-green-50 border-green-100'}`}>
+          <AlertTriangle size={15} className={dues.length > 0 ? 'text-red-500 shrink-0' : 'text-green-500 shrink-0'} />
+          {dues.length > 0 ? (
+            <span className="text-red-700">
+              <strong>{dues.length}</strong> flat(s) with outstanding dues ·{' '}
+              <strong>{formatINR(totalPending)}</strong> total pending — {selectedFy.label}
+            </span>
+          ) : (
+            <span className="text-green-700">All flats cleared for {selectedFy.label} 🎉</span>
+          )}
         </div>
       )}
 
-      {/* Collections by flat */}
-      <div className="card">
-        <div className="px-5 py-3 border-b border-slate-100">
-          <h3 className="font-semibold text-sm">Collections by flat — {month}</h3>
+      {/* Table */}
+      {isLoading ? (
+        <div className="card h-64 animate-pulse bg-slate-100" />
+      ) : !dues?.length ? (
+        <div className="card p-10 text-center text-sm text-slate-400">
+          No pending dues for {selectedFy.label}
         </div>
-        <div className="divide-y divide-slate-50 max-h-64 overflow-y-auto">
-          {(flatsData ?? []).map((f: any) => (
-            <div key={f.flat_code} className="flex justify-between items-center px-5 py-2 text-sm">
-              <span className="font-medium w-12">{f.flat_code}</span>
-              <span className="text-slate-500 flex-1 px-2">{formatINR(f.maintenance_amt)}</span>
-              <span className={f.collected > 0 ? 'font-semibold text-green-700' : 'text-slate-300'}>
-                {f.collected > 0 ? formatINR(f.collected) : '—'}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Pending */}
-      {unpaidFlats.length > 0 && (
-        <div className="card">
-          <div className="px-5 py-3 border-b border-slate-100 flex items-center gap-2">
-            <AlertTriangle size={15} className="text-amber-500" />
-            <h3 className="font-semibold text-sm">Pending maintenance — {month}</h3>
-          </div>
-          {unpaidFlats.map((f: any) => (
-            <div key={f.flat_code} className="flex justify-between px-5 py-2.5 border-b border-slate-50 text-sm">
-              <span className="font-medium">{f.flat_code}</span>
-              <span className="text-red-600 font-semibold">{formatINR(f.maintenance_amt - f.collected)} due</span>
-            </div>
-          ))}
+      ) : (
+        <div className="card overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 border-b border-slate-200">
+              <tr>
+                <th className="text-left px-4 py-2.5 font-semibold text-slate-600">Flat</th>
+                <th className="text-left px-4 py-2.5 font-semibold text-slate-600">Block</th>
+                <th className="text-right px-4 py-2.5 font-semibold text-slate-600">Annual Due</th>
+                <th className="text-right px-4 py-2.5 font-semibold text-slate-600">Collected</th>
+                <th className="text-right px-4 py-2.5 font-semibold text-slate-600">Pending</th>
+                <th className="text-left px-4 py-2.5 font-semibold text-slate-600">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {dues.map((r, i) => (
+                <tr key={r.flat_code} className={i % 2 === 1 ? 'bg-slate-50/50' : ''}>
+                  <td className="px-4 py-2.5 font-semibold">{r.flat_code}</td>
+                  <td className="px-4 py-2.5 text-slate-600">{r.block}</td>
+                  <td className="px-4 py-2.5 text-right">{formatINR(r.annual_due)}</td>
+                  <td className="px-4 py-2.5 text-right text-green-700">{r.collected_fy > 0 ? formatINR(r.collected_fy) : '—'}</td>
+                  <td className="px-4 py-2.5 text-right font-semibold text-red-600">{formatINR(r.pending)}</td>
+                  <td className="px-4 py-2.5">
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                      r.status === 'Due'     ? 'bg-red-100 text-red-700' :
+                      r.status === 'Partial' ? 'bg-amber-100 text-amber-700' :
+                                               'bg-green-100 text-green-700'
+                    }`}>{r.status}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot className="border-t-2 border-slate-300 bg-slate-50">
+              <tr>
+                <td className="px-4 py-3 font-bold" colSpan={4}>Total outstanding</td>
+                <td className="px-4 py-3 text-right font-bold text-red-600">{formatINR(totalPending)}</td>
+                <td />
+              </tr>
+            </tfoot>
+          </table>
         </div>
       )}
+    </div>
+  )
+}
 
-      {/* Action buttons */}
-      <div className="flex gap-2 flex-wrap">
-        <button onClick={handleShare} className="btn-primary flex items-center gap-2 flex-1 justify-center">
-          {shared ? <><CheckCircle size={15} /> Copied!</> : <><Share2 size={15} /> Share with residents</>}
-        </button>
-        <button onClick={handleExcelExport} className="btn-secondary flex items-center gap-2">
-          <Download size={15} /> Export Excel
-        </button>
+// ── AGM REPORTS TAB ───────────────────────────────────────────
+
+function AGMReportsTab() {
+  const fy = getCurrentFy()
+  const [selectedFyYear, setSelectedFyYear] = useState(fy.year)
+  const selectedFy = getFyRange(selectedFyYear)
+  const [generating, setGenerating] = useState<string | null>(null)
+
+  // Defaulters: pending > 0, sorted block → flat
+  const { data: defaulters } = useQuery({
+    queryKey: ['agm-defaulters', selectedFyYear],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('v_dues_tracker')
+        .select('*')
+        .eq('fiscal_year', selectedFyYear)
+        .gt('pending', 0)
+        .order('block')
+        .order('flat_code')
+      return (data ?? []) as DuesEntry[]
+    },
+  })
+
+  // Income: aggregate CR transactions by category for the FY
+  const { data: incomeTxns } = useQuery({
+    queryKey: ['agm-income', selectedFyYear],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('transactions')
+        .select('category, amount')
+        .eq('cr_dr', 'CR')
+        .neq('row_type', 'VOIDED')
+        .gte('value_date', selectedFy.start)
+        .lte('value_date', selectedFy.end)
+      return data ?? []
+    },
+  })
+
+  // Expenditure: from expenses table by category
+  const { data: expenditure } = useQuery({
+    queryKey: ['agm-expenses', selectedFyYear],
+    queryFn: async () => {
+      const [{ data: exps }, { data: cats }] = await Promise.all([
+        supabase.from('expenses').select('amount, category_id')
+          .gte('expense_date', selectedFy.start)
+          .lte('expense_date', selectedFy.end),
+        supabase.from('expense_categories').select('id, name'),
+      ])
+      const catMap = new Map((cats ?? []).map((c: any) => [c.id, c.name as string]))
+      const grouped = new Map<string, number>()
+      for (const e of exps ?? []) {
+        const cat = catMap.get((e as any).category_id) ?? 'Uncategorised'
+        grouped.set(cat, (grouped.get(cat) ?? 0) + ((e as any).amount ?? 0))
+      }
+      return Array.from(grouped.entries())
+        .map(([category, amount]) => ({ category, amount }))
+        .sort((a, b) => b.amount - a.amount)
+    },
+  })
+
+  // Corpus plans for fund statement
+  const { data: corpusData } = useQuery({
+    queryKey: ['agm-corpus'],
+    queryFn: async () => {
+      const { data } = await supabase.from('v_corpus_tracker').select('*')
+      return data ?? []
+    },
+  })
+
+  // Aggregate income by category
+  const income = useMemo(() => {
+    const grouped = new Map<string, number>()
+    for (const t of incomeTxns ?? []) {
+      grouped.set((t as any).category, (grouped.get((t as any).category) ?? 0) + ((t as any).amount ?? 0))
+    }
+    return Array.from(grouped.entries())
+      .map(([category, amount]) => ({ category, amount }))
+      .sort((a, b) => b.amount - a.amount)
+  }, [incomeTxns])
+
+  // Receipts & Payments: all CR transactions by category + expenses by category
+  const { data: allCrTxns } = useQuery({
+    queryKey: ['agm-cr-txns', selectedFyYear],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('transactions')
+        .select('category, amount')
+        .eq('cr_dr', 'CR')
+        .neq('row_type', 'VOIDED')
+        .gte('value_date', selectedFy.start)
+        .lte('value_date', selectedFy.end)
+      return data ?? []
+    },
+  })
+
+  const receipts = useMemo(() => {
+    const grouped = new Map<string, number>()
+    for (const t of allCrTxns ?? []) {
+      const cat = (t as any).category ?? 'Other'
+      grouped.set(cat, (grouped.get(cat) ?? 0) + ((t as any).amount ?? 0))
+    }
+    return Array.from(grouped.entries())
+      .map(([category, amount]) => ({ category, amount }))
+      .sort((a, b) => b.amount - a.amount)
+  }, [allCrTxns])
+
+  // Build CorpusPlanSummary[] for the PDF
+  const corpusPlans = useMemo(() => {
+    const planMap = new Map<string, any>()
+    for (const row of corpusData ?? []) {
+      const r = row as any
+      if (!planMap.has(r.plan_id)) {
+        planMap.set(r.plan_id, {
+          plan_name: r.plan_name,
+          plan_status: r.plan_status,
+          start_fiscal_year: r.start_fiscal_year,
+          end_fiscal_year: r.end_fiscal_year,
+          total_target: 0,
+          total_collected: 0,
+          total_balance: 0,
+          flats: [],
+        })
+      }
+      const plan = planMap.get(r.plan_id)
+      plan.total_target    += r.corpus_target ?? 0
+      plan.total_collected += r.collected ?? 0
+      plan.total_balance   += r.balance ?? 0
+      plan.flats.push({
+        flat_code:     r.flat_code,
+        corpus_target: r.corpus_target ?? 0,
+        collected:     r.collected ?? 0,
+        balance:       r.balance ?? 0,
+        status:        r.status ?? '',
+      })
+    }
+    return Array.from(planMap.values())
+  }, [corpusData])
+
+  const generated = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+
+  async function handleDefaultersPdf() {
+    if (!defaulters?.length) return
+    setGenerating('defaulters')
+    try {
+      const [{ pdf }, { DefaultersListDoc }] = await Promise.all([
+        import('@react-pdf/renderer'),
+        import('@/components/reports/AgmPdfDocs'),
+      ])
+      const blob = await pdf(
+        <DefaultersListDoc rows={defaulters} fyLabel={selectedFy.label} generated={generated} />
+      ).toBlob()
+      triggerDownload(blob, `Defaulters_${selectedFy.label.replace(/\s/g, '_')}.pdf`)
+    } finally {
+      setGenerating(null)
+    }
+  }
+
+  async function handleIEPdf() {
+    setGenerating('ie')
+    try {
+      const [{ pdf }, { IEStatementDoc }] = await Promise.all([
+        import('@react-pdf/renderer'),
+        import('@/components/reports/AgmPdfDocs'),
+      ])
+      const blob = await pdf(
+        <IEStatementDoc
+          income={income}
+          expenditure={expenditure ?? []}
+          fyLabel={selectedFy.label}
+          generated={generated}
+        />
+      ).toBlob()
+      triggerDownload(blob, `IE_Statement_${selectedFy.label.replace(/\s/g, '_')}.pdf`)
+    } finally {
+      setGenerating(null)
+    }
+  }
+
+  async function handleCorpusPdf() {
+    if (!corpusPlans.length) return
+    setGenerating('corpus')
+    try {
+      const [{ pdf }, { CorpusFundDoc }] = await Promise.all([
+        import('@react-pdf/renderer'),
+        import('@/components/reports/AgmPdfDocs'),
+      ])
+      const blob = await pdf(
+        <CorpusFundDoc plans={corpusPlans} generated={generated} />
+      ).toBlob()
+      triggerDownload(blob, `Corpus_Fund_Statement.pdf`)
+    } finally {
+      setGenerating(null)
+    }
+  }
+
+  async function handleRPPdf() {
+    setGenerating('rp')
+    try {
+      const [{ pdf }, { ReceiptsPaymentsDoc }] = await Promise.all([
+        import('@react-pdf/renderer'),
+        import('@/components/reports/AgmPdfDocs'),
+      ])
+      const blob = await pdf(
+        <ReceiptsPaymentsDoc
+          receipts={receipts}
+          payments={expenditure ?? []}
+          fyLabel={selectedFy.label}
+          generated={generated}
+        />
+      ).toBlob()
+      triggerDownload(blob, `RP_Account_${selectedFy.label.replace(/\s/g, '_')}.pdf`)
+    } finally {
+      setGenerating(null)
+    }
+  }
+
+  const reports = [
+    {
+      key: 'defaulters',
+      title: 'Defaulters List',
+      desc: 'All flats with outstanding maintenance dues — read at AGM',
+      meta: `${defaulters?.length ?? 0} flat(s) pending · ${selectedFy.label}`,
+      onDownload: handleDefaultersPdf,
+      disabled: !defaulters?.length,
+    },
+    {
+      key: 'ie',
+      title: 'Income & Expenditure Statement',
+      desc: 'Categorised income vs expenditure for the financial year',
+      meta: `${income.length} income categories · ${selectedFy.label}`,
+      onDownload: handleIEPdf,
+      disabled: income.length === 0,
+    },
+    {
+      key: 'corpus',
+      title: 'Corpus Fund Statement',
+      desc: 'Per-plan flat-wise corpus collection status',
+      meta: `${corpusPlans.length} plan(s) · all time`,
+      onDownload: handleCorpusPdf,
+      disabled: corpusPlans.length === 0,
+    },
+    {
+      key: 'rp',
+      title: 'Receipts & Payments Account',
+      desc: 'Cash-basis summary of all inflows and outflows',
+      meta: `${receipts.length} receipt categories · ${selectedFy.label}`,
+      onDownload: handleRPPdf,
+      disabled: receipts.length === 0,
+    },
+  ]
+
+  return (
+    <div className="space-y-5">
+      {/* FY selector */}
+      <div className="flex items-center gap-3">
+        <label className="text-sm font-medium text-slate-600">Financial Year</label>
+        <select
+          value={selectedFyYear}
+          onChange={e => setSelectedFyYear(Number(e.target.value))}
+          className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white"
+        >
+          {FISCAL_YEARS.map(f => <option key={f.year} value={f.year}>{f.label}</option>)}
+        </select>
+        <span className="text-xs text-slate-400">Corpus Fund Statement is for all active/completed plans regardless of FY</span>
       </div>
-      </div>}
+
+      {/* Report cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {reports.map(r => (
+          <div key={r.key} className="card p-5 flex flex-col gap-3">
+            <div className="flex items-start gap-3">
+              <FileText size={20} className="text-violet-500 shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <h3 className="font-semibold text-slate-800 text-sm leading-snug">{r.title}</h3>
+                <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{r.desc}</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-400 border-t border-slate-100 pt-2">{r.meta}</p>
+
+            <button
+              onClick={r.onDownload}
+              disabled={r.disabled || generating === r.key}
+              className="btn-primary flex items-center justify-center gap-2 py-2 text-sm mt-auto disabled:opacity-50"
+            >
+              {generating === r.key
+                ? <><Loader2 size={14} className="animate-spin" /> Generating PDF…</>
+                : <><Download size={14} /> Download PDF</>
+              }
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <p className="text-xs text-slate-400 text-center">
+        PDFs are generated in-browser — no data leaves your device.
+      </p>
     </div>
   )
 }
@@ -281,26 +782,44 @@ function FlatStatementTab() {
     enabled: !!flatCode,
   })
 
-  const { data: corpusEntry } = useQuery({
-    queryKey: ['corpus-entry', flatCode],
+  const { data: corpusEntries } = useQuery({
+    queryKey: ['corpus-entries', flatCode],
     queryFn: async () => {
-      const { data } = await supabase.from('v_corpus_tracker').select('*').eq('flat_code', flatCode).single()
+      const { data } = await supabase
+        .from('v_corpus_tracker')
+        .select('plan_name, corpus_target, collected, balance, status')
+        .eq('flat_code', flatCode)
+      return data ?? []
+    },
+    enabled: !!flatCode,
+  })
+
+  const corpusTotals = corpusEntries && corpusEntries.length > 0 ? {
+    collected: corpusEntries.reduce((s, e) => s + (e.collected ?? 0), 0),
+    target:    corpusEntries.reduce((s, e) => s + (e.corpus_target ?? 0), 0),
+    balance:   corpusEntries.reduce((s, e) => s + (e.balance ?? 0), 0),
+    plans:     corpusEntries.length,
+  } : null
+
+  // Cumulative dues tracker — tracks all dues/collections from dues_start_fiscal_year to today
+  const { data: duesEntry } = useQuery({
+    queryKey: ['dues-entry', flatCode],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('v_dues_tracker')
+        .select('collected_fy, pending, status, start_fiscal_year')
+        .eq('flat_code', flatCode)
+        .single()
       return data
     },
     enabled: !!flatCode,
   })
 
-  const summary = useMemo(() => {
-    const maintenance = (txns ?? []).filter(t => t.cr_dr === 'CR' && t.category === 'Maintenance')
-    const corpus      = (txns ?? []).filter(t => t.cr_dr === 'CR' && t.category === 'Corpus')
-    const expenses    = (txns ?? []).filter(t => t.cr_dr === 'DR')
-    const maintenanceCollected = maintenance.reduce((s, t) => s + t.amount, 0)
-    const corpusCollected      = corpus.reduce((s, t) => s + t.amount, 0)
-    const annualDue = mode !== 'all' ? (flatInfo?.maintenance_amt ?? 0) * 12 : null
-    return { maintenanceCollected, corpusCollected, annualDue, expenseTotal: expenses.reduce((s, t) => s + t.amount, 0) }
-  }, [txns, flatInfo, mode])
+  const maintenanceCollected = useMemo(() =>
+    (txns ?? []).filter(t => t.cr_dr === 'CR' && t.category === 'Maintenance')
+               .reduce((s, t) => s + t.amount, 0)
+  , [txns])
 
-  // Group transactions by fiscal month
   const grouped = useMemo(() => {
     const map = new Map<string, any[]>()
     ;(txns ?? []).forEach(t => {
@@ -318,14 +837,14 @@ function FlatStatementTab() {
       ['Lilac Apartment Association — Flat Statement'],
       [`Flat: ${flatCode}`, `BHK: ${flatInfo?.bhk_type ?? ''}`, `Period: ${rangeLabel}`],
       [],
-      ['SUMMARY'],
+      ['SUMMARY (cumulative since Apr-' + String(duesEntry?.start_fiscal_year ?? '').slice(-2) + ')'],
       ['Maintenance rate/mo', flatInfo?.maintenance_amt ?? ''],
-      ...(summary.annualDue != null ? [['Annual due', summary.annualDue]] : []),
-      ['Maintenance collected', summary.maintenanceCollected],
-      ...(summary.annualDue != null ? [['Maintenance pending', Math.max(0, summary.annualDue - summary.maintenanceCollected)]] : []),
-      ['Corpus collected (period)', summary.corpusCollected],
-      ['Corpus collected (total)', corpusEntry?.collected ?? ''],
-      ['Corpus target', corpusEntry?.corpus_target ?? ''],
+      ['Total collected', duesEntry?.collected_fy ?? ''],
+      ['Outstanding', duesEntry?.pending ?? ''],
+      [],
+      ['Corpus collected (total)', corpusTotals?.collected ?? ''],
+      ['Corpus target (total)', corpusTotals?.target ?? ''],
+      ['Corpus balance', corpusTotals?.balance ?? ''],
       [],
       ['TRANSACTIONS'],
       ['Date', 'Month', 'CR/DR', 'Amount', 'Category', 'Corpus', 'Type', 'Description'],
@@ -339,7 +858,7 @@ function FlatStatementTab() {
     XLSX.writeFile(wb, `Lilac_${flatCode}_${rangeLabel.replace(/\s/g, '_')}.xlsx`)
   }
 
-  const pending = summary.annualDue != null ? Math.max(0, summary.annualDue - summary.maintenanceCollected) : null
+  const outstandingAmt = duesEntry ? Number(duesEntry.pending) : null
 
   return (
     <div className="space-y-4">
@@ -379,7 +898,7 @@ function FlatStatementTab() {
         )}
 
         <button onClick={handleExport} disabled={!txns?.length}
-          className="ml-auto flex items-center gap-1.5 text-sm text-brand-700 hover:text-brand-900 disabled:opacity-40">
+          className="ml-auto flex items-center gap-1.5 text-sm text-violet-700 hover:text-violet-900 disabled:opacity-40">
           <Download size={14} /> Export Excel
         </button>
       </div>
@@ -390,31 +909,30 @@ function FlatStatementTab() {
           <p className="text-xs text-slate-500 mb-1">Rate / month</p>
           <p className="text-xl font-bold text-slate-800">{formatINR(flatInfo?.maintenance_amt ?? 0)}</p>
         </div>
-        {summary.annualDue != null && (
-          <div className="card p-4 bg-slate-50">
-            <p className="text-xs text-slate-500 mb-1">Annual due ({fy.label})</p>
-            <p className="text-xl font-bold text-slate-800">{formatINR(summary.annualDue)}</p>
-          </div>
-        )}
+
         <div className="card p-4 bg-green-50">
           <p className="text-xs text-slate-500 mb-1">Maintenance collected</p>
-          <p className="text-xl font-bold text-green-700">{formatINR(summary.maintenanceCollected)}</p>
+          <p className="text-xl font-bold text-green-700">{formatINR(maintenanceCollected)}</p>
         </div>
-        {pending != null && (
-          <div className={`card p-4 ${pending > 0 ? 'bg-red-50' : 'bg-green-50'}`}>
-            <p className="text-xs text-slate-500 mb-1">Pending</p>
-            <p className={`text-xl font-bold ${pending > 0 ? 'text-red-600' : 'text-green-600'}`}>
-              {pending > 0 ? formatINR(pending) : '✓ Clear'}
+
+        {duesEntry && (
+          <div className={`card p-4 ${outstandingAmt! > 0 ? 'bg-red-50' : 'bg-green-50'}`}>
+            <p className="text-xs text-slate-500 mb-1">Outstanding</p>
+            <p className={`text-xl font-bold ${outstandingAmt! > 0 ? 'text-red-600' : 'text-green-600'}`}>
+              {outstandingAmt! > 0 ? formatINR(outstandingAmt!) : '✓ Clear'}
             </p>
+            <p className="text-xs text-slate-400 mt-0.5">all dues since Apr-{String(duesEntry.start_fiscal_year).slice(-2)}</p>
           </div>
         )}
-        {summary.corpusCollected > 0 && (
+
+        {corpusTotals && (
           <div className="card p-4 bg-purple-50">
             <p className="text-xs text-slate-500 mb-1">Corpus collected</p>
-            <p className="text-xl font-bold text-purple-700">{formatINR(summary.corpusCollected)}</p>
-            {corpusEntry && (
-              <p className="text-xs text-slate-400 mt-0.5">of {formatINR(corpusEntry.corpus_target)} target</p>
-            )}
+            <p className="text-xl font-bold text-purple-700">{formatINR(corpusTotals.collected)}</p>
+            <p className="text-xs text-slate-400 mt-0.5">
+              of {formatINR(corpusTotals.target)} target
+              {corpusTotals.plans > 1 && ` · ${corpusTotals.plans} plans`}
+            </p>
           </div>
         )}
       </div>
@@ -463,6 +981,539 @@ function FlatStatementTab() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ── EXPENDITURE REPORTS TAB ──────────────────────────────────
+
+type ExpSubTab = 'category' | 'vendor' | 'trend'
+
+function ExpenditureReportsTab() {
+  const fy = getCurrentFy()
+  const [selectedFyYear, setSelectedFyYear] = useState(fy.year)
+  const [subTab, setSubTab] = useState<ExpSubTab>('category')
+  const selectedFy = getFyRange(selectedFyYear)
+
+  // Category-wise expenses
+  const { data: catExpenses, isLoading: loadingCat } = useQuery({
+    queryKey: ['exp-by-category', selectedFyYear],
+    queryFn: async () => {
+      const [{ data: exps }, { data: cats }] = await Promise.all([
+        supabase.from('expenses').select('amount, category_id')
+          .gte('expense_date', selectedFy.start)
+          .lte('expense_date', selectedFy.end),
+        supabase.from('expense_categories').select('id, name, budget_type'),
+      ])
+      const catMap = new Map((cats ?? []).map((c: any) => [c.id, { name: c.name as string, budget_type: c.budget_type as string }]))
+      const grouped = new Map<string, { amount: number; budget_type: string }>()
+      for (const e of exps ?? []) {
+        const cat = catMap.get((e as any).category_id) ?? { name: 'Uncategorised', budget_type: 'Maintenance' }
+        const prev = grouped.get(cat.name) ?? { amount: 0, budget_type: cat.budget_type }
+        grouped.set(cat.name, { amount: prev.amount + ((e as any).amount ?? 0), budget_type: cat.budget_type })
+      }
+      return Array.from(grouped.entries())
+        .map(([category, v]) => ({ category, amount: v.amount, budget_type: v.budget_type }))
+        .sort((a, b) => b.amount - a.amount)
+    },
+  })
+
+  // Vendor-wise expenses
+  const { data: vendorExpenses, isLoading: loadingVendor } = useQuery({
+    queryKey: ['exp-by-vendor', selectedFyYear],
+    queryFn: async () => {
+      const [{ data: exps }, { data: vendors }] = await Promise.all([
+        supabase.from('expenses').select('amount, vendor_id, payee_name_raw, payment_mode')
+          .gte('expense_date', selectedFy.start)
+          .lte('expense_date', selectedFy.end),
+        supabase.from('vendors').select('id, name'),
+      ])
+      const vendorMap = new Map((vendors ?? []).map((v: any) => [v.id, v.name as string]))
+      const grouped = new Map<string, number>()
+      for (const e of exps ?? []) {
+        const name = (e as any).vendor_id
+          ? (vendorMap.get((e as any).vendor_id) ?? 'Unknown Vendor')
+          : ((e as any).payee_name_raw ?? 'Cash / Misc')
+        grouped.set(name, (grouped.get(name) ?? 0) + ((e as any).amount ?? 0))
+      }
+      return Array.from(grouped.entries())
+        .map(([vendor, amount]) => ({ vendor, amount, tdsRequired: amount >= 30000 }))
+        .sort((a, b) => b.amount - a.amount)
+    },
+  })
+
+  // Monthly trend
+  const { data: monthlyTrend, isLoading: loadingTrend } = useQuery({
+    queryKey: ['exp-monthly-trend', selectedFyYear],
+    queryFn: async () => {
+      const { data: exps } = await supabase
+        .from('expenses')
+        .select('expense_date, amount')
+        .gte('expense_date', selectedFy.start)
+        .lte('expense_date', selectedFy.end)
+      const monthly = new Map<string, number>()
+      const MONTHS_S = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+      for (const e of exps ?? []) {
+        const d = new Date((e as any).expense_date)
+        const key = `${MONTHS_S[d.getMonth()]}-${String(d.getFullYear()).slice(-2)}`
+        monthly.set(key, (monthly.get(key) ?? 0) + ((e as any).amount ?? 0))
+      }
+      // Build ordered array Apr→Mar
+      const result: { month: string; amount: number }[] = []
+      for (let m = 3; m <= 14; m++) {
+        const yr = m > 11 ? selectedFyYear + 1 : selectedFyYear
+        const mi = m > 11 ? m - 12 : m
+        const key = `${MONTHS_S[mi]}-${String(yr).slice(-2)}`
+        result.push({ month: key, amount: monthly.get(key) ?? 0 })
+      }
+      return result
+    },
+  })
+
+  function handleExcelCategory() {
+    if (!catExpenses?.length) return
+    const wb = XLSX.utils.book_new()
+    const rows: any[][] = [
+      [`Expenditure by Category — ${selectedFy.label}`], [],
+      ['Category', 'Type', 'Amount'],
+      ...(catExpenses).map(r => [r.category, r.budget_type, r.amount]),
+      [],
+      ['TOTAL', '', catExpenses.reduce((s, r) => s + r.amount, 0)],
+    ]
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Category')
+    XLSX.writeFile(wb, `Expenses_Category_${selectedFy.label.replace(/\s/g,'_')}.xlsx`)
+  }
+
+  function handleExcelVendor() {
+    if (!vendorExpenses?.length) return
+    const wb = XLSX.utils.book_new()
+    const rows: any[][] = [
+      [`Expenditure by Vendor — ${selectedFy.label}`], [],
+      ['Vendor / Payee', 'Amount', 'TDS Required (>₹30K)'],
+      ...(vendorExpenses).map(r => [r.vendor, r.amount, r.tdsRequired ? 'Yes' : 'No']),
+    ]
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Vendor')
+    XLSX.writeFile(wb, `Expenses_Vendor_${selectedFy.label.replace(/\s/g,'_')}.xlsx`)
+  }
+
+  const totalExpenses = (catExpenses ?? []).reduce((s, r) => s + r.amount, 0)
+  const maintenanceTotal = (catExpenses ?? []).filter(r => r.budget_type === 'Maintenance').reduce((s, r) => s + r.amount, 0)
+  const corpusTotal      = (catExpenses ?? []).filter(r => r.budget_type === 'Corpus').reduce((s, r) => s + r.amount, 0)
+  const tdsVendors       = (vendorExpenses ?? []).filter(r => r.tdsRequired).length
+
+  return (
+    <div className="space-y-4">
+      {/* Controls */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex gap-1 bg-slate-100 rounded-lg p-0.5 text-sm">
+          {([
+            { key: 'category', label: 'By category' },
+            { key: 'vendor',   label: 'By vendor' },
+            { key: 'trend',    label: 'Monthly trend' },
+          ] as { key: ExpSubTab; label: string }[]).map(({ key, label }) => (
+            <button key={key} onClick={() => setSubTab(key)}
+              className={`px-3 py-1 rounded-md font-medium transition-colors
+                ${subTab === key ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <select value={selectedFyYear} onChange={e => setSelectedFyYear(Number(e.target.value))}
+          className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white">
+          {FISCAL_YEARS.map(f => <option key={f.year} value={f.year}>{f.label}</option>)}
+        </select>
+      </div>
+
+      {/* KPI strip */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="card p-4 bg-rose-50">
+          <p className="text-xs text-slate-500 mb-1">Total expenses</p>
+          <p className="text-xl font-bold text-rose-600">{totalExpenses > 0 ? formatINR(totalExpenses) : '—'}</p>
+        </div>
+        <div className="card p-4 bg-blue-50">
+          <p className="text-xs text-slate-500 mb-1">Maintenance expenses</p>
+          <p className="text-xl font-bold text-blue-700">{maintenanceTotal > 0 ? formatINR(maintenanceTotal) : '—'}</p>
+        </div>
+        <div className="card p-4 bg-violet-50">
+          <p className="text-xs text-slate-500 mb-1">Corpus expenses</p>
+          <p className="text-xl font-bold text-violet-700">{corpusTotal > 0 ? formatINR(corpusTotal) : '—'}</p>
+        </div>
+        <div className={`card p-4 ${tdsVendors > 0 ? 'bg-amber-50' : 'bg-white'}`}>
+          <p className="text-xs text-slate-500 mb-1">TDS required vendors</p>
+          <p className={`text-xl font-bold ${tdsVendors > 0 ? 'text-amber-600' : 'text-slate-400'}`}>
+            {tdsVendors > 0 ? tdsVendors : '—'}
+          </p>
+          {tdsVendors > 0 && <p className="text-xs text-amber-500 mt-0.5">Vendors paid &gt;₹30K</p>}
+        </div>
+      </div>
+
+      {/* By category */}
+      {subTab === 'category' && (
+        <div className="space-y-4">
+          {catExpenses && catExpenses.length > 0 && (
+            <div className="card p-4">
+              <h3 className="font-semibold text-sm mb-3">Category breakdown — {selectedFy.label}</h3>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart
+                  data={catExpenses.slice(0, 12).map(r => ({ name: r.category.length > 16 ? r.category.slice(0, 14) + '…' : r.category, amount: r.amount }))}
+                  margin={{ top: 4, right: 8, bottom: 40, left: 8 }}
+                >
+                  <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-30} textAnchor="end" interval={0} />
+                  <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `₹${(Number(v)/1000).toFixed(0)}k`} />
+                  <Tooltip formatter={(v: any) => [formatINR(Number(v)), 'Amount']} />
+                  <Bar dataKey="amount" fill="#7c3aed" radius={[3, 3, 0, 0]} maxBarSize={32} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+          {loadingCat ? (
+            <div className="card h-40 animate-pulse bg-slate-100" />
+          ) : !catExpenses?.length ? (
+            <div className="card p-10 text-center text-sm text-slate-400">No expenses recorded for {selectedFy.label}</div>
+          ) : (
+            <div className="card overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+                <h3 className="font-semibold text-sm">Expenses by category</h3>
+                <button onClick={handleExcelCategory}
+                  className="flex items-center gap-1.5 text-sm text-violet-700 hover:text-violet-900">
+                  <Download size={14} /> Export Excel
+                </button>
+              </div>
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    <th className="text-left px-4 py-2.5 font-semibold text-slate-600">Category</th>
+                    <th className="text-left px-4 py-2.5 font-semibold text-slate-600">Type</th>
+                    <th className="text-right px-4 py-2.5 font-semibold text-slate-600">Amount</th>
+                    <th className="text-right px-4 py-2.5 font-semibold text-slate-600">% of total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {catExpenses.map((r, i) => (
+                    <tr key={r.category} className={i % 2 === 1 ? 'bg-slate-50/50' : ''}>
+                      <td className="px-4 py-2.5 font-medium">{r.category}</td>
+                      <td className="px-4 py-2.5">
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                          r.budget_type === 'Corpus' ? 'bg-violet-100 text-violet-700' : 'bg-blue-100 text-blue-700'
+                        }`}>{r.budget_type}</span>
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-semibold">{formatINR(r.amount)}</td>
+                      <td className="px-4 py-2.5 text-right text-slate-500">
+                        {totalExpenses > 0 ? `${((r.amount / totalExpenses) * 100).toFixed(1)}%` : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="border-t-2 border-slate-300 bg-slate-50">
+                  <tr>
+                    <td className="px-4 py-3 font-bold" colSpan={2}>Total</td>
+                    <td className="px-4 py-3 text-right font-bold">{formatINR(totalExpenses)}</td>
+                    <td />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* By vendor */}
+      {subTab === 'vendor' && (
+        loadingVendor ? (
+          <div className="card h-40 animate-pulse bg-slate-100" />
+        ) : !vendorExpenses?.length ? (
+          <div className="card p-10 text-center text-sm text-slate-400">No expenses for {selectedFy.label}</div>
+        ) : (
+          <div className="card overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-sm">Payments by vendor / payee</h3>
+                {tdsVendors > 0 && (
+                  <p className="text-xs text-amber-600 mt-0.5">{tdsVendors} vendor(s) exceed ₹30,000 — TDS may be applicable</p>
+                )}
+              </div>
+              <button onClick={handleExcelVendor}
+                className="flex items-center gap-1.5 text-sm text-violet-700 hover:text-violet-900">
+                <Download size={14} /> Export Excel
+              </button>
+            </div>
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr>
+                  <th className="text-left px-4 py-2.5 font-semibold text-slate-600">Vendor / Payee</th>
+                  <th className="text-right px-4 py-2.5 font-semibold text-slate-600">Amount paid</th>
+                  <th className="text-left px-4 py-2.5 font-semibold text-slate-600">TDS</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {vendorExpenses.map((r, i) => (
+                  <tr key={r.vendor} className={i % 2 === 1 ? 'bg-slate-50/50' : ''}>
+                    <td className="px-4 py-2.5 font-medium">{r.vendor}</td>
+                    <td className="px-4 py-2.5 text-right font-semibold">{formatINR(r.amount)}</td>
+                    <td className="px-4 py-2.5">
+                      {r.tdsRequired
+                        ? <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">TDS required</span>
+                        : <span className="text-xs text-slate-300">—</span>
+                      }
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="border-t-2 border-slate-300 bg-slate-50">
+                <tr>
+                  <td className="px-4 py-3 font-bold">Total</td>
+                  <td className="px-4 py-3 text-right font-bold">{formatINR(vendorExpenses.reduce((s,r) => s + r.amount, 0))}</td>
+                  <td />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )
+      )}
+
+      {/* Monthly trend */}
+      {subTab === 'trend' && (
+        loadingTrend ? (
+          <div className="card h-64 animate-pulse bg-slate-100" />
+        ) : (
+          <div className="card p-4">
+            <h3 className="font-semibold text-sm mb-3">Monthly expenditure — {selectedFy.label}</h3>
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={monthlyTrend} margin={{ top: 4, right: 8, bottom: 4, left: 8 }}>
+                <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `₹${(Number(v)/1000).toFixed(0)}k`} />
+                <Tooltip formatter={(v: any) => [formatINR(Number(v)), 'Expenses']} />
+                <Bar dataKey="amount" fill="#f43f5e" radius={[3, 3, 0, 0]} maxBarSize={32} name="Expenses" />
+              </BarChart>
+            </ResponsiveContainer>
+            <div className="mt-3 text-xs text-slate-400 text-right">
+              Total: {formatINR((monthlyTrend ?? []).reduce((s, r) => s + r.amount, 0))}
+            </div>
+          </div>
+        )
+      )}
+    </div>
+  )
+}
+
+// ── UTILITY TAB ──────────────────────────────────────────────
+
+function UtilityTab() {
+  const fy = getCurrentFy()
+  const [fyYear, setFyYear]       = useState(fy.year)
+  const [activeCatId, setActive]  = useState<string | null>(null)
+
+  const { data: utilityCats = [] } = useQuery({
+    queryKey: ['utility-categories'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('expense_categories')
+        .select('id, name, unit_label')
+        .eq('is_utility', true)
+        .order('sort_order')
+      return (data ?? []) as { id: string; name: string; unit_label: string | null }[]
+    },
+  })
+
+  const displayCat = utilityCats.find(c => c.id === activeCatId) ?? utilityCats[0]
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex gap-1 bg-slate-100 rounded-lg p-0.5 text-sm flex-wrap">
+          {utilityCats.map(cat => (
+            <button key={cat.id} onClick={() => setActive(cat.id)}
+              className={`px-3 py-1 rounded-md font-medium transition-colors
+                ${displayCat?.id === cat.id ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}>
+              {cat.name}
+            </button>
+          ))}
+        </div>
+        <select value={fyYear} onChange={e => setFyYear(Number(e.target.value))}
+          className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white">
+          {FISCAL_YEARS.map(f => <option key={f.year} value={f.year}>{f.label}</option>)}
+        </select>
+      </div>
+
+      {displayCat
+        ? <UtilityReport catId={displayCat.id} catName={displayCat.name} unitLabel={displayCat.unit_label} fyYear={fyYear} />
+        : <div className="card h-48 animate-pulse bg-slate-100" />
+      }
+    </div>
+  )
+}
+
+function UtilityReport({ catId, catName, unitLabel: unitLabelProp, fyYear }: {
+  catId: string; catName: string; unitLabel: string | null; fyYear: number
+}) {
+  const fy = getFyRange(fyYear)
+  const unitLabel = unitLabelProp ?? 'units'
+
+  const { data: items, isLoading } = useQuery({
+    queryKey: ['utility-report', catId, fyYear],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('expense_line_items')
+        .select('id, cost_center, utility_units, utility_rate, amount, period_from, description')
+        .eq('category_id', catId)
+        .gte('period_from', fy.start)
+        .lte('period_from', fy.end)
+        .order('period_from')
+      return data ?? []
+    },
+  })
+
+  const blocks = useMemo(() =>
+    [...new Set((items ?? []).map((i: any) => i.cost_center as string))].filter(Boolean).sort()
+  , [items])
+
+  const hasUnits   = (items ?? []).some((i: any) => i.utility_units != null)
+  const totalUnits = useMemo(() => (items ?? []).reduce((s, i: any) => s + (Number(i.utility_units) || 0), 0), [items])
+  const totalAmt   = useMemo(() => (items ?? []).reduce((s, i: any) => s + (Number(i.amount) || 0), 0), [items])
+
+  const chartData = useMemo(() => {
+    const map = new Map<string, Record<string, number>>()
+    for (const item of items ?? []) {
+      if (!item.period_from) continue
+      const d    = new Date((item as any).period_from)
+      const mon  = `${MONTHS_SHORT[d.getMonth()]}-${String(d.getFullYear()).slice(-2)}`
+      if (!map.has(mon)) map.set(mon, {})
+      const row  = map.get(mon)!
+      const blk  = (item as any).cost_center ?? 'Other'
+      row[blk]   = (row[blk] ?? 0) + (Number((item as any).amount) || 0)
+    }
+    return Array.from(map.entries()).map(([month, v]) => ({ month, ...v }))
+  }, [items])
+
+  function handleExcel() {
+    const wb = XLSX.utils.book_new()
+    const rows: any[][] = [
+      [`${catName} — ${fy.label}`], [],
+      hasUnits
+        ? ['Period', 'Block', unitLabel, 'Rate', 'Amount', 'Notes']
+        : ['Period', 'Block', 'Amount', 'Notes'],
+      ...(items ?? []).map((i: any) =>
+        hasUnits
+          ? [i.period_from, i.cost_center, i.utility_units ?? '', i.utility_rate ?? '', i.amount, i.description ?? '']
+          : [i.period_from, i.cost_center, i.amount, i.description ?? '']
+      ),
+      [], hasUnits
+        ? ['TOTAL', '', totalUnits, '', totalAmt, '']
+        : ['TOTAL', '', totalAmt, ''],
+    ]
+    const ws = XLSX.utils.aoa_to_sheet(rows)
+    XLSX.utils.book_append_sheet(wb, ws, catName.slice(0, 31))
+    XLSX.writeFile(wb, `${catName.replace(/[^a-zA-Z0-9]/g, '_')}_${fy.label.replace(/\s/g, '_')}.xlsx`)
+  }
+
+  if (isLoading) return <div className="card h-64 animate-pulse bg-slate-100" />
+
+  if (!items?.length) return (
+    <div className="card p-10 text-center">
+      <Zap size={32} className="mx-auto text-slate-200 mb-3" />
+      <p className="text-sm text-slate-400">No {catName} line items recorded for {fy.label}.</p>
+      <p className="text-xs text-slate-300 mt-1">Add expenses in Expenses with category "{catName}" and line items.</p>
+    </div>
+  )
+
+  return (
+    <div className="space-y-4">
+      {/* Summary cards */}
+      <div className={`grid grid-cols-2 gap-3 ${hasUnits ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
+        <div className="card p-4 bg-violet-50">
+          <p className="text-xs text-slate-500 mb-1">Total cost</p>
+          <p className="text-xl font-bold text-violet-700">{formatINR(totalAmt)}</p>
+        </div>
+        {hasUnits && (
+          <>
+            <div className="card p-4 bg-blue-50">
+              <p className="text-xs text-slate-500 mb-1">Total {unitLabel}</p>
+              <p className="text-xl font-bold text-blue-700">{totalUnits.toLocaleString('en-IN')}</p>
+            </div>
+            <div className="card p-4 bg-slate-50">
+              <p className="text-xs text-slate-500 mb-1">Avg rate / {unitLabel}</p>
+              <p className="text-xl font-bold text-slate-700">
+                {totalUnits > 0 ? `₹${(totalAmt / totalUnits).toFixed(2)}` : '—'}
+              </p>
+            </div>
+          </>
+        )}
+        <div className="card p-4 bg-slate-50">
+          <p className="text-xs text-slate-500 mb-1">Areas tracked</p>
+          <p className="text-xl font-bold text-slate-700">{blocks.length}</p>
+        </div>
+      </div>
+
+      {/* Monthly amount by block — bar chart */}
+      {chartData.length > 0 && blocks.length > 0 && (
+        <div className="card p-4">
+          <h3 className="font-semibold text-sm mb-3">Monthly cost by area — {fy.label}</h3>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={chartData} margin={{ top: 4, right: 8, bottom: 4, left: 8 }}>
+              <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `₹${(Number(v)/1000).toFixed(0)}k`} />
+              <Tooltip formatter={(v: any, name: string) => [formatINR(Number(v)), name]} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              {blocks.map(block => (
+                <Bar key={block} dataKey={block} stackId="a"
+                  fill={BLOCK_COLORS[block] ?? '#94a3b8'} name={block} />
+              ))}
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* Detail table */}
+      <div className="card overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+          <h3 className="font-semibold text-sm">Line-item detail</h3>
+          <button onClick={handleExcel}
+            className="flex items-center gap-1.5 text-sm text-violet-700 hover:text-violet-900">
+            <Download size={14} /> Export Excel
+          </button>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 border-b border-slate-200">
+              <tr>
+                <th className="text-left px-4 py-2 font-semibold text-slate-600">Period</th>
+                <th className="text-left px-4 py-2 font-semibold text-slate-600">Area / Block</th>
+                {hasUnits && <>
+                  <th className="text-right px-4 py-2 font-semibold text-slate-600">{unitLabel}</th>
+                  <th className="text-right px-4 py-2 font-semibold text-slate-600">Rate</th>
+                </>}
+                <th className="text-right px-4 py-2 font-semibold text-slate-600">Amount</th>
+                <th className="text-left px-4 py-2 font-semibold text-slate-600">Notes</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {(items ?? []).map((item: any, i: number) => (
+                <tr key={item.id} className={i % 2 === 1 ? 'bg-slate-50/50' : ''}>
+                  <td className="px-4 py-2.5 text-slate-600">{item.period_from ?? '—'}</td>
+                  <td className="px-4 py-2.5 font-medium">{item.cost_center ?? '—'}</td>
+                  {hasUnits && <>
+                    <td className="px-4 py-2.5 text-right">{item.utility_units != null ? Number(item.utility_units).toLocaleString('en-IN') : '—'}</td>
+                    <td className="px-4 py-2.5 text-right text-slate-500">{item.utility_rate != null ? `₹${item.utility_rate}` : '—'}</td>
+                  </>}
+                  <td className="px-4 py-2.5 text-right font-semibold">{formatINR(item.amount)}</td>
+                  <td className="px-4 py-2.5 text-slate-500 text-xs max-w-xs truncate">{item.description ?? ''}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot className="border-t-2 border-slate-300 bg-slate-50">
+              <tr>
+                <td className="px-4 py-3 font-bold" colSpan={hasUnits ? 2 : 2}>Total</td>
+                {hasUnits && <>
+                  <td className="px-4 py-3 text-right font-bold">{totalUnits.toLocaleString('en-IN')}</td>
+                  <td />
+                </>}
+                <td className="px-4 py-3 text-right font-bold">{formatINR(totalAmt)}</td>
+                <td />
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
     </div>
   )
 }
