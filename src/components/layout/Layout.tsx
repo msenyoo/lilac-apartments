@@ -3,6 +3,7 @@ import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, ArrowUpFromLine, ClipboardList, IndianRupee,
   Building2, FileText, LogOut, Menu, X, Settings, ChevronRight,
+  Receipt,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useQuery } from '@tanstack/react-query'
@@ -12,6 +13,7 @@ const NAV = [
   { to: '/transactions', icon: ArrowUpFromLine,   label: 'Transactions', badge: 'review' },
   { to: '/dues',         icon: IndianRupee,       label: 'Dues' },
   { to: '/corpus',       icon: Building2,         label: 'Corpus' },
+  { to: '/expenses',     icon: Receipt,           label: 'Expenses' },
   { to: '/reports',      icon: FileText,          label: 'Reports' },
   { to: '/flats',        icon: ClipboardList,     label: 'Flats & Residents' },
   { to: '/settings',     icon: Settings,          label: 'Settings' },

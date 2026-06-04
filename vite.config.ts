@@ -12,7 +12,7 @@ export default defineConfig({
         name: 'Lilac Apartments',
         short_name: 'Lilac',
         description: 'Lilac Apartment Association — Monthly Reports',
-        theme_color: '#1A3C5E',
+        theme_color: '#7c3aed',
         background_color: '#f8fafc',
         display: 'standalone',
         orientation: 'portrait',
