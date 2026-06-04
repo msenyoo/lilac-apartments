@@ -54,9 +54,11 @@ export interface CorpusPlan {
   total_target: number
   pre_payments: number
   planned_budget: { category: string; budget: number }[]
-  status: 'active' | 'completed' | 'cancelled'
+  status: 'draft' | 'active' | 'completed' | 'cancelled'
   start_fiscal_year: number | null
   end_fiscal_year: number | null
+  closed_at: string | null
+  close_notes: string | null
   created_at: string
 }
 
@@ -66,10 +68,26 @@ export interface CorpusPlanFlat {
   flat_id: string
   target_amount: number
   pre_payment: number
-  installment_1: number | null
-  installment_2: number | null
-  installment_3: number | null
+  carry_forward_amount: number
+  carry_forward_plan_id: string | null
   flat?: Flat
+}
+
+export interface CorpusPlanInstallment {
+  id: string
+  plan_id: string
+  installment_no: number
+  label: string
+  due_date: string | null
+  default_amount: number
+}
+
+export interface CorpusPlanFlatInstallment {
+  id: string
+  plan_id: string
+  flat_id: string
+  installment_no: number
+  amount: number
 }
 
 export interface Transaction {
@@ -165,11 +183,15 @@ export interface CorpusEntry {
   flat_code: string
   block: string
   flat_type: string
-  corpus_target: number
-  pre_payment: number
+  plan_id: string
   plan_name: string
+  plan_status: 'draft' | 'active' | 'completed' | 'cancelled'
   start_fiscal_year: number
   end_fiscal_year: number
+  corpus_target: number
+  pre_payment: number
+  carry_forward_amount: number
+  effective_target: number
   collected: number
   balance: number
   pct_paid: number
