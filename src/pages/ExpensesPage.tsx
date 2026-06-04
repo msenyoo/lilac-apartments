@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm, useFieldArray, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Plus, Trash2, Download, Receipt, Users, Building, X, GitMerge, CheckCircle2 } from 'lucide-react'
+import { Plus, Trash2, Download, Receipt, Users, Building, X, GitMerge, CheckCircle2, Paperclip, RefreshCcw, Coins, Upload, Loader2, Trash } from 'lucide-react'
+import { useDropzone } from 'react-dropzone'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
@@ -21,7 +22,15 @@ import {
 // ── Types ─────────────────────────────────────────────────────
 
 interface ExpenseCategory { id: string; name: string; budget_type: string; is_utility: boolean }
-interface Vendor  { id: string; name: string; type: string | null; phone: string | null }
+interface Vendor  { id: string; name: string; type: string | null; phone: string | null; pan_number: string | null; notes: string | null }
+interface RecurringTemplate {
+  id: string; name: string; description: string | null
+  vendor: { id: string; name: string } | null
+  category: { id: string; name: string } | null
+  amount: number; payment_mode: string; frequency: string; active: boolean
+}
+interface PettyCashTxn { id: string; txn_date: string; txn_type: string; amount: number; notes: string | null }
+interface Attachment { id: string; expense_id: string; file_name: string; file_url: string; file_size: number | null; uploaded_at: string }
 interface StaffMember { id: string; name: string; role: string; assigned_area: string | null; phone: string | null; left_date: string | null }
 interface Expense {
   id: string; expense_date: string; description: string
@@ -99,7 +108,7 @@ const STATUS_STYLE: Record<string, string> = {
 // ── Page ──────────────────────────────────────────────────────
 
 export default function ExpensesPage() {
-  const [tab, setTab] = useState<'daybook' | 'reconcile' | 'vendors' | 'staff'>('daybook')
+  const [tab, setTab] = useState<'daybook' | 'reconcile' | 'vendors' | 'staff' | 'recurring' | 'petty'>('daybook')
   const [addOpen, setAddOpen] = useState(false)
 
   return (
@@ -121,6 +130,8 @@ export default function ExpensesPage() {
           { key: 'reconcile', label: 'Reconcile',  icon: GitMerge },
           { key: 'vendors',   label: 'Vendors',    icon: Building },
           { key: 'staff',     label: 'Staff',      icon: Users },
+          { key: 'recurring', label: 'Recurring',  icon: RefreshCcw },
+          { key: 'petty',     label: 'Petty Cash', icon: Coins },
         ] as { key: typeof tab; label: string; icon: any }[]).map(({ key, label, icon: Icon }) => (
           <button key={key} onClick={() => setTab(key)}
             className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
@@ -135,6 +146,8 @@ export default function ExpensesPage() {
       {tab === 'reconcile' && <ReconcileTab />}
       {tab === 'vendors'   && <VendorsTab />}
       {tab === 'staff'     && <StaffTab />}
+      {tab === 'recurring' && <RecurringTab />}
+      {tab === 'petty'     && <PettyCashTab />}
 
       <AddExpenseDialog open={addOpen} onClose={() => setAddOpen(false)} />
     </div>
@@ -349,6 +362,8 @@ function ExpenseDetailPanel({ expense: e, onClose }: { expense: Expense; onClose
           </div>
         </div>
       )}
+
+      <AttachmentsSection expenseId={e.id} />
     </div>
   )
 }
@@ -1019,6 +1034,8 @@ function ReconcileTab() {
 // ── Vendors tab ───────────────────────────────────────────────
 
 function VendorsTab() {
+  const [addOpen, setAddOpen] = useState(false)
+
   const { data: vendors = [], isLoading } = useQuery({
     queryKey: ['vendors'],
     queryFn: async () => {
@@ -1028,26 +1045,40 @@ function VendorsTab() {
   })
 
   if (isLoading) return <div className="card h-32 animate-pulse bg-slate-100" />
-  if (!vendors.length) return (
-    <div className="card p-10 text-center text-slate-400">
-      <Building size={28} className="mx-auto mb-2 opacity-40" />
-      <p className="text-sm">No vendors added yet</p>
-    </div>
-  )
 
   return (
-    <div className="card divide-y divide-slate-100">
-      {vendors.map(v => (
-        <div key={v.id} className="flex items-center gap-3 px-4 py-3">
-          <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
-            <Building size={14} className="text-slate-400" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-slate-800">{v.name}</p>
-            <p className="text-xs text-slate-400">{v.type ?? 'Vendor'}{v.phone ? ` · ${v.phone}` : ''}</p>
-          </div>
+    <div className="space-y-3">
+      <div className="flex justify-end">
+        <Button size="sm" onClick={() => setAddOpen(true)} className="flex items-center gap-1.5">
+          <Plus size={14} /> Add Vendor
+        </Button>
+      </div>
+
+      {vendors.length === 0 ? (
+        <div className="card p-10 text-center text-slate-400">
+          <Building size={28} className="mx-auto mb-2 opacity-40" />
+          <p className="text-sm">No vendors added yet</p>
         </div>
-      ))}
+      ) : (
+        <div className="card divide-y divide-slate-100">
+          {vendors.map(v => (
+            <div key={v.id} className="flex items-center gap-3 px-4 py-3">
+              <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
+                <Building size={14} className="text-slate-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-slate-800">{v.name}</p>
+                <p className="text-xs text-slate-400">
+                  {v.type ?? 'Vendor'}{v.phone ? ` · ${v.phone}` : ''}{v.pan_number ? ` · PAN: ${v.pan_number}` : ''}
+                </p>
+                {v.notes && <p className="text-xs text-slate-400 truncate">{v.notes}</p>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <AddVendorDialog open={addOpen} onClose={() => setAddOpen(false)} />
     </div>
   )
 }
@@ -1055,6 +1086,8 @@ function VendorsTab() {
 // ── Staff tab ─────────────────────────────────────────────────
 
 function StaffTab() {
+  const [addOpen, setAddOpen] = useState(false)
+
   const { data: staffList = [], isLoading } = useQuery({
     queryKey: ['staff'],
     queryFn: async () => {
@@ -1067,15 +1100,21 @@ function StaffTab() {
   const inactive = staffList.filter(s => s.left_date)
 
   if (isLoading) return <div className="card h-32 animate-pulse bg-slate-100" />
-  if (!staffList.length) return (
-    <div className="card p-10 text-center text-slate-400">
-      <Users size={28} className="mx-auto mb-2 opacity-40" />
-      <p className="text-sm">No staff added yet</p>
-    </div>
-  )
 
   return (
     <div className="space-y-3">
+      <div className="flex justify-end">
+        <Button size="sm" onClick={() => setAddOpen(true)} className="flex items-center gap-1.5">
+          <Plus size={14} /> Add Staff
+        </Button>
+      </div>
+
+      {staffList.length === 0 ? (
+        <div className="card p-10 text-center text-slate-400">
+          <Users size={28} className="mx-auto mb-2 opacity-40" />
+          <p className="text-sm">No staff added yet</p>
+        </div>
+      ) : (<>
       <div className="card divide-y divide-slate-100">
         <div className="px-4 py-2 bg-slate-50 rounded-t-xl">
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Active ({active.length})</p>
@@ -1112,6 +1151,632 @@ function StaffTab() {
           ))}
         </div>
       )}
+      </>)}
+
+      <AddStaffDialog open={addOpen} onClose={() => setAddOpen(false)} />
+    </div>
+  )
+}
+
+// â”€â”€ Add Vendor dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+function AddVendorDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const qc = useQueryClient()
+  const [name, setName]   = useState('')
+  const [type, setType]   = useState('')
+  const [phone, setPhone] = useState('')
+  const [pan, setPan]     = useState('')
+  const [notes, setNotes] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [err, setErr]       = useState('')
+
+  function reset() { setName(''); setType(''); setPhone(''); setPan(''); setNotes(''); setErr('') }
+
+  async function handleSave() {
+    if (!name.trim()) return
+    setSaving(true); setErr('')
+    try {
+      const { error } = await supabase.from('vendors').insert({
+        name: name.trim(), type: type || null, phone: phone || null,
+        pan_number: pan || null, notes: notes || null,
+      })
+      if (error) throw error
+      qc.invalidateQueries({ queryKey: ['vendors'] })
+      reset(); onClose()
+    } catch (e: any) { setErr(e.message) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!v) { reset(); onClose() } }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader><DialogTitle>Add Vendor</DialogTitle></DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <Label>Name *</Label>
+            <Input value={name} onChange={e => setName(e.target.value)} placeholder="Vendor / company name" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <Label>Type</Label>
+              <Select value={type} onValueChange={setType}>
+                <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
+                <SelectContent>
+                  {['Individual','Company','Agency','Municipal'].map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>Phone</Label>
+              <Input value={phone} onChange={e => setPhone(e.target.value)} placeholder="Mobile number" />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label>PAN number</Label>
+            <Input value={pan} onChange={e => setPan(e.target.value)} placeholder="For TDS tracking" />
+          </div>
+          <div className="space-y-1">
+            <Label>Notes</Label>
+            <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Optional remarks" />
+          </div>
+          {err && <p className="text-sm text-red-500">{err}</p>}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => { reset(); onClose() }}>Cancel</Button>
+          <Button onClick={handleSave} disabled={!name.trim() || saving}>
+            {saving ? 'Saving...' : 'Add Vendor'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// â”€â”€ Add Staff dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+const STAFF_ROLES = ['Security', 'Sweeper', 'Gardener', 'Plumber', 'Electrician', 'Lift Operator', 'Other']
+
+function AddStaffDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const qc = useQueryClient()
+  const today = new Date().toISOString().slice(0, 10)
+  const [form, setForm] = useState({ name: '', role: '', area: '', phone: '', joined: today })
+  const [salary, setSalary] = useState('')
+  const [saving, setSaving]  = useState(false)
+  const [err, setErr]        = useState('')
+
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setForm(f => ({ ...f, [k]: e.target.value }))
+
+  function reset() { setForm({ name: '', role: '', area: '', phone: '', joined: today }); setSalary(''); setErr('') }
+
+  async function handleSave() {
+    if (!form.name.trim() || !form.role) return
+    setSaving(true); setErr('')
+    try {
+      const { data: staff, error: sErr } = await supabase.from('staff').insert({
+        name: form.name.trim(), role: form.role,
+        assigned_area: form.area || null, phone: form.phone || null, joined_date: form.joined,
+      }).select().single()
+      if (sErr) throw sErr
+
+      if (salary && Number(salary) > 0) {
+        const { error: shErr } = await supabase.from('staff_salary_history').insert({
+          staff_id: staff.id, monthly_salary: Number(salary), effective_from: form.joined,
+        })
+        if (shErr) throw shErr
+      }
+
+      qc.invalidateQueries({ queryKey: ['staff'] })
+      reset(); onClose()
+    } catch (e: any) { setErr(e.message) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!v) { reset(); onClose() } }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader><DialogTitle>Add Staff Member</DialogTitle></DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <Label>Full name *</Label>
+            <Input value={form.name} onChange={set('name')} placeholder="e.g. Murugan" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <Label>Role *</Label>
+              <Select value={form.role} onValueChange={r => setForm(f => ({ ...f, role: r }))}>
+                <SelectTrigger><SelectValue placeholder="Select role" /></SelectTrigger>
+                <SelectContent>
+                  {STAFF_ROLES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>Assigned area</Label>
+              <Input value={form.area} onChange={set('area')} placeholder="Block-A, Common, All..." />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <Label>Phone</Label>
+              <Input value={form.phone} onChange={set('phone')} placeholder="Mobile number" />
+            </div>
+            <div className="space-y-1">
+              <Label>Joined date *</Label>
+              <Input type="date" value={form.joined} onChange={set('joined')} />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label>Starting monthly salary (Rs)</Label>
+            <Input type="number" value={salary} onChange={e => setSalary(e.target.value)} placeholder="Optional - can set later" />
+            <p className="text-xs text-slate-400">Added as initial salary history entry effective from joined date</p>
+          </div>
+          {err && <p className="text-sm text-red-500">{err}</p>}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => { reset(); onClose() }}>Cancel</Button>
+          <Button onClick={handleSave} disabled={!form.name.trim() || !form.role || saving}>
+            {saving ? 'Saving...' : 'Add Staff'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// â”€â”€ Recurring templates tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+function RecurringTab() {
+  const qc = useQueryClient()
+  const [addOpen, setAddOpen] = useState(false)
+
+  const { data: templates = [], isLoading } = useQuery({
+    queryKey: ['recurring-templates'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('recurring_expense_templates')
+        .select('*, vendor:vendor_id(id,name), category:category_id(id,name)')
+        .order('name')
+      return (data ?? []) as RecurringTemplate[]
+    },
+  })
+
+  async function toggleActive(id: string, current: boolean) {
+    await supabase.from('recurring_expense_templates').update({ active: !current }).eq('id', id)
+    qc.invalidateQueries({ queryKey: ['recurring-templates'] })
+  }
+
+  if (isLoading) return <div className="card h-40 animate-pulse bg-slate-100" />
+
+  return (
+    <div className="space-y-3">
+      <div className="flex justify-end">
+        <Button size="sm" onClick={() => setAddOpen(true)} className="flex items-center gap-1.5">
+          <Plus size={14} /> Add Template
+        </Button>
+      </div>
+
+      {templates.length === 0 ? (
+        <div className="card p-12 flex flex-col items-center gap-3 text-center text-slate-400">
+          <RefreshCcw size={28} className="opacity-40" />
+          <div>
+            <p className="text-sm font-medium text-slate-700">No recurring templates</p>
+            <p className="text-xs mt-1">Add templates for monthly expenses like lift AMC, security agency contract, etc.</p>
+          </div>
+        </div>
+      ) : (
+        <div className="card divide-y divide-slate-100">
+          {templates.map(t => (
+            <div key={t.id} className={`flex items-center gap-3 px-4 py-3 ${!t.active ? 'opacity-50' : ''}`}>
+              <div className="w-8 h-8 rounded-full bg-violet-50 flex items-center justify-center shrink-0">
+                <RefreshCcw size={14} className="text-violet-500" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium text-slate-800">{t.name}</p>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                    t.frequency === 'Monthly' ? 'bg-blue-100 text-blue-700' :
+                    t.frequency === 'Quarterly' ? 'bg-amber-100 text-amber-700' :
+                    'bg-purple-100 text-purple-700'
+                  }`}>{t.frequency}</span>
+                </div>
+                <p className="text-xs text-slate-400">
+                  {t.vendor?.name ?? 'No vendor'} {t.category ? 'Â· ' + t.category.name : ''}
+                  {t.description ? ' Â· ' + t.description : ''}
+                </p>
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <span className="text-sm font-semibold text-slate-800">{formatINR(t.amount)}</span>
+                <button
+                  onClick={() => toggleActive(t.id, t.active)}
+                  className={`text-xs px-2 py-0.5 rounded-full font-medium transition-colors ${
+                    t.active
+                      ? 'bg-green-100 text-green-700 hover:bg-red-100 hover:text-red-700'
+                      : 'bg-slate-100 text-slate-500 hover:bg-green-100 hover:text-green-700'
+                  }`}
+                >
+                  {t.active ? 'Active' : 'Inactive'}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <AddRecurringDialog open={addOpen} onClose={() => setAddOpen(false)} />
+    </div>
+  )
+}
+
+function AddRecurringDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const qc = useQueryClient()
+  const [form, setForm] = useState({ name: '', description: '', vendor_id: '', category_id: '', amount: '', payment_mode: 'Online', frequency: 'Monthly' })
+  const [saving, setSaving] = useState(false)
+  const [err, setErr]       = useState('')
+
+  const { data: vendors = [] } = useQuery({ queryKey: ['vendors'], queryFn: async () => {
+    const { data } = await supabase.from('vendors').select('id,name').order('name')
+    return (data ?? []) as { id: string; name: string }[]
+  }})
+  const { data: categories = [] } = useQuery({ queryKey: ['expense-categories'], queryFn: async () => {
+    const { data } = await supabase.from('expense_categories').select('id,name').order('sort_order')
+    return (data ?? []) as { id: string; name: string }[]
+  }})
+
+  const set = (k: keyof typeof form) => (v: string) => setForm(f => ({ ...f, [k]: v }))
+  function reset() {
+    setForm({ name: '', description: '', vendor_id: '', category_id: '', amount: '', payment_mode: 'Online', frequency: 'Monthly' })
+    setErr('')
+  }
+
+  async function handleSave() {
+    if (!form.name.trim() || !form.amount) return
+    setSaving(true); setErr('')
+    try {
+      const { error } = await supabase.from('recurring_expense_templates').insert({
+        name: form.name.trim(), description: form.description || null,
+        vendor_id: form.vendor_id || null, category_id: form.category_id || null,
+        amount: Number(form.amount), payment_mode: form.payment_mode, frequency: form.frequency,
+      })
+      if (error) throw error
+      qc.invalidateQueries({ queryKey: ['recurring-templates'] })
+      reset(); onClose()
+    } catch (e: any) { setErr(e.message) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!v) { reset(); onClose() } }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader><DialogTitle>Add Recurring Template</DialogTitle></DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <Label>Name *</Label>
+            <Input value={form.name} onChange={e => set('name')(e.target.value)} placeholder="e.g. Lift AMC" />
+          </div>
+          <div className="space-y-1">
+            <Label>Description</Label>
+            <Input value={form.description} onChange={e => set('description')(e.target.value)} placeholder="Optional details" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <Label>Amount (Rs) *</Label>
+              <Input type="number" value={form.amount} onChange={e => set('amount')(e.target.value)} placeholder="0" />
+            </div>
+            <div className="space-y-1">
+              <Label>Frequency</Label>
+              <Select value={form.frequency} onValueChange={set('frequency')}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {['Monthly','Quarterly','Annual'].map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <Label>Vendor</Label>
+              <Select value={form.vendor_id} onValueChange={set('vendor_id')}>
+                <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                <SelectContent>
+                  {vendors.map(v => <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>Category</Label>
+              <Select value={form.category_id} onValueChange={set('category_id')}>
+                <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                <SelectContent>
+                  {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label>Payment mode</Label>
+            <Select value={form.payment_mode} onValueChange={set('payment_mode')}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {PAYMENT_MODES.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          {err && <p className="text-sm text-red-500">{err}</p>}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => { reset(); onClose() }}>Cancel</Button>
+          <Button onClick={handleSave} disabled={!form.name.trim() || !form.amount || saving}>
+            {saving ? 'Saving...' : 'Add Template'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// â”€â”€ Petty cash tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+const TXN_TYPE_STYLE: Record<string, string> = {
+  Opening:       'bg-blue-100 text-blue-700',
+  Replenishment: 'bg-green-100 text-green-700',
+  Disbursement:  'bg-red-100 text-red-700',
+}
+
+function PettyCashTab() {
+  const qc = useQueryClient()
+  const [addOpen, setAddOpen] = useState(false)
+
+  const { data: txns = [], isLoading } = useQuery({
+    queryKey: ['petty-cash'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('petty_cash_transactions')
+        .select('*')
+        .order('txn_date', { ascending: false })
+      return (data ?? []) as PettyCashTxn[]
+    },
+  })
+
+  const balance = txns.reduce((s, t) =>
+    t.txn_type === 'Disbursement' ? s - t.amount : s + t.amount, 0
+  )
+
+  async function handleAdd(form: { txn_date: string; txn_type: string; amount: string; notes: string }) {
+    const { error } = await supabase.from('petty_cash_transactions').insert({
+      txn_date: form.txn_date,
+      txn_type: form.txn_type,
+      amount:   Number(form.amount),
+      notes:    form.notes || null,
+    })
+    if (error) throw error
+    qc.invalidateQueries({ queryKey: ['petty-cash'] })
+  }
+
+  if (isLoading) return <div className="card h-40 animate-pulse bg-slate-100" />
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="card p-4 flex-1 bg-white">
+          <p className="text-xs text-slate-500 mb-1">Current balance</p>
+          <p className={`text-2xl font-bold ${balance >= 0 ? 'text-slate-800' : 'text-red-600'}`}>
+            {formatINR(balance)}
+          </p>
+          <p className="text-xs text-slate-400 mt-0.5">{txns.length} entries</p>
+        </div>
+        <Button size="sm" onClick={() => setAddOpen(true)} className="flex items-center gap-1.5 mt-1">
+          <Plus size={14} /> Add Entry
+        </Button>
+      </div>
+
+      {txns.length === 0 ? (
+        <div className="card p-12 flex flex-col items-center gap-3 text-center text-slate-400">
+          <Coins size={28} className="opacity-40" />
+          <div>
+            <p className="text-sm font-medium text-slate-700">No petty cash entries</p>
+            <p className="text-xs mt-1">Start with an Opening entry to set the initial balance.</p>
+          </div>
+        </div>
+      ) : (
+        <div className="card divide-y divide-slate-100">
+          {txns.map(t => (
+            <div key={t.id} className="flex items-center gap-3 px-4 py-3">
+              <div className="shrink-0 w-10 text-center">
+                <p className="text-xs font-bold text-slate-800 leading-tight">
+                  {new Date(t.txn_date).getDate().toString().padStart(2, '0')}
+                </p>
+                <p className="text-[10px] text-slate-400 uppercase">
+                  {new Date(t.txn_date).toLocaleString('en', { month: 'short' })}
+                </p>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${TXN_TYPE_STYLE[t.txn_type] ?? 'bg-slate-100 text-slate-600'}`}>
+                    {t.txn_type}
+                  </span>
+                  {t.notes && <span className="text-xs text-slate-500 truncate">{t.notes}</span>}
+                </div>
+              </div>
+              <span className={`text-sm font-semibold shrink-0 ${t.txn_type === 'Disbursement' ? 'text-red-600' : 'text-green-700'}`}>
+                {t.txn_type === 'Disbursement' ? '-' : '+'}{formatINR(t.amount)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <AddPettyCashDialog open={addOpen} onClose={() => setAddOpen(false)} onSave={handleAdd} />
+    </div>
+  )
+}
+
+function AddPettyCashDialog({ open, onClose, onSave }: {
+  open: boolean; onClose: () => void
+  onSave: (form: { txn_date: string; txn_type: string; amount: string; notes: string }) => Promise<void>
+}) {
+  const today = new Date().toISOString().slice(0, 10)
+  const [form, setForm] = useState({ txn_date: today, txn_type: 'Disbursement', amount: '', notes: '' })
+  const [saving, setSaving] = useState(false)
+  const [err, setErr]       = useState('')
+
+  const set = (k: keyof typeof form) => (v: string) => setForm(f => ({ ...f, [k]: v }))
+  function reset() { setForm({ txn_date: today, txn_type: 'Disbursement', amount: '', notes: '' }); setErr('') }
+
+  async function handleSave() {
+    if (!form.amount || Number(form.amount) <= 0) return
+    setSaving(true); setErr('')
+    try { await onSave(form); reset(); onClose() }
+    catch (e: any) { setErr(e.message) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!v) { reset(); onClose() } }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader><DialogTitle>Add Petty Cash Entry</DialogTitle></DialogHeader>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <Label>Date *</Label>
+              <Input type="date" value={form.txn_date} onChange={e => set('txn_date')(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label>Type *</Label>
+              <Select value={form.txn_type} onValueChange={set('txn_type')}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {['Opening','Replenishment','Disbursement'].map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label>Amount (Rs) *</Label>
+            <Input type="number" value={form.amount} onChange={e => set('amount')(e.target.value)} placeholder="0" />
+          </div>
+          <div className="space-y-1">
+            <Label>Notes</Label>
+            <Input value={form.notes} onChange={e => set('notes')(e.target.value)} placeholder="What was the purpose?" />
+          </div>
+          {err && <p className="text-sm text-red-500">{err}</p>}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => { reset(); onClose() }}>Cancel</Button>
+          <Button onClick={handleSave} disabled={!form.amount || Number(form.amount) <= 0 || saving}>
+            {saving ? 'Saving...' : 'Add Entry'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// â”€â”€ Attachments section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+function AttachmentsSection({ expenseId }: { expenseId: string }) {
+  const qc = useQueryClient()
+  const [uploading, setUploading] = useState(false)
+  const [uploadErr, setUploadErr] = useState('')
+
+  const { data: attachments = [] } = useQuery({
+    queryKey: ['attachments', expenseId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('expense_attachments')
+        .select('*')
+        .eq('expense_id', expenseId)
+        .order('uploaded_at')
+      return (data ?? []) as Attachment[]
+    },
+  })
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    accept: { 'image/*': [], 'application/pdf': [] },
+    maxSize: 10 * 1024 * 1024,
+    onDrop: async (files) => {
+      if (!files.length) return
+      setUploading(true); setUploadErr('')
+      try {
+        for (const file of files) {
+          const path = `expenses/${expenseId}/${Date.now()}_${file.name}`
+          const { error: upErr } = await supabase.storage
+            .from('expense-attachments')
+            .upload(path, file)
+          if (upErr) throw upErr
+          const { error: dbErr } = await supabase.from('expense_attachments').insert({
+            expense_id: expenseId, file_name: file.name,
+            file_url: path, file_size: file.size,
+          })
+          if (dbErr) throw dbErr
+        }
+        qc.invalidateQueries({ queryKey: ['attachments', expenseId] })
+      } catch (e: any) { setUploadErr(e.message) }
+      finally { setUploading(false) }
+    },
+  })
+
+  async function handleDelete(att: Attachment) {
+    await supabase.storage.from('expense-attachments').remove([att.file_url])
+    await supabase.from('expense_attachments').delete().eq('id', att.id)
+    qc.invalidateQueries({ queryKey: ['attachments', expenseId] })
+  }
+
+  async function handleDownload(att: Attachment) {
+    const { data } = await supabase.storage
+      .from('expense-attachments')
+      .createSignedUrl(att.file_url, 60)
+    if (data?.signedUrl) window.open(data.signedUrl, '_blank')
+  }
+
+  return (
+    <div className="card p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <Paperclip size={14} className="text-slate-400" />
+        <h4 className="text-sm font-medium">Attachments</h4>
+        {attachments.length > 0 && (
+          <span className="text-xs text-slate-400">{attachments.length} file{attachments.length > 1 ? 's' : ''}</span>
+        )}
+      </div>
+
+      {attachments.length > 0 && (
+        <div className="space-y-1">
+          {attachments.map(att => (
+            <div key={att.id} className="flex items-center gap-2 p-2 rounded-lg bg-slate-50 text-xs">
+              <span className="flex-1 truncate text-slate-700">{att.file_name}</span>
+              {att.file_size != null && (
+                <span className="text-slate-400 shrink-0">{(att.file_size / 1024).toFixed(0)} KB</span>
+              )}
+              <button onClick={() => handleDownload(att)} className="text-violet-600 hover:text-violet-800 shrink-0">
+                <Download size={12} />
+              </button>
+              <button onClick={() => handleDelete(att)} className="text-slate-400 hover:text-red-500 shrink-0">
+                <Trash size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div
+        {...getRootProps()}
+        className={`border-2 border-dashed rounded-lg p-3 text-center cursor-pointer transition-colors text-xs ${
+          isDragActive ? 'border-violet-400 bg-violet-50' : 'border-slate-200 hover:border-violet-300 hover:bg-slate-50'
+        }`}
+      >
+        <input {...getInputProps()} />
+        {uploading ? (
+          <div className="flex items-center justify-center gap-1.5 text-slate-500">
+            <Loader2 size={13} className="animate-spin" /> Uploading...
+          </div>
+        ) : (
+          <div className="flex items-center justify-center gap-1.5 text-slate-400">
+            <Upload size={13} />
+            {isDragActive ? 'Drop to upload' : 'Drop files or click - PDF, JPG, PNG (max 10 MB)'}
+          </div>
+        )}
+      </div>
+      {uploadErr && <p className="text-xs text-red-500">{uploadErr}</p>}
     </div>
   )
 }

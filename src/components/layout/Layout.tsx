@@ -3,7 +3,7 @@ import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, ArrowUpFromLine, ClipboardList, IndianRupee,
   Building2, FileText, LogOut, Menu, X, Settings, ChevronRight,
-  Receipt,
+  Receipt, MoreHorizontal,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useQuery } from '@tanstack/react-query'
@@ -17,6 +17,14 @@ const NAV = [
   { to: '/reports',      icon: FileText,          label: 'Reports' },
   { to: '/flats',        icon: ClipboardList,     label: 'Flats & Residents' },
   { to: '/settings',     icon: Settings,          label: 'Settings' },
+]
+
+// Primary 4 tabs in bottom nav; rest accessible via More → sidebar drawer
+const BOTTOM_NAV = [
+  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/dues',      icon: IndianRupee,     label: 'Dues' },
+  { to: '/corpus',    icon: Building2,       label: 'Corpus' },
+  { to: '/expenses',  icon: Receipt,         label: 'Expenses' },
 ]
 
 export default function Layout() {
@@ -167,11 +175,46 @@ export default function Layout() {
 
         {/* Scrollable page content */}
         <main className="flex-1 overflow-y-auto">
-          <div className="p-4 lg:p-6 max-w-screen-2xl mx-auto">
+          {/* pb-20 on mobile leaves room above the fixed bottom nav bar */}
+          <div className="p-4 lg:p-6 pb-20 lg:pb-6 max-w-screen-2xl mx-auto">
             <Outlet />
           </div>
         </main>
       </div>
+
+      {/* ── Mobile bottom nav bar ─────────────────────────────── */}
+      <nav className="fixed bottom-0 inset-x-0 z-40 lg:hidden bg-white border-t border-slate-200">
+        <div className="flex items-stretch" style={{ height: '56px' }}>
+          {BOTTOM_NAV.map(({ to, icon: Icon, label }) => (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) =>
+                `flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors
+                 ${isActive ? 'text-brand-600' : 'text-slate-400 active:text-slate-600'}`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <Icon size={20} strokeWidth={isActive ? 2 : 1.75} />
+                  <span className={`text-[10px] font-medium ${isActive ? 'text-brand-600' : 'text-slate-400'}`}>
+                    {label}
+                  </span>
+                </>
+              )}
+            </NavLink>
+          ))}
+
+          {/* More — opens the full sidebar drawer */}
+          <button
+            onClick={() => setOpen(true)}
+            className="flex-1 flex flex-col items-center justify-center gap-0.5 text-slate-400 active:text-slate-600 transition-colors"
+          >
+            <MoreHorizontal size={20} strokeWidth={1.75} />
+            <span className="text-[10px] font-medium">More</span>
+          </button>
+        </div>
+      </nav>
     </div>
   )
 }
