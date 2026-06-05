@@ -134,7 +134,7 @@ export default function CorpusPage() {
       )}
 
       {/* KPI strip */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <SummaryCard label="Target"       value={formatINR(totalTarget)}                      color="text-slate-800" bg="bg-white" />
         <SummaryCard label="Collected"    value={formatINR(totalCollected)}                   color="text-green-700" bg="bg-green-50" />
         <SummaryCard label="Balance"      value={formatINR(Math.max(0, totalTarget - totalCollected))} color="text-amber-600" bg="bg-amber-50" />
@@ -157,7 +157,7 @@ export default function CorpusPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
+      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 flex-wrap">
         {([
           { key: 'collection',  label: 'By Flat' },
           { key: 'plan',        label: 'Installment Plan', disabled: selectedPlanId === '__all__' },
@@ -315,7 +315,7 @@ function CollectionGrid({ corpus, isLoading, multiPlan }: { corpus: CorpusEntry[
           <Download size={14} /> Export
         </button>
       </div>
-      <div className="flex gap-4">
+      <div className="flex flex-col lg:flex-row gap-4">
         <div className="flex-1 min-w-0">
           <div className="rounded-xl overflow-hidden border border-slate-200" style={{ height: 480 }}>
             <AgGridReact
@@ -454,7 +454,7 @@ function FlatCorpusPanel({ flat, onClose }: { flat: CorpusEntry; onClose: () => 
   })
 
   return (
-    <div className="w-72 shrink-0 space-y-3">
+    <div className="w-full lg:w-72 shrink-0 space-y-3">
       <div className="card p-4 space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold">{flat.flat_code}</h3>
@@ -532,7 +532,7 @@ function ExpenditureView({ expenditures, plan }: { expenditures: any[]; plan: Co
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         <div className="card p-4 bg-slate-50">
           <p className="text-xs text-slate-500 mb-1">Total budget</p>
           <p className="text-xl font-bold text-slate-800">{formatINR(totalBudget)}</p>

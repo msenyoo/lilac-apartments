@@ -41,7 +41,7 @@ export default function TransactionsPage() {
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
+      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 flex-wrap">
         {([
           { key: 'upload', label: 'Upload' },
           { key: 'review', label: `Review${reviewCount ? ` (${reviewCount})` : ''}` },
@@ -304,7 +304,7 @@ function ImportPreview({ preview, fileName, onConfirm, onCancel }: {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="card p-4 bg-slate-50">
           <p className="text-xs text-slate-500 mb-1">In file</p>
           <p className="text-2xl font-bold text-slate-800">{preview.totalInFile}</p>

@@ -29,7 +29,7 @@ export default function SettingsPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
+      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 flex-wrap">
         {([
           { key: 'general',     label: 'General' },
           { key: 'rates',       label: 'Maintenance Rates' },
@@ -341,12 +341,14 @@ function AddRateChangeDialog({ open, onClose, flats, currentRates, onSuccess }: 
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) { reset(); onClose() } }}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
+      <DialogContent className="max-w-lg p-0">
+        {/* Sticky header */}
+        <div className="px-6 pt-6 pb-4 border-b border-slate-100 shrink-0">
           <DialogTitle>Add Rate Change</DialogTitle>
-        </DialogHeader>
+        </div>
 
-        <div className="space-y-4">
+        {/* Body */}
+        <div className="px-6 py-4 space-y-4">
           <div className="space-y-1">
             <Label>New monthly rate (₹) *</Label>
             <Input
@@ -429,12 +431,15 @@ function AddRateChangeDialog({ open, onClose, flats, currentRates, onSuccess }: 
           {error && <p className="text-sm text-red-500">{error}</p>}
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => { reset(); onClose() }}>Cancel</Button>
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving…' : `Apply to ${selectedFlatIds.length} flat${selectedFlatIds.length !== 1 ? 's' : ''}`}
-          </Button>
-        </DialogFooter>
+        {/* Sticky footer */}
+        <div className="px-6 py-4 border-t border-slate-100 shrink-0">
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { reset(); onClose() }}>Cancel</Button>
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? 'Saving…' : `Apply to ${selectedFlatIds.length} flat${selectedFlatIds.length !== 1 ? 's' : ''}`}
+            </Button>
+          </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   )

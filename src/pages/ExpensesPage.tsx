@@ -124,7 +124,7 @@ export default function ExpensesPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
+      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 overflow-x-auto">
         {([
           { key: 'daybook',   label: 'Day Book',   icon: Receipt },
           { key: 'reconcile', label: 'Reconcile',  icon: GitMerge },
@@ -497,7 +497,7 @@ function AddExpenseDialog({ open, onClose }: { open: boolean; onClose: () => voi
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) { reset(); onClose() } }}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle>Add Expense</DialogTitle>
         </DialogHeader>

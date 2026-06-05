@@ -107,13 +107,13 @@ export default function DuesPage() {
         <SummaryCard label="Clear"          value={String(counts.Clear)}   color="text-green-600" bg="bg-green-50" />
       </div>
 
-      {/* Grid */}
-      <div className="flex gap-4">
+      {/* Grid + detail panel — stacks vertically on mobile */}
+      <div className="flex flex-col lg:flex-row gap-4">
         <div className="flex-1 min-w-0">
           {isLoading ? (
             <div className="card h-64 animate-pulse bg-slate-100" />
           ) : (
-            <div className="rounded-xl overflow-hidden border border-slate-200" style={{ height: 520 }}>
+            <div className="rounded-xl overflow-hidden border border-slate-200" style={{ height: 480 }}>
               <AgGridReact
                 ref={gridRef}
                 rowData={data ?? []}
@@ -201,7 +201,7 @@ function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat
   }
 
   return (
-    <div className="w-72 shrink-0 space-y-3">
+    <div className="w-full lg:w-72 shrink-0 space-y-3">
       <div className="card p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div>

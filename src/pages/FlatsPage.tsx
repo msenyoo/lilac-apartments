@@ -76,12 +76,12 @@ function FlatsTab() {
   ], [])
 
   return (
-    <div className="flex gap-4">
+    <div className="flex flex-col lg:flex-row gap-4">
       <div className="flex-1 min-w-0">
         {isLoading ? (
           <div className="card h-64 animate-pulse bg-slate-100" />
         ) : (
-          <div className="rounded-xl overflow-hidden border border-slate-200" style={{ height: 520 }}>
+          <div className="rounded-xl overflow-hidden border border-slate-200" style={{ height: 480 }}>
             <AgGridReact
               rowData={flats ?? []}
               columnDefs={colDefs}
@@ -96,7 +96,7 @@ function FlatsTab() {
 
       {/* Detail panel */}
       {selected && (
-        <div className="w-72 shrink-0 space-y-3">
+        <div className="w-full lg:w-72 shrink-0 space-y-3">
           <div className="card p-4 space-y-3">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-lg">{selected.code}</h3>
