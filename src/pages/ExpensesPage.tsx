@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useRoleCtx } from '@/contexts/RoleContext'
 import { useForm, useFieldArray, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -108,6 +109,7 @@ const STATUS_STYLE: Record<string, string> = {
 // ── Page ──────────────────────────────────────────────────────
 
 export default function ExpensesPage() {
+  const { canWrite } = useRoleCtx()
   const [tab, setTab] = useState<'daybook' | 'reconcile' | 'vendors' | 'staff' | 'recurring' | 'petty'>('daybook')
   const [addOpen, setAddOpen] = useState(false)
 
@@ -118,10 +120,18 @@ export default function ExpensesPage() {
           <h2 className="text-xl font-semibold">Expenses</h2>
           <p className="text-sm text-slate-500 mt-0.5">Day book · Reconcile · Vendors · Staff</p>
         </div>
-        <Button onClick={() => setAddOpen(true)} className="flex items-center gap-2">
-          <Plus size={16} /> Add Expense
-        </Button>
+        {canWrite && (
+          <Button onClick={() => setAddOpen(true)} className="flex items-center gap-2">
+            <Plus size={16} /> Add Expense
+          </Button>
+        )}
       </div>
+
+      {!canWrite && (
+        <div className="flex items-center gap-2 px-3 py-2 mb-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+          <span>Read-only access — contact the administrator to make changes.</span>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1 bg-slate-100 rounded-xl p-1 overflow-x-auto">
@@ -802,6 +812,7 @@ interface UnmatchedDR {
 }
 
 function ReconcileTab() {
+  const { canWrite } = useRoleCtx()
   const qc = useQueryClient()
   const [selectedExpenseId, setSelectedExpenseId] = useState<string | null>(null)
   const [selectedTxnId,     setSelectedTxnId]     = useState<string | null>(null)
@@ -914,15 +925,17 @@ function ReconcileTab() {
           {!amountMatch && (
             <span className="text-xs text-orange-600 font-medium shrink-0">Amount mismatch</span>
           )}
-          <Button
-            size="sm"
-            onClick={() => matchMutation.mutate()}
-            disabled={matchMutation.isPending}
-            className="shrink-0"
-          >
-            <CheckCircle2 size={14} className="mr-1.5" />
-            {matchMutation.isPending ? 'Matching…' : 'Match'}
-          </Button>
+          {canWrite && (
+            <Button
+              size="sm"
+              onClick={() => matchMutation.mutate()}
+              disabled={matchMutation.isPending}
+              className="shrink-0"
+            >
+              <CheckCircle2 size={14} className="mr-1.5" />
+              {matchMutation.isPending ? 'Matching…' : 'Match'}
+            </Button>
+          )}
           <button
             onClick={() => { setSelectedExpenseId(null); setSelectedTxnId(null) }}
             className="text-slate-400 hover:text-slate-600 shrink-0"
@@ -1034,6 +1047,7 @@ function ReconcileTab() {
 // ── Vendors tab ───────────────────────────────────────────────
 
 function VendorsTab() {
+  const { canWrite } = useRoleCtx()
   const [addOpen, setAddOpen] = useState(false)
 
   const { data: vendors = [], isLoading } = useQuery({
@@ -1048,11 +1062,13 @@ function VendorsTab() {
 
   return (
     <div className="space-y-3">
-      <div className="flex justify-end">
-        <Button size="sm" onClick={() => setAddOpen(true)} className="flex items-center gap-1.5">
-          <Plus size={14} /> Add Vendor
-        </Button>
-      </div>
+      {canWrite && (
+        <div className="flex justify-end">
+          <Button size="sm" onClick={() => setAddOpen(true)} className="flex items-center gap-1.5">
+            <Plus size={14} /> Add Vendor
+          </Button>
+        </div>
+      )}
 
       {vendors.length === 0 ? (
         <div className="card p-10 text-center text-slate-400">
@@ -1086,6 +1102,7 @@ function VendorsTab() {
 // ── Staff tab ─────────────────────────────────────────────────
 
 function StaffTab() {
+  const { canWrite } = useRoleCtx()
   const [addOpen, setAddOpen] = useState(false)
 
   const { data: staffList = [], isLoading } = useQuery({
@@ -1103,11 +1120,13 @@ function StaffTab() {
 
   return (
     <div className="space-y-3">
-      <div className="flex justify-end">
-        <Button size="sm" onClick={() => setAddOpen(true)} className="flex items-center gap-1.5">
-          <Plus size={14} /> Add Staff
-        </Button>
-      </div>
+      {canWrite && (
+        <div className="flex justify-end">
+          <Button size="sm" onClick={() => setAddOpen(true)} className="flex items-center gap-1.5">
+            <Plus size={14} /> Add Staff
+          </Button>
+        </div>
+      )}
 
       {staffList.length === 0 ? (
         <div className="card p-10 text-center text-slate-400">
@@ -1327,6 +1346,7 @@ function AddStaffDialog({ open, onClose }: { open: boolean; onClose: () => void 
 // â”€â”€ Recurring templates tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function RecurringTab() {
+  const { canWrite } = useRoleCtx()
   const qc = useQueryClient()
   const [addOpen, setAddOpen] = useState(false)
 
@@ -1350,11 +1370,13 @@ function RecurringTab() {
 
   return (
     <div className="space-y-3">
-      <div className="flex justify-end">
-        <Button size="sm" onClick={() => setAddOpen(true)} className="flex items-center gap-1.5">
-          <Plus size={14} /> Add Template
-        </Button>
-      </div>
+      {canWrite && (
+        <div className="flex justify-end">
+          <Button size="sm" onClick={() => setAddOpen(true)} className="flex items-center gap-1.5">
+            <Plus size={14} /> Add Template
+          </Button>
+        </div>
+      )}
 
       {templates.length === 0 ? (
         <div className="card p-12 flex flex-col items-center gap-3 text-center text-slate-400">
@@ -1387,16 +1409,24 @@ function RecurringTab() {
               </div>
               <div className="flex items-center gap-3 shrink-0">
                 <span className="text-sm font-semibold text-slate-800">{formatINR(t.amount)}</span>
-                <button
-                  onClick={() => toggleActive(t.id, t.active)}
-                  className={`text-xs px-2 py-0.5 rounded-full font-medium transition-colors ${
-                    t.active
-                      ? 'bg-green-100 text-green-700 hover:bg-red-100 hover:text-red-700'
-                      : 'bg-slate-100 text-slate-500 hover:bg-green-100 hover:text-green-700'
-                  }`}
-                >
-                  {t.active ? 'Active' : 'Inactive'}
-                </button>
+                {canWrite ? (
+                  <button
+                    onClick={() => toggleActive(t.id, t.active)}
+                    className={`text-xs px-2 py-0.5 rounded-full font-medium transition-colors ${
+                      t.active
+                        ? 'bg-green-100 text-green-700 hover:bg-red-100 hover:text-red-700'
+                        : 'bg-slate-100 text-slate-500 hover:bg-green-100 hover:text-green-700'
+                    }`}
+                  >
+                    {t.active ? 'Active' : 'Inactive'}
+                  </button>
+                ) : (
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                    t.active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
+                  }`}>
+                    {t.active ? 'Active' : 'Inactive'}
+                  </span>
+                )}
               </div>
             </div>
           ))}
@@ -1524,6 +1554,7 @@ const TXN_TYPE_STYLE: Record<string, string> = {
 }
 
 function PettyCashTab() {
+  const { canWrite } = useRoleCtx()
   const qc = useQueryClient()
   const [addOpen, setAddOpen] = useState(false)
 
@@ -1565,9 +1596,11 @@ function PettyCashTab() {
           </p>
           <p className="text-xs text-slate-400 mt-0.5">{txns.length} entries</p>
         </div>
-        <Button size="sm" onClick={() => setAddOpen(true)} className="flex items-center gap-1.5 mt-1">
-          <Plus size={14} /> Add Entry
-        </Button>
+        {canWrite && (
+          <Button size="sm" onClick={() => setAddOpen(true)} className="flex items-center gap-1.5 mt-1">
+            <Plus size={14} /> Add Entry
+          </Button>
+        )}
       </div>
 
       {txns.length === 0 ? (
@@ -1675,6 +1708,7 @@ function AddPettyCashDialog({ open, onClose, onSave }: {
 // â”€â”€ Attachments section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function AttachmentsSection({ expenseId }: { expenseId: string }) {
+  const { canWrite } = useRoleCtx()
   const qc = useQueryClient()
   const [uploading, setUploading] = useState(false)
   const [uploadErr, setUploadErr] = useState('')
@@ -1750,33 +1784,39 @@ function AttachmentsSection({ expenseId }: { expenseId: string }) {
               <button onClick={() => handleDownload(att)} className="text-violet-600 hover:text-violet-800 shrink-0">
                 <Download size={12} />
               </button>
-              <button onClick={() => handleDelete(att)} className="text-slate-400 hover:text-red-500 shrink-0">
-                <Trash size={12} />
-              </button>
+              {canWrite && (
+                <button onClick={() => handleDelete(att)} className="text-slate-400 hover:text-red-500 shrink-0">
+                  <Trash size={12} />
+                </button>
+              )}
             </div>
           ))}
         </div>
       )}
 
-      <div
-        {...getRootProps()}
-        className={`border-2 border-dashed rounded-lg p-3 text-center cursor-pointer transition-colors text-xs ${
-          isDragActive ? 'border-violet-400 bg-violet-50' : 'border-slate-200 hover:border-violet-300 hover:bg-slate-50'
-        }`}
-      >
-        <input {...getInputProps()} />
-        {uploading ? (
-          <div className="flex items-center justify-center gap-1.5 text-slate-500">
-            <Loader2 size={13} className="animate-spin" /> Uploading...
+      {canWrite && (
+        <>
+          <div
+            {...getRootProps()}
+            className={`border-2 border-dashed rounded-lg p-3 text-center cursor-pointer transition-colors text-xs ${
+              isDragActive ? 'border-violet-400 bg-violet-50' : 'border-slate-200 hover:border-violet-300 hover:bg-slate-50'
+            }`}
+          >
+            <input {...getInputProps()} />
+            {uploading ? (
+              <div className="flex items-center justify-center gap-1.5 text-slate-500">
+                <Loader2 size={13} className="animate-spin" /> Uploading...
+              </div>
+            ) : (
+              <div className="flex items-center justify-center gap-1.5 text-slate-400">
+                <Upload size={13} />
+                {isDragActive ? 'Drop to upload' : 'Drop files or click - PDF, JPG, PNG (max 10 MB)'}
+              </div>
+            )}
           </div>
-        ) : (
-          <div className="flex items-center justify-center gap-1.5 text-slate-400">
-            <Upload size={13} />
-            {isDragActive ? 'Drop to upload' : 'Drop files or click - PDF, JPG, PNG (max 10 MB)'}
-          </div>
-        )}
-      </div>
-      {uploadErr && <p className="text-xs text-red-500">{uploadErr}</p>}
+          {uploadErr && <p className="text-xs text-red-500">{uploadErr}</p>}
+        </>
+      )}
     </div>
   )
 }

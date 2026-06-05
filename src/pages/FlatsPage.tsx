@@ -5,11 +5,13 @@ import type { ColDef } from 'ag-grid-community'
 import { X, Edit2, UserMinus, UserPlus } from 'lucide-react'
 import { supabase, Flat, Resident } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
+import { useRoleCtx } from '@/contexts/RoleContext'
 
 
 type Tab = 'flats' | 'residents'
 
 export default function FlatsPage() {
+  const { canWrite } = useRoleCtx()
   const [tab, setTab] = useState<Tab>('flats')
 
   return (
@@ -18,6 +20,12 @@ export default function FlatsPage() {
         <h2 className="text-xl font-semibold">Flats & Residents</h2>
         <p className="text-sm text-slate-500 mt-0.5">Manage flat details, maintenance rates, owners and tenants</p>
       </div>
+
+      {!canWrite && (
+        <div className="flex items-center gap-2 px-3 py-2 mb-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+          <span>Read-only access — contact the administrator to make changes.</span>
+        </div>
+      )}
 
       <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
         {([{ key: 'flats', label: 'Flats' }, { key: 'residents', label: 'Residents' }] as { key: Tab; label: string }[]).map(({ key, label }) => (
@@ -36,6 +44,7 @@ export default function FlatsPage() {
 
 // ── FLATS TAB ─────────────────────────────────────────────────
 function FlatsTab() {
+  const { isAdmin } = useRoleCtx()
   const qc = useQueryClient()
   const [selected, setSelected] = useState<Flat | null>(null)
   const [editRate, setEditRate] = useState(false)
@@ -110,10 +119,12 @@ function FlatsTab() {
               <Detail label="Current rate" value={formatINR(selected.maintenance_amt) + '/mo'} />
               <Detail label="Corpus target" value={formatINR(selected.corpus_target)} />
             </div>
-            <button onClick={() => setEditRate(true)}
-              className="w-full btn-secondary text-sm flex items-center justify-center gap-1.5">
-              <Edit2 size={13} /> Change maintenance rate
-            </button>
+            {isAdmin && (
+              <button onClick={() => setEditRate(true)}
+                className="w-full btn-secondary text-sm flex items-center justify-center gap-1.5">
+                <Edit2 size={13} /> Change maintenance rate
+              </button>
+            )}
           </div>
 
           {/* Rate history */}
@@ -136,7 +147,7 @@ function FlatsTab() {
         </div>
       )}
 
-      {editRate && selected && (
+      {isAdmin && editRate && selected && (
         <RateChangeModal flat={selected} onClose={() => setEditRate(false)} onSaved={() => { setEditRate(false); qc.invalidateQueries() }} />
       )}
     </div>
@@ -213,6 +224,7 @@ function RateChangeModal({ flat, onClose, onSaved }: { flat: Flat; onClose: () =
 
 // ── RESIDENTS TAB ─────────────────────────────────────────────
 function ResidentsTab() {
+  const { isAdmin } = useRoleCtx()
   const qc = useQueryClient()
   const [showAdd, setShowAdd] = useState(false)
 
@@ -259,7 +271,8 @@ function ResidentsTab() {
         ? <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">Active</span>
         : <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500">Inactive</span>,
     },
-    { headerName: 'Actions', width: 100, sortable: false, filter: false,
+    ...(isAdmin ? [{
+      headerName: 'Actions', width: 100, sortable: false, filter: false,
       cellRenderer: (p: any) => (
         <button
           onClick={() => handleDeactivate(p.data)}
@@ -268,8 +281,8 @@ function ResidentsTab() {
           <UserMinus size={13} /> {p.data.is_active ? 'Move out' : 'Reactivate'}
         </button>
       ),
-    },
-  ], [])
+    } as ColDef<any>] : []),
+  ], [isAdmin])
 
   async function handleDeactivate(resident: Resident) {
     const nowActive = resident.is_active
@@ -288,9 +301,11 @@ function ResidentsTab() {
           <span className="text-slate-300 mx-1">·</span>
           UPI IDs stored here auto-match payments on upload
         </p>
-        <button onClick={() => setShowAdd(true)} className="btn-primary flex items-center gap-1.5 text-sm">
-          <UserPlus size={15} /> Add resident
-        </button>
+        {isAdmin && (
+          <button onClick={() => setShowAdd(true)} className="btn-primary flex items-center gap-1.5 text-sm">
+            <UserPlus size={15} /> Add resident
+          </button>
+        )}
       </div>
 
       {isLoading ? (
@@ -307,7 +322,7 @@ function ResidentsTab() {
         </div>
       )}
 
-      {showAdd && (
+      {isAdmin && showAdd && (
         <AddResidentModal
           flats={flats ?? []}
           onClose={() => setShowAdd(false)}

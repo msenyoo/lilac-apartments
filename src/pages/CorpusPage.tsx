@@ -7,6 +7,7 @@ import * as XLSX from 'xlsx'
 import { supabase, CorpusEntry, CorpusPlan } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { useRoleCtx } from '@/contexts/RoleContext'
 
 const STATUS_BADGE: Record<string, string> = {
   active:    'bg-green-100 text-green-700',
@@ -16,6 +17,7 @@ const STATUS_BADGE: Record<string, string> = {
 }
 
 export default function CorpusPage() {
+  const { canWrite } = useRoleCtx()
   const [selectedPlanId, setSelectedPlanId] = useState<string>('__all__')
   const [tab, setTab] = useState<'collection' | 'plan' | 'expenditure'>('collection')
 
@@ -127,6 +129,12 @@ export default function CorpusPage() {
           onChange={id => { setSelectedPlanId(id); setTab('collection') }}
         />
       </div>
+
+      {!canWrite && (
+        <div className="flex items-center gap-2 px-3 py-2 mb-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+          <span>Read-only access — contact the administrator to make changes.</span>
+        </div>
+      )}
 
       {/* Consolidated view banner when showing all */}
       {selectedPlanId === '__all__' && activePlans.length > 1 && (

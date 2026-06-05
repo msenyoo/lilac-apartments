@@ -3,11 +3,27 @@ import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, ArrowUpFromLine, ClipboardList, IndianRupee,
   Building2, FileText, LogOut, Menu, X, Settings, ChevronRight,
-  Receipt, MoreHorizontal,
+  Receipt, MoreHorizontal, UserCircle2,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useQuery } from '@tanstack/react-query'
 import HelpButton from '@/components/HelpButton'
+import { useRoleCtx } from '@/contexts/RoleContext'
+import type { AppRole } from '@/hooks/useRole'
+
+function roleBadgeClass(role: AppRole | null) {
+  if (role === 'admin')     return 'bg-violet-100 text-violet-700'
+  if (role === 'committee') return 'bg-blue-100 text-blue-700'
+  if (role === 'auditor')   return 'bg-slate-100 text-slate-600'
+  return 'bg-slate-100 text-slate-400'
+}
+
+function roleDotClass(role: AppRole | null) {
+  if (role === 'admin')     return 'bg-violet-500'
+  if (role === 'committee') return 'bg-blue-500'
+  if (role === 'auditor')   return 'bg-slate-400'
+  return 'bg-slate-300'
+}
 
 const NAV = [
   { to: '/dashboard',    icon: LayoutDashboard,  label: 'Dashboard' },
@@ -32,9 +48,19 @@ export default function Layout() {
   const navigate  = useNavigate()
   const location  = useLocation()
   const [open, setOpen] = useState(false)
+  const { role } = useRoleCtx()
+  const [userLabel, setUserLabel] = useState<string>('')
 
   // Close drawer on route change (mobile)
   useEffect(() => { setOpen(false) }, [location.pathname])
+
+  // Fetch current user identifier once on mount
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      const raw = data.user?.email ?? data.user?.phone ?? ''
+      setUserLabel(raw.endsWith('@lilac.com') ? raw.slice(0, -'@lilac.com'.length) : raw)
+    })
+  }, [])
 
   const { data: reviewCount } = useQuery({
     queryKey: ['review-count'],
@@ -89,8 +115,19 @@ export default function Layout() {
         ))}
       </nav>
 
-      {/* Logout */}
-      <div className="border-t border-slate-700 p-3">
+      {/* Footer: user info + logout */}
+      <div className="border-t border-slate-700 p-3 space-y-1">
+        {/* User identifier + role badge */}
+        <div className="flex items-center gap-3 px-3 py-2">
+          <UserCircle2 size={17} strokeWidth={1.75} className="shrink-0 text-slate-400" />
+          <span className="flex-1 text-xs text-slate-300 truncate">{userLabel}</span>
+          {role && (
+            <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide ${roleBadgeClass(role)}`}>
+              {role}
+            </span>
+          )}
+        </div>
+        {/* Sign out */}
         <button
           onClick={handleLogout}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400
@@ -214,7 +251,12 @@ export default function Layout() {
             onClick={() => setOpen(true)}
             className="flex-1 flex flex-col items-center justify-center gap-0.5 text-slate-400 active:text-slate-600 transition-colors"
           >
-            <MoreHorizontal size={20} strokeWidth={1.75} />
+            <span className="relative inline-flex">
+              <MoreHorizontal size={20} strokeWidth={1.75} />
+              {role && (
+                <span className={`absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border border-white ${roleDotClass(role)}`} />
+              )}
+            </span>
             <span className="text-[10px] font-medium">More</span>
           </button>
         </div>
