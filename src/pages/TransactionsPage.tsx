@@ -13,6 +13,7 @@ import {
   parsePipeStatement, tagTransaction, getFiscalLabel,
   getFiscalYear, getFiscalMonth, bankDateToISO, formatINR, FLAT_CODES,
 } from '@/lib/tagger'
+import { useRoleCtx } from '@/contexts/RoleContext'
 
 
 type Tab = 'upload' | 'review' | 'all'
@@ -22,7 +23,8 @@ const EXPENSE_CATS = ['SALARY','EB','CIVIL','SEWAGE','LIFT SERVICE','LIFT','INTE
 // ── MAIN PAGE ─────────────────────────────────────────────────
 export default function TransactionsPage() {
   const [params] = useSearchParams()
-  const [tab, setTab] = useState<Tab>((params.get('tab') as Tab) || 'upload')
+  const { canWrite } = useRoleCtx()
+  const [tab, setTab] = useState<Tab>((params.get('tab') as Tab) || (canWrite ? 'upload' : 'all'))
 
   const { data: reviewCount, refetch: refetchCount } = useQuery({
     queryKey: ['review-count'],
@@ -33,6 +35,12 @@ export default function TransactionsPage() {
     refetchInterval: 30_000,
   })
 
+  const visibleTabs = [
+    ...(canWrite ? [{ key: 'upload' as Tab, label: 'Upload' }] : []),
+    { key: 'review' as Tab, label: `Review${reviewCount ? ` (${reviewCount})` : ''}` },
+    { key: 'all' as Tab,    label: 'All Transactions' },
+  ]
+
   return (
     <div className="space-y-4">
       <div>
@@ -40,13 +48,15 @@ export default function TransactionsPage() {
         <p className="text-sm text-slate-500 mt-0.5">Upload statements, review unknowns, browse all data</p>
       </div>
 
+      {!canWrite && (
+        <div className="flex items-center gap-2 px-3 py-2 mb-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+          <span>Read-only access — contact the administrator to make changes.</span>
+        </div>
+      )}
+
       {/* Tab bar */}
       <div className="flex gap-1 bg-slate-100 rounded-xl p-1 flex-wrap">
-        {([
-          { key: 'upload', label: 'Upload' },
-          { key: 'review', label: `Review${reviewCount ? ` (${reviewCount})` : ''}` },
-          { key: 'all',    label: 'All Transactions' },
-        ] as { key: Tab; label: string }[]).map(({ key, label }) => (
+        {visibleTabs.map(({ key, label }) => (
           <button
             key={key}
             onClick={() => setTab(key)}
@@ -58,7 +68,7 @@ export default function TransactionsPage() {
         ))}
       </div>
 
-      {tab === 'upload' && <UploadTab onImported={() => { setTab('review'); refetchCount() }} />}
+      {canWrite && tab === 'upload' && <UploadTab onImported={() => { setTab('review'); refetchCount() }} />}
       {tab === 'review' && <ReviewTab />}
       {tab === 'all'    && <AllTransactionsTab />}
     </div>
@@ -405,6 +415,7 @@ function UploadHistory() {
 
 // ── REVIEW TAB ────────────────────────────────────────────────
 function ReviewTab() {
+  const { canWrite } = useRoleCtx()
   const qc = useQueryClient()
   const { data: items, isLoading } = useQuery({
     queryKey: ['review-queue'],
@@ -436,7 +447,11 @@ function ReviewTab() {
         <h3 className="font-semibold">Review queue</h3>
         <span className="badge-review">{items.length} pending</span>
       </div>
-      <p className="text-sm text-slate-500">Auto-tagging couldn't identify these. Assign a flat or category.</p>
+      <p className="text-sm text-slate-500">
+        {canWrite
+          ? "Auto-tagging couldn't identify these. Assign a flat or category."
+          : "Auto-tagging couldn't identify these. Read-only view."}
+      </p>
       <div className="grid gap-2 lg:grid-cols-2">
         {items.map(item => (
           <ReviewItem key={item.id} item={item} flats={flats ?? []} onSaved={() => qc.invalidateQueries()} />
@@ -447,6 +462,7 @@ function ReviewTab() {
 }
 
 function ReviewItem({ item, flats, onSaved }: { item: ReviewEntry; flats: any[]; onSaved: () => void }) {
+  const { canWrite } = useRoleCtx()
   const [flatCode, setFlatCode]   = useState('')
   const [category, setCategory]   = useState('Maintenance')
   const [corpus, setCorpus]       = useState<'YES' | 'NO'>('NO')
@@ -541,10 +557,12 @@ function ReviewItem({ item, flats, onSaved }: { item: ReviewEntry; flats: any[];
         )}
 
         <div className="flex gap-2">
-          <button onClick={handleSave} disabled={!flatCode || saving} className="btn-primary flex-1 text-sm py-2">
-            {saving ? <span className="flex justify-center"><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /></span> : 'Save tag'}
-          </button>
-          {item.cr_dr === 'CR' && (
+          {canWrite && (
+            <button onClick={handleSave} disabled={!flatCode || saving} className="btn-primary flex-1 text-sm py-2">
+              {saving ? <span className="flex justify-center"><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /></span> : 'Save tag'}
+            </button>
+          )}
+          {canWrite && item.cr_dr === 'CR' && (
             <button onClick={() => setShowSplit(true)} className="btn-secondary text-sm px-3 py-2 flex items-center gap-1.5">
               <Scissors size={14} /> Split
             </button>
@@ -859,6 +877,7 @@ function getCurrentFy() {
 }
 
 function AllTransactionsTab() {
+  const { canWrite } = useRoleCtx()
   const gridRef = useRef<AgGridReact>(null)
   const qc = useQueryClient()
   const fy = getCurrentFy()
@@ -1051,7 +1070,7 @@ function AllTransactionsTab() {
             )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {selectedTxn.row_type !== 'VOIDED' && (
+            {canWrite && selectedTxn.row_type !== 'VOIDED' && (
               <button onClick={() => setShowEdit(true)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-brand-500 text-brand-600 text-sm font-medium hover:bg-brand-50">
                 Edit

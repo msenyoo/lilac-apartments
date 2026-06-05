@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
-import { Save, RefreshCw, Plus, Pencil, Zap } from 'lucide-react'
+import { Save, RefreshCw, Plus, Pencil, Zap, Eye, EyeOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -21,7 +21,7 @@ type SettingsTab = 'general' | 'rates' | 'categories' | 'imports' | 'audit' | 'u
 
 export default function SettingsPage() {
   const [tab, setTab] = useState<SettingsTab>('general')
-  const { isAdmin } = useRoleCtx()
+  const { isAdmin, canWrite } = useRoleCtx()
 
   const allTabs: { key: SettingsTab; label: string; adminOnly?: boolean }[] = [
     { key: 'general',    label: 'General' },
@@ -40,6 +40,12 @@ export default function SettingsPage() {
         <h2 className="text-xl font-semibold">Settings</h2>
         <p className="text-sm text-slate-500 mt-0.5">App configuration</p>
       </div>
+
+      {!canWrite && (
+        <div className="flex items-center gap-2 px-3 py-2 mb-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+          <span>Read-only access — contact the administrator to make changes.</span>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1 bg-slate-100 rounded-xl p-1 flex-wrap">
@@ -66,6 +72,7 @@ export default function SettingsPage() {
 // ── General settings ──────────────────────────────────────────
 
 function GeneralSettings() {
+  const { isAdmin } = useRoleCtx()
   const qc = useQueryClient()
 
   const { data: settings, isLoading } = useQuery({
@@ -141,13 +148,15 @@ function GeneralSettings() {
         </div>
       </div>
 
-      <div className="flex">
-        <button onClick={handleSave} disabled={saving || isLoading}
-          className="btn-primary flex items-center gap-2">
-          {saving ? <RefreshCw size={15} className="animate-spin" /> : <Save size={15} />}
-          {saved ? 'Saved!' : 'Save settings'}
-        </button>
-      </div>
+      {isAdmin && (
+        <div className="flex">
+          <button onClick={handleSave} disabled={saving || isLoading}
+            className="btn-primary flex items-center gap-2">
+            {saving ? <RefreshCw size={15} className="animate-spin" /> : <Save size={15} />}
+            {saved ? 'Saved!' : 'Save settings'}
+          </button>
+        </div>
+      )}
 
       <div className="card p-5 space-y-2">
         <h3 className="font-semibold">About</h3>
@@ -174,6 +183,7 @@ interface RateRow {
 }
 
 function RateHistorySettings() {
+  const { isAdmin } = useRoleCtx()
   const qc = useQueryClient()
   const [addOpen, setAddOpen] = useState(false)
   const [filterBlock, setFilterBlock] = useState<string>('all')
@@ -211,9 +221,11 @@ function RateHistorySettings() {
         <div>
           <p className="text-sm text-slate-600">Current maintenance rates per flat. Changes apply forward-only from the effective date.</p>
         </div>
-        <Button onClick={() => setAddOpen(true)} className="flex items-center gap-2">
-          <Plus size={15} /> Add Rate Change
-        </Button>
+        {isAdmin && (
+          <Button onClick={() => setAddOpen(true)} className="flex items-center gap-2">
+            <Plus size={15} /> Add Rate Change
+          </Button>
+        )}
       </div>
 
       {/* Block filter */}
@@ -273,13 +285,15 @@ function RateHistorySettings() {
         </div>
       )}
 
-      <AddRateChangeDialog
-        open={addOpen}
-        onClose={() => setAddOpen(false)}
-        flats={flats}
-        currentRates={currentRates}
-        onSuccess={() => qc.invalidateQueries({ queryKey: ['rate-history-all'] })}
-      />
+      {isAdmin && (
+        <AddRateChangeDialog
+          open={addOpen}
+          onClose={() => setAddOpen(false)}
+          flats={flats}
+          currentRates={currentRates}
+          onSuccess={() => qc.invalidateQueries({ queryKey: ['rate-history-all'] })}
+        />
+      )}
     </div>
   )
 }
@@ -463,6 +477,7 @@ interface ExpenseCategory {
 }
 
 function CategoriesSettings() {
+  const { isAdmin } = useRoleCtx()
   const qc = useQueryClient()
   const [editTarget, setEditTarget] = useState<ExpenseCategory | null>(null)
   const [addOpen, setAddOpen]       = useState(false)
@@ -499,9 +514,11 @@ function CategoriesSettings() {
         <p className="text-sm text-slate-500">
           Categories marked as utility appear in the Utility report tab with per-block tracking.
         </p>
-        <Button size="sm" onClick={() => setAddOpen(true)} className="flex items-center gap-1.5 shrink-0">
-          <Plus size={14} /> Add Category
-        </Button>
+        {isAdmin && (
+          <Button size="sm" onClick={() => setAddOpen(true)} className="flex items-center gap-1.5 shrink-0">
+            <Plus size={14} /> Add Category
+          </Button>
+        )}
       </div>
 
       {(['Maintenance', 'Corpus'] as const).map(budgetType => {
@@ -521,24 +538,35 @@ function CategoriesSettings() {
                       {cat.unit_label}
                     </span>
                   )}
-                  <button
-                    onClick={() => toggleUtility(cat)}
-                    title={cat.is_utility ? 'Shown in Utility report — click to remove' : 'Click to add to Utility report'}
-                    className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium transition-colors shrink-0 ${
-                      cat.is_utility
-                        ? 'bg-amber-100 text-amber-700 hover:bg-slate-100 hover:text-slate-500'
-                        : 'bg-slate-100 text-slate-400 hover:bg-amber-100 hover:text-amber-700'
-                    }`}
-                  >
-                    <Zap size={10} />
-                    {cat.is_utility ? 'Utility' : 'Not utility'}
-                  </button>
-                  <button
-                    onClick={() => setEditTarget(cat)}
-                    className="p-1 text-slate-400 hover:text-slate-700 transition-colors shrink-0"
-                  >
-                    <Pencil size={13} />
-                  </button>
+                  {isAdmin ? (
+                    <button
+                      onClick={() => toggleUtility(cat)}
+                      title={cat.is_utility ? 'Shown in Utility report — click to remove' : 'Click to add to Utility report'}
+                      className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium transition-colors shrink-0 ${
+                        cat.is_utility
+                          ? 'bg-amber-100 text-amber-700 hover:bg-slate-100 hover:text-slate-500'
+                          : 'bg-slate-100 text-slate-400 hover:bg-amber-100 hover:text-amber-700'
+                      }`}
+                    >
+                      <Zap size={10} />
+                      {cat.is_utility ? 'Utility' : 'Not utility'}
+                    </button>
+                  ) : (
+                    <span className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${
+                      cat.is_utility ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-400'
+                    }`}>
+                      <Zap size={10} />
+                      {cat.is_utility ? 'Utility' : 'Not utility'}
+                    </span>
+                  )}
+                  {isAdmin && (
+                    <button
+                      onClick={() => setEditTarget(cat)}
+                      className="p-1 text-slate-400 hover:text-slate-700 transition-colors shrink-0"
+                    >
+                      <Pencil size={13} />
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -546,17 +574,19 @@ function CategoriesSettings() {
         )
       })}
 
-      <AddEditCategoryDialog
-        key={editTarget?.id ?? 'new'}
-        open={addOpen || !!editTarget}
-        initial={editTarget}
-        onClose={() => { setAddOpen(false); setEditTarget(null) }}
-        onSuccess={() => {
-          qc.invalidateQueries({ queryKey: ['expense-categories-all'] })
-          qc.invalidateQueries({ queryKey: ['utility-categories'] })
-          qc.invalidateQueries({ queryKey: ['expense-categories'] })
-        }}
-      />
+      {isAdmin && (
+        <AddEditCategoryDialog
+          key={editTarget?.id ?? 'new'}
+          open={addOpen || !!editTarget}
+          initial={editTarget}
+          onClose={() => { setAddOpen(false); setEditTarget(null) }}
+          onSuccess={() => {
+            qc.invalidateQueries({ queryKey: ['expense-categories-all'] })
+            qc.invalidateQueries({ queryKey: ['utility-categories'] })
+            qc.invalidateQueries({ queryKey: ['expense-categories'] })
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -865,7 +895,8 @@ function userRoleBadgeClass(role: string) {
 function UsersTab() {
   const { isAdmin } = useRoleCtx()
   const qc = useQueryClient()
-  const [updatingId, setUpdatingId] = useState<string | null>(null)
+  const [addOpen, setAddOpen]       = useState(false)
+  const [editTarget, setEditTarget] = useState<any | null>(null)
 
   const { data: users = [], isLoading } = useQuery({
     queryKey: ['v_users'],
@@ -882,14 +913,8 @@ function UsersTab() {
     },
   })
 
-  async function handleRoleChange(userId: string, newRole: string) {
-    setUpdatingId(userId)
-    try {
-      await supabase.from('user_roles').upsert({ user_id: userId, role: newRole })
-      qc.invalidateQueries({ queryKey: ['v_users'] })
-    } finally {
-      setUpdatingId(null)
-    }
+  function invalidateUsers() {
+    qc.invalidateQueries({ queryKey: ['v_users'] })
   }
 
   if (!isAdmin) {
@@ -902,7 +927,15 @@ function UsersTab() {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-slate-500">Manage user roles. Changes take effect immediately.</p>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-slate-500">Manage users and roles. Changes take effect immediately.</p>
+        <Button
+          onClick={() => setAddOpen(true)}
+          className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white shrink-0"
+        >
+          <Plus size={15} /> Add User
+        </Button>
+      </div>
 
       {isLoading ? (
         <div className="card h-40 animate-pulse bg-slate-100" />
@@ -912,12 +945,12 @@ function UsersTab() {
         </div>
       ) : (
         <div className="card overflow-hidden">
-          <div className="grid grid-cols-[2fr_1fr_0.8fr_0.8fr_1fr] px-4 py-2 bg-slate-50 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wide gap-3">
+          <div className="grid grid-cols-[2fr_1fr_0.8fr_0.8fr_auto] px-4 py-2 bg-slate-50 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wide gap-3">
             <span>Name / Mobile</span>
             <span>Email</span>
             <span>Role</span>
             <span>Last sign in</span>
-            <span>Change role</span>
+            <span></span>
           </div>
           <div className="divide-y divide-slate-100">
             {(users as any[]).map(user => {
@@ -925,7 +958,7 @@ function UsersTab() {
               const isMobile = loginId.endsWith('@lilac.com')
               const mobileNum = isMobile ? loginId.replace('@lilac.com', '') : null
               return (
-                <div key={user.id} className="grid grid-cols-[2fr_1fr_0.8fr_0.8fr_1fr] px-4 py-3 text-sm gap-3 items-center">
+                <div key={user.id} className="grid grid-cols-[2fr_1fr_0.8fr_0.8fr_auto] px-4 py-3 text-sm gap-3 items-center">
                   <div>
                     <p className="text-slate-800 text-xs font-medium">{user.display_name ?? '—'}</p>
                     <p className="text-slate-400 text-xs">{mobileNum ?? loginId}</p>
@@ -939,23 +972,283 @@ function UsersTab() {
                       ? new Date(user.last_sign_in_at).toLocaleDateString('en-IN', { dateStyle: 'short' })
                       : '—'}
                   </span>
-                  <select
-                    value={user.role ?? ''}
-                    disabled={updatingId === user.id}
-                    onChange={e => handleRoleChange(user.id, e.target.value)}
-                    className="border border-slate-200 rounded-lg px-2 py-1 text-xs bg-white disabled:opacity-50"
+                  <button
+                    onClick={() => setEditTarget(user)}
+                    className="p-1 text-slate-400 hover:text-slate-700 transition-colors"
+                    title="Edit user"
                   >
-                    {ROLE_OPTIONS.map(o => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
+                    <Pencil size={13} />
+                  </button>
                 </div>
               )
             })}
           </div>
         </div>
       )}
+
+      <AddUserDialog
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        onSuccess={invalidateUsers}
+      />
+
+      <EditUserDialog
+        key={editTarget?.id ?? 'none'}
+        user={editTarget}
+        onClose={() => setEditTarget(null)}
+        onSuccess={invalidateUsers}
+      />
     </div>
+  )
+}
+
+// ── Add User dialog ────────────────────────────────────────────
+
+function AddUserDialog({ open, onClose, onSuccess }: {
+  open: boolean
+  onClose: () => void
+  onSuccess: () => void
+}) {
+  const [name,     setName]     = useState('')
+  const [mobile,   setMobile]   = useState('')
+  const [password, setPassword] = useState('')
+  const [showPw,   setShowPw]   = useState(false)
+  const [role,     setRole]     = useState('committee')
+  const [saving,   setSaving]   = useState(false)
+  const [success,  setSuccess]  = useState(false)
+  const [error,    setError]    = useState('')
+
+  function reset() {
+    setName(''); setMobile(''); setPassword(''); setShowPw(false)
+    setRole('committee'); setError(''); setSuccess(false)
+  }
+
+  function validate() {
+    if (!name.trim())                       { setError('Name is required'); return false }
+    if (!/^\d{10}$/.test(mobile.trim()))    { setError('Mobile must be exactly 10 digits'); return false }
+    if (password.length < 8)               { setError('Password must be at least 8 characters'); return false }
+    if (!role)                             { setError('Role is required'); return false }
+    return true
+  }
+
+  async function handleSubmit() {
+    setError('')
+    if (!validate()) return
+    setSaving(true)
+    try {
+      const { error: fnErr } = await supabase.functions.invoke('create-user', {
+        body: { name: name.trim(), mobile: mobile.trim(), password, role },
+      })
+      if (fnErr) throw fnErr
+      onSuccess()
+      setSuccess(true)
+      setTimeout(() => {
+        setSuccess(false)
+        reset()
+        onClose()
+      }, 1200)
+    } catch (e: any) {
+      setError(e.message ?? 'Failed to create user')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!v) { reset(); onClose() } }}>
+      <DialogContent className="max-w-sm p-0">
+        <div className="px-6 pt-6 pb-4 border-b border-slate-100 shrink-0">
+          <DialogTitle>Add User</DialogTitle>
+        </div>
+
+        <div className="px-6 py-4 space-y-4">
+          <div className="space-y-1">
+            <Label>Name *</Label>
+            <Input
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="e.g. Rajesh Kumar"
+              className="text-sm"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label>Mobile *</Label>
+            <Input
+              value={mobile}
+              onChange={e => setMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
+              placeholder="10-digit number"
+              inputMode="numeric"
+              className="text-sm"
+            />
+            {mobile.length > 0 && (
+              <p className="text-xs text-slate-400">Will log in as {mobile}@lilac.com</p>
+            )}
+          </div>
+
+          <div className="space-y-1">
+            <Label>Password *</Label>
+            <div className="relative">
+              <Input
+                type={showPw ? 'text' : 'password'}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="Min 8 characters"
+                className="text-sm pr-9"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPw(p => !p)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              >
+                {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <Label>Role *</Label>
+            <Select value={role} onValueChange={setRole}>
+              <SelectTrigger className="text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ROLE_OPTIONS.map(o => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {error   && <p className="text-sm text-red-500">{error}</p>}
+          {success && <p className="text-sm text-emerald-600">User created successfully!</p>}
+        </div>
+
+        <div className="px-6 py-4 border-t border-slate-100 shrink-0">
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { reset(); onClose() }}>Cancel</Button>
+            <Button
+              onClick={handleSubmit}
+              disabled={saving || success}
+              className="bg-violet-600 hover:bg-violet-700 text-white"
+            >
+              {saving ? 'Creating…' : success ? 'Created!' : 'Create user'}
+            </Button>
+          </DialogFooter>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ── Edit User dialog ───────────────────────────────────────────
+
+function EditUserDialog({ user, onClose, onSuccess }: {
+  user: any | null
+  onClose: () => void
+  onSuccess: () => void
+}) {
+  const [name,         setName]         = useState(user?.display_name ?? '')
+  const [mobile,       setMobile]       = useState(user?.mobile ?? '')
+  const [contactEmail, setContactEmail] = useState(user?.contact_email ?? '')
+  const [role,         setRole]         = useState(user?.role ?? 'committee')
+  const [saving,       setSaving]       = useState(false)
+  const [error,        setError]        = useState('')
+
+  async function handleSave() {
+    if (!name.trim()) { setError('Name is required'); return }
+    setSaving(true); setError('')
+    try {
+      const { error: profileErr } = await supabase.from('profiles').upsert({
+        id: user.id,
+        display_name:  name.trim(),
+        mobile:        mobile.trim() || null,
+        contact_email: contactEmail.trim() || null,
+      })
+      if (profileErr) throw profileErr
+
+      const { error: roleErr } = await supabase.from('user_roles').upsert({
+        user_id: user.id,
+        role,
+      })
+      if (roleErr) throw roleErr
+
+      onSuccess()
+      onClose()
+    } catch (e: any) {
+      setError(e.message ?? 'Failed to save changes')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog open={!!user} onOpenChange={v => { if (!v) onClose() }}>
+      <DialogContent className="max-w-sm p-0">
+        <div className="px-6 pt-6 pb-4 border-b border-slate-100 shrink-0">
+          <DialogTitle>Edit User</DialogTitle>
+        </div>
+
+        <div className="px-6 py-4 space-y-4">
+          <div className="space-y-1">
+            <Label>Name *</Label>
+            <Input
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Display name"
+              className="text-sm"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label>Mobile</Label>
+            <Input
+              value={mobile}
+              onChange={e => setMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
+              placeholder="10-digit number"
+              inputMode="numeric"
+              className="text-sm"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label>Contact email</Label>
+            <Input
+              value={contactEmail}
+              onChange={e => setContactEmail(e.target.value)}
+              placeholder="real email for communication"
+              type="email"
+              className="text-sm"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label>Role</Label>
+            <Select value={role} onValueChange={setRole}>
+              <SelectTrigger className="text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ROLE_OPTIONS.map(o => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {error && <p className="text-sm text-red-500">{error}</p>}
+        </div>
+
+        <div className="px-6 py-4 border-t border-slate-100 shrink-0">
+          <DialogFooter>
+            <Button variant="outline" onClick={onClose}>Cancel</Button>
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? 'Saving…' : 'Save changes'}
+            </Button>
+          </DialogFooter>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 
