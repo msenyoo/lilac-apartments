@@ -170,7 +170,7 @@ export default function ReportPage() {
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit flex-wrap">
+      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 overflow-x-auto">
         {([
           { key: 'monthly',     label: 'Monthly summary' },
           { key: 'flat',        label: 'Flat statement' },
@@ -869,7 +869,7 @@ function FlatStatementTab() {
           {FLAT_CODES.map(f => <option key={f} value={f}>{f}</option>)}
         </select>
 
-        <div className="flex gap-1 bg-slate-100 rounded-lg p-0.5 text-sm">
+        <div className="flex gap-1 bg-slate-100 rounded-lg p-0.5 text-sm flex-wrap">
           {([
             { key: 'fy',     label: fy.label },
             { key: 'custom', label: 'Custom' },
@@ -1105,7 +1105,7 @@ function ExpenditureReportsTab() {
     <div className="space-y-4">
       {/* Controls */}
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex gap-1 bg-slate-100 rounded-lg p-0.5 text-sm">
+        <div className="flex gap-1 bg-slate-100 rounded-lg p-0.5 text-sm flex-wrap">
           {([
             { key: 'category', label: 'By category' },
             { key: 'vendor',   label: 'By vendor' },
