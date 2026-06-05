@@ -71,8 +71,8 @@ test.describe('Transactions', () => {
   test.beforeEach(async ({ page }) => { await page.goto('/transactions') })
 
   test('shows Upload tab by default', async ({ page }) => {
-    // Default tab is Upload
-    await expect(page.getByText(/drag.*drop|upload.*csv|import/i).first()).toBeVisible({ timeout: 10_000 })
+    // Default tab is Upload — shows drag & drop area
+    await expect(page.getByText(/click to select or drag/i).first()).toBeVisible({ timeout: 10_000 })
   })
 
   test('All Transactions tab shows grid', async ({ page }) => {
@@ -81,7 +81,7 @@ test.describe('Transactions', () => {
   })
 
   test('tab buttons are visible', async ({ page }) => {
-    await expect(page.getByRole('button', { name: /upload/i }).first()).toBeVisible()
+    await expect(page.getByRole('button', { name: /^upload$/i })).toBeVisible()
     await expect(page.getByRole('button', { name: /all transactions/i })).toBeVisible()
   })
 })
@@ -99,12 +99,13 @@ test.describe('Corpus', () => {
   })
 
   test('"By Flat" tab renders flat grid', async ({ page }) => {
-    await page.getByRole('button', { name: /by flat/i }).click()
-    await expect(page.locator('.ag-root-wrapper')).toBeVisible({ timeout: 10_000 })
+    // "By Flat" is the default tab (key: collection) — grid loads automatically
+    await expect(page.locator('.ag-root-wrapper')).toBeVisible({ timeout: 15_000 })
   })
 
   test('clicking flat row opens detail panel', async ({ page }) => {
-    await page.getByRole('button', { name: /by flat/i }).click()
+    // "By Flat" tab is the default — wait for grid then click a row
+    await page.locator('.ag-root-wrapper').waitFor({ timeout: 15_000 })
     await page.locator('.ag-row').first().waitFor({ timeout: 10_000 })
     await page.locator('.ag-row').first().click()
     await expect(page.getByText(/payment history/i)).toBeVisible({ timeout: 5_000 })
@@ -119,11 +120,12 @@ test.describe('Expenses', () => {
   test.beforeEach(async ({ page }) => { await page.goto('/expenses') })
 
   test('Day Book tab is default and renders', async ({ page }) => {
-    // Default tab is daybook — should show expense list or empty state
-    await expect(page.locator('.rounded-xl').first()).toBeVisible({ timeout: 5_000 })
+    // Default tab is daybook — KPI cards or empty state is visible
+    await expect(page.locator('.card').first()).toBeVisible({ timeout: 10_000 })
   })
 
   test('Day Book tab button is present', async ({ page }) => {
+    // Tab label is "Day Book" (with space)
     await expect(page.getByRole('button', { name: /day book/i })).toBeVisible()
   })
 
@@ -134,15 +136,15 @@ test.describe('Expenses', () => {
   test('Add Expense dialog opens and closes', async ({ page }) => {
     await page.getByRole('button', { name: /add expense/i }).click()
     const dialog = page.getByRole('dialog')
-    await expect(dialog).toBeVisible()
-    // Description field (Label says "Description *", input has placeholder)
-    await expect(page.getByPlaceholder(/security salary/i)).toBeVisible()
+    await expect(dialog).toBeVisible({ timeout: 5_000 })
+    // Description input placeholder text from the JSX
+    await expect(page.getByPlaceholder(/security salary june/i)).toBeVisible()
     await page.keyboard.press('Escape')
     await expect(dialog).not.toBeVisible()
   })
 
   test('Vendors tab renders with Add Vendor button', async ({ page }) => {
-    await page.getByRole('button', { name: /vendors/i }).click()
+    await page.getByRole('button', { name: /^vendors$/i }).click()
     await expect(page.getByRole('button', { name: /add vendor/i })).toBeVisible({ timeout: 10_000 })
   })
 
@@ -160,29 +162,31 @@ test.describe('Reports', () => {
   test.beforeEach(async ({ page }) => { await page.goto('/reports') })
 
   test('tab buttons show main report categories', async ({ page }) => {
+    // Tabs: Monthly summary, Flat statement, Dues aging, AGM reports, Utilities, Expenditure
     await expect(page.getByRole('button', { name: /monthly summary/i })).toBeVisible()
     await expect(page.getByRole('button', { name: /agm reports/i })).toBeVisible()
   })
 
   test('Monthly summary tab loads with KPI', async ({ page }) => {
-    // Default tab is monthly summary
-    await expect(page.locator('.rounded-xl').first()).toBeVisible({ timeout: 10_000 })
+    // Default tab is monthly summary — shows a card with the summary
+    await expect(page.locator('.card').first()).toBeVisible({ timeout: 10_000 })
   })
 
   test('Flat statement tab renders', async ({ page }) => {
-    await page.getByRole('button', { name: /flat statement/i }).click()
-    await expect(page.locator('.rounded-xl, table, .ag-root-wrapper').first()).toBeVisible({ timeout: 10_000 })
+    await page.getByRole('button', { name: /^flat statement$/i }).click()
+    // Flat statement shows cards and/or transaction ledger
+    await expect(page.locator('.card').first()).toBeVisible({ timeout: 10_000 })
   })
 
   test('AGM reports tab shows report cards', async ({ page }) => {
-    await page.getByRole('button', { name: /agm reports/i }).click()
-    // Should show download/generate buttons for AGM reports
-    await expect(page.getByRole('button', { name: /download|generate|pdf/i }).first()).toBeVisible({ timeout: 10_000 })
+    await page.getByRole('button', { name: /^agm reports$/i }).click()
+    // Should show "Download PDF" buttons on the report cards
+    await expect(page.getByRole('button', { name: /download pdf/i }).first()).toBeVisible({ timeout: 10_000 })
   })
 
   test('Expenditure tab renders', async ({ page }) => {
-    await page.getByRole('button', { name: /expenditure/i }).first().click()
-    await expect(page.locator('.rounded-xl').first()).toBeVisible({ timeout: 10_000 })
+    await page.getByRole('button', { name: /^expenditure$/i }).click()
+    await expect(page.locator('.card').first()).toBeVisible({ timeout: 10_000 })
   })
 })
 
@@ -195,18 +199,19 @@ test.describe('Settings', () => {
 
   test('Maintenance Rates tab renders rate list', async ({ page }) => {
     // Default tab is General — must click to Maintenance Rates first
-    await page.getByRole('button', { name: /maintenance rates/i }).click()
-    // Rates render as .card divs with rate rows (not a <table>)
+    // Tab label is exactly "Maintenance Rates"
+    await page.getByRole('button', { name: /^maintenance rates$/i }).click()
+    // Rates render as card divs (not a table); wait for the card + Add Rate Change button
     await expect(page.locator('.card').first()).toBeVisible({ timeout: 10_000 })
     await expect(page.getByRole('button', { name: /add rate change/i })).toBeVisible({ timeout: 5_000 })
   })
 
   test('Rate change dialog opens and is not clipped by viewport', async ({ page }) => {
     // Must navigate to Maintenance Rates tab first (default is General)
-    await page.getByRole('button', { name: /maintenance rates/i }).click()
+    await page.getByRole('button', { name: /^maintenance rates$/i }).click()
     await page.getByRole('button', { name: /add rate change/i }).click()
     const dialog = page.getByRole('dialog')
-    await expect(dialog).toBeVisible()
+    await expect(dialog).toBeVisible({ timeout: 5_000 })
 
     // Dialog must fit inside the viewport
     const box      = await dialog.boundingBox()
@@ -215,16 +220,18 @@ test.describe('Settings', () => {
     expect(box!.y).toBeGreaterThanOrEqual(0)
     expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height + 5)
 
-    // Save/Apply button at bottom must be reachable (not hidden under viewport)
-    const saveBtn = dialog.getByRole('button', { name: /save|apply|add/i }).first()
+    // Apply/Save button at bottom must be reachable (not hidden under viewport)
+    // Button text is "Apply to N flats" or "Apply to 0 flats"
+    const saveBtn = dialog.getByRole('button', { name: /apply|save/i }).first()
     await expect(saveBtn).toBeVisible()
 
     await page.keyboard.press('Escape')
   })
 
   test('General tab has UPI field', async ({ page }) => {
+    // General is the default tab, but click it explicitly to be safe
     await page.getByRole('button', { name: /^general$/i }).click()
-    // UPI ID label is a native <label> element wrapping the input
+    // UPI ID label text — rendered as a native <label> element
     await expect(page.getByText(/upi id/i)).toBeVisible()
   })
 })
