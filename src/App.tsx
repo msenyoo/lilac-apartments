@@ -12,6 +12,7 @@ import ReportPage      from '@/pages/ReportPage'
 import FlatsPage       from '@/pages/FlatsPage'
 import SettingsPage    from '@/pages/SettingsPage'
 import ExpensesPage    from '@/pages/ExpensesPage'
+import { RoleProvider } from '@/contexts/RoleContext'
 
 export default function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined)
@@ -35,7 +36,7 @@ export default function App() {
   return (
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
-        <Route path="/" element={<Layout />}>
+        <Route path="/" element={<RoleProvider><Layout /></RoleProvider>}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard"    element={<DashboardPage />} />
           <Route path="transactions" element={<TransactionsPage />} />

@@ -12,14 +12,27 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import { useRoleCtx } from '@/contexts/RoleContext'
 
 const FY_OPTIONS = ['2022','2023','2024','2025','2026','2027','2028']
 function fyLabel(y: string) { return `FY ${y}-${String(parseInt(y) + 1).slice(-2)}` }
 
-type SettingsTab = 'general' | 'rates' | 'categories' | 'imports'
+type SettingsTab = 'general' | 'rates' | 'categories' | 'imports' | 'audit' | 'users'
 
 export default function SettingsPage() {
   const [tab, setTab] = useState<SettingsTab>('general')
+  const { isAdmin } = useRoleCtx()
+
+  const allTabs: { key: SettingsTab; label: string; adminOnly?: boolean }[] = [
+    { key: 'general',    label: 'General' },
+    { key: 'rates',      label: 'Maintenance Rates' },
+    { key: 'categories', label: 'Expense Categories' },
+    { key: 'imports',    label: 'Import History' },
+    { key: 'audit',      label: 'Audit Log' },
+    { key: 'users',      label: 'Users', adminOnly: true },
+  ]
+
+  const visibleTabs = allTabs.filter(t => !t.adminOnly || isAdmin)
 
   return (
     <div className="space-y-4 max-w-3xl">
@@ -30,12 +43,7 @@ export default function SettingsPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 bg-slate-100 rounded-xl p-1 flex-wrap">
-        {([
-          { key: 'general',     label: 'General' },
-          { key: 'rates',       label: 'Maintenance Rates' },
-          { key: 'categories',  label: 'Expense Categories' },
-          { key: 'imports',     label: 'Import History' },
-        ] as { key: SettingsTab; label: string }[]).map(({ key, label }) => (
+        {visibleTabs.map(({ key, label }) => (
           <button key={key} onClick={() => setTab(key)}
             className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
               tab === key ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'
@@ -49,6 +57,8 @@ export default function SettingsPage() {
       {tab === 'rates'      && <RateHistorySettings />}
       {tab === 'categories' && <CategoriesSettings />}
       {tab === 'imports'    && <UploadHistorySection />}
+      {tab === 'audit'      && <AuditLogTab />}
+      {tab === 'users'      && isAdmin && <UsersTab />}
     </div>
   )
 }
@@ -657,6 +667,292 @@ function AddEditCategoryDialog({ open, initial, onClose, onSuccess }: {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+// ── Audit log tab ─────────────────────────────────────────────
+
+const AUDITED_TABLES = [
+  'all',
+  'transactions',
+  'flats',
+  'maintenance_rate_history',
+  'expense_categories',
+  'app_settings',
+  'user_roles',
+  'corpus_plans',
+  'uploads',
+]
+
+function actionBadgeClass(action: string) {
+  if (action === 'INSERT') return 'bg-emerald-100 text-emerald-700'
+  if (action === 'UPDATE') return 'bg-amber-100 text-amber-700'
+  if (action === 'DELETE') return 'bg-rose-100 text-rose-700'
+  return 'bg-slate-100 text-slate-500'
+}
+
+function defaultFromDate() {
+  const d = new Date()
+  d.setDate(d.getDate() - 30)
+  return d.toISOString().slice(0, 10)
+}
+
+function AuditLogTab() {
+  const [tableFilter, setTableFilter] = useState<string>('all')
+  const [actionFilter, setActionFilter] = useState<'all' | 'INSERT' | 'UPDATE' | 'DELETE'>('all')
+  const [fromDate, setFromDate] = useState<string>(defaultFromDate())
+  const [toDate, setToDate]     = useState<string>(new Date().toISOString().slice(0, 10))
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  const { data: logs = [], isLoading, isError } = useQuery({
+    queryKey: ['audit_log', tableFilter, actionFilter, fromDate, toDate],
+    queryFn: async () => {
+      let q = supabase.from('audit_log').select('*').order('created_at', { ascending: false }).limit(100)
+      if (tableFilter !== 'all') q = q.eq('table_name', tableFilter)
+      if (actionFilter !== 'all') q = q.eq('action', actionFilter)
+      if (fromDate) q = q.gte('created_at', fromDate)
+      if (toDate)   q = q.lte('created_at', toDate + 'T23:59:59Z')
+      const { data, error } = await q
+      if (error) {
+        // Table may not exist yet — return empty gracefully
+        console.warn('audit_log query error:', error.message)
+        return []
+      }
+      return data ?? []
+    },
+  })
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-slate-500">Read-only log of data changes recorded by the database.</p>
+
+      {/* Filters */}
+      <div className="card p-4 flex flex-wrap gap-3 items-end">
+        <div className="flex-1 min-w-36 space-y-1">
+          <label className="text-xs font-medium text-slate-500 uppercase tracking-wide">Table</label>
+          <select
+            value={tableFilter}
+            onChange={e => setTableFilter(e.target.value)}
+            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+          >
+            {AUDITED_TABLES.map(t => (
+              <option key={t} value={t}>{t === 'all' ? 'All tables' : t}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex-1 min-w-32 space-y-1">
+          <label className="text-xs font-medium text-slate-500 uppercase tracking-wide">Action</label>
+          <select
+            value={actionFilter}
+            onChange={e => setActionFilter(e.target.value as typeof actionFilter)}
+            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+          >
+            <option value="all">All actions</option>
+            <option value="INSERT">INSERT</option>
+            <option value="UPDATE">UPDATE</option>
+            <option value="DELETE">DELETE</option>
+          </select>
+        </div>
+
+        <div className="flex-1 min-w-32 space-y-1">
+          <label className="text-xs font-medium text-slate-500 uppercase tracking-wide">From</label>
+          <input
+            type="date"
+            value={fromDate}
+            onChange={e => setFromDate(e.target.value)}
+            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+          />
+        </div>
+
+        <div className="flex-1 min-w-32 space-y-1">
+          <label className="text-xs font-medium text-slate-500 uppercase tracking-wide">To</label>
+          <input
+            type="date"
+            value={toDate}
+            onChange={e => setToDate(e.target.value)}
+            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+          />
+        </div>
+      </div>
+
+      {/* Table */}
+      {isLoading ? (
+        <div className="card h-40 animate-pulse bg-slate-100" />
+      ) : isError ? (
+        <div className="card p-6 text-center">
+          <p className="text-sm text-slate-400">Unable to load audit log. The table may not be available yet.</p>
+        </div>
+      ) : logs.length === 0 ? (
+        <div className="card p-6 text-center">
+          <p className="text-sm text-slate-400">No audit log entries found for the selected filters.</p>
+        </div>
+      ) : (
+        <div className="card overflow-hidden">
+          <div className="grid grid-cols-[1fr_1.2fr_1fr_auto_0.7fr] px-4 py-2 bg-slate-50 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wide gap-3">
+            <span>Timestamp</span>
+            <span>User</span>
+            <span>Table</span>
+            <span>Action</span>
+            <span className="text-right">Record</span>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {(logs as any[]).map((row) => {
+              const isExpanded = expandedId === row.id
+              return (
+                <div key={row.id}>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedId(isExpanded ? null : row.id)}
+                    className="grid grid-cols-[1fr_1.2fr_1fr_auto_0.7fr] w-full px-4 py-3 text-sm gap-3 text-left hover:bg-slate-50 transition-colors items-center"
+                  >
+                    <span className="text-slate-500 text-xs tabular-nums">
+                      {new Date(row.created_at).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
+                    </span>
+                    <span className="text-slate-700 truncate text-xs">{row.user_email ?? '—'}</span>
+                    <span className="text-slate-600 text-xs font-mono">{row.table_name}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${actionBadgeClass(row.action)}`}>
+                      {row.action}
+                    </span>
+                    <span className="text-right text-slate-400 text-xs font-mono">
+                      {row.record_id ? String(row.record_id).slice(0, 8) : '—'}
+                    </span>
+                  </button>
+
+                  {isExpanded && (
+                    <div className="px-4 pb-4 pt-1 bg-slate-50 border-t border-slate-100">
+                      <div className="flex gap-3 flex-wrap">
+                        <div className="flex-1 min-w-48">
+                          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Before</p>
+                          <pre className="text-xs bg-white border border-slate-200 rounded-lg p-3 overflow-x-auto text-slate-700 whitespace-pre-wrap break-all">
+                            {row.old_val ? JSON.stringify(row.old_val, null, 2) : 'null'}
+                          </pre>
+                        </div>
+                        <div className="flex-1 min-w-48">
+                          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">After</p>
+                          <pre className="text-xs bg-white border border-slate-200 rounded-lg p-3 overflow-x-auto text-slate-700 whitespace-pre-wrap break-all">
+                            {row.new_val ? JSON.stringify(row.new_val, null, 2) : 'null'}
+                          </pre>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Users tab (admin only) ─────────────────────────────────────
+
+const ROLE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'admin',     label: 'Admin' },
+  { value: 'committee', label: 'Committee' },
+  { value: 'auditor',   label: 'Auditor' },
+]
+
+function userRoleBadgeClass(role: string) {
+  if (role === 'admin')     return 'bg-violet-100 text-violet-700'
+  if (role === 'committee') return 'bg-blue-100 text-blue-700'
+  if (role === 'auditor')   return 'bg-amber-100 text-amber-700'
+  return 'bg-slate-100 text-slate-400'
+}
+
+function UsersTab() {
+  const { isAdmin } = useRoleCtx()
+  const qc = useQueryClient()
+  const [updatingId, setUpdatingId] = useState<string | null>(null)
+
+  const { data: users = [], isLoading } = useQuery({
+    queryKey: ['v_users'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('v_users')
+        .select('*')
+        .order('created_at', { ascending: false })
+      if (error) {
+        console.warn('v_users query error:', error.message)
+        return []
+      }
+      return data ?? []
+    },
+  })
+
+  async function handleRoleChange(userId: string, newRole: string) {
+    setUpdatingId(userId)
+    try {
+      await supabase.from('user_roles').upsert({ user_id: userId, role: newRole })
+      qc.invalidateQueries({ queryKey: ['v_users'] })
+    } finally {
+      setUpdatingId(null)
+    }
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="card p-6 text-center">
+        <p className="text-sm text-slate-400">You do not have permission to manage users.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-slate-500">Manage user roles. Changes take effect on next sign-in.</p>
+
+      {isLoading ? (
+        <div className="card h-40 animate-pulse bg-slate-100" />
+      ) : users.length === 0 ? (
+        <div className="card p-6 text-center">
+          <p className="text-sm text-slate-400">No users found.</p>
+        </div>
+      ) : (
+        <div className="card overflow-hidden">
+          <div className="grid grid-cols-[1.5fr_0.8fr_1fr_1fr] px-4 py-2 bg-slate-50 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wide gap-3">
+            <span>Email</span>
+            <span>Role</span>
+            <span>Last sign in</span>
+            <span>Joined</span>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {(users as any[]).map(user => (
+              <div key={user.id} className="grid grid-cols-[1.5fr_0.8fr_1fr_1fr] px-4 py-3 text-sm gap-3 items-center">
+                <span className="text-slate-700 truncate text-xs">{user.email}</span>
+                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold w-fit ${userRoleBadgeClass(user.role)}`}>
+                  {user.role ?? '—'}
+                </span>
+                <span className="text-slate-400 text-xs">
+                  {user.last_sign_in_at
+                    ? new Date(user.last_sign_in_at).toLocaleDateString('en-IN', { dateStyle: 'short' })
+                    : '—'}
+                </span>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-slate-400 text-xs">
+                    {user.created_at
+                      ? new Date(user.created_at).toLocaleDateString('en-IN', { dateStyle: 'short' })
+                      : '—'}
+                  </span>
+                  <select
+                    value={user.role ?? ''}
+                    disabled={updatingId === user.id}
+                    onChange={e => handleRoleChange(user.id, e.target.value)}
+                    className="border border-slate-200 rounded-lg px-2 py-1 text-xs bg-white disabled:opacity-50"
+                  >
+                    {ROLE_OPTIONS.map(o => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
