@@ -153,6 +153,13 @@ export interface AppSetting {
   updated_at: string
 }
 
+export interface UserRole {
+  user_id: string
+  role: 'admin' | 'committee' | 'auditor'
+  assigned_by: string | null
+  assigned_at: string
+}
+
 // ── VIEW TYPES ────────────────────────────────────────────────
 
 export interface MonthlyCollection {
