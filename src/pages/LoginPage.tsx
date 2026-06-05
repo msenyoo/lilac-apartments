@@ -1,13 +1,12 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Building2, Eye, EyeOff, LogIn } from 'lucide-react'
+import { Building2, Eye, EyeOff } from 'lucide-react'
 
-// 10-digit Indian mobile → number@lilac.com so Supabase email auth works transparently
 function toAuthEmail(input: string): string {
   const digits = input.replace(/\D/g, '')
   if (/^\d{10}$/.test(digits)) return `${digits}@lilac.com`
   if (/^91\d{10}$/.test(digits)) return `${digits.slice(2)}@lilac.com`
-  return input // already an email
+  return input
 }
 
 export default function LoginPage() {
@@ -30,107 +29,121 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-6"
-         style={{ background: 'linear-gradient(135deg, #0d1e30 0%, #1a3c5e 60%, #2e75b6 100%)' }}>
-
-      {/* Logo block */}
-      <div className="text-center mb-8 select-none">
-        <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl mb-5 shadow-xl"
-             style={{ background: 'rgba(255,255,255,0.12)', backdropFilter: 'blur(8px)' }}>
-          <Building2 size={38} className="text-white" />
+    <div className="min-h-screen flex" style={{ background: 'var(--ink-50)' }}>
+      {/* Brand panel — desktop left */}
+      <div
+        className="hidden lg:flex flex-col justify-between w-[420px] shrink-0 p-12"
+        style={{ background: 'linear-gradient(160deg, var(--brand-700) 0%, var(--brand-500) 100%)' }}
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-white/20">
+            <Building2 size={22} className="text-white" />
+          </div>
+          <span className="text-white font-bold text-[16px]">Lilac Apartments</span>
         </div>
-        <h1 className="text-3xl font-bold text-white tracking-tight">Lilac Apartments</h1>
-        <p className="text-blue-300 text-sm mt-1.5 font-medium tracking-wide uppercase">
-          Association Management
-        </p>
+        <div>
+          <p className="text-white/90 text-[28px] font-bold leading-snug mb-3">
+            Association<br />management,<br />simplified.
+          </p>
+          <p className="text-white/60 text-[14px] leading-relaxed">
+            Dues · Corpus · Expenses · Reports — all in one place for your volunteer committee.
+          </p>
+        </div>
+        <p className="text-white/40 text-[12px]">Rajakil Pakkam · Chennai</p>
       </div>
 
-      {/* Card */}
-      <div className="w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden"
-           style={{ background: 'rgba(255,255,255,0.97)' }}>
-
-        <div className="h-1.5 w-full" style={{ background: 'linear-gradient(90deg, #1a3c5e, #2e75b6)' }} />
-
-        <form onSubmit={handleLogin} className="p-7 space-y-5">
-          <div className="text-center pb-1">
-            <h2 className="text-xl font-semibold text-slate-800">Committee sign in</h2>
-            <p className="text-slate-400 text-sm mt-1">Enter your credentials to continue</p>
-          </div>
-
-          {/* Mobile / Email */}
-          <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-slate-700">
-              Mobile number
-              <span className="text-slate-400 font-normal ml-1">(or email)</span>
-            </label>
-            <input
-              type="text"
-              inputMode="tel"
-              required
-              autoComplete="username"
-              value={login}
-              onChange={e => setLogin(e.target.value)}
-              placeholder="9876543210"
-              className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm
-                         bg-slate-50 focus:bg-white focus:outline-none focus:ring-2
-                         focus:ring-brand-500 focus:border-transparent transition-all"
-            />
-            {isPhone && (
-              <p className="text-xs text-slate-400">
-                Signing in as <span className="font-medium text-slate-600">{toAuthEmail(login.trim())}</span>
-              </p>
-            )}
-          </div>
-
-          {/* Password */}
-          <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-slate-700">Password</label>
-            <div className="relative">
-              <input
-                type={showPass ? 'text' : 'password'}
-                required
-                autoComplete="current-password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full border border-slate-200 rounded-xl px-4 py-3 pr-11 text-sm
-                           bg-slate-50 focus:bg-white focus:outline-none focus:ring-2
-                           focus:ring-brand-500 focus:border-transparent transition-all"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPass(v => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400
-                           hover:text-slate-600 transition-colors"
-              >
-                {showPass ? <EyeOff size={17} /> : <Eye size={17} />}
-              </button>
-            </div>
-          </div>
-
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-              <p className="text-red-700 text-sm">{error}</p>
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl
-                       font-semibold text-sm text-white transition-all
-                       disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{ background: 'linear-gradient(135deg, #1a3c5e, #2e75b6)' }}
+      {/* Form panel */}
+      <div className="flex-1 flex flex-col items-center justify-center p-6 sm:p-12">
+        {/* Mobile logo */}
+        <div className="lg:hidden flex flex-col items-center mb-8">
+          <div
+            className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4"
+            style={{ background: 'var(--brand-600)' }}
           >
-            {loading
-              ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              : <><LogIn size={16} /> Sign in</>
-            }
-          </button>
-        </form>
-      </div>
+            <Building2 size={28} className="text-white" />
+          </div>
+          <p className="font-extrabold text-[20px]">Lilac Apartments</p>
+          <p className="text-[13px] mt-1" style={{ color: 'var(--ink-400)' }}>Committee portal</p>
+        </div>
 
-      <p className="mt-6 text-blue-300/60 text-xs">Rajakil Pakkam · Chennai</p>
+        <div className="w-full max-w-sm">
+          <div className="mb-7">
+            <h2 className="text-[22px] font-extrabold" style={{ color: 'var(--ink-900)' }}>
+              Sign in
+            </h2>
+            <p className="text-[13.5px] mt-1" style={{ color: 'var(--ink-500)' }}>
+              Enter your mobile number or email
+            </p>
+          </div>
+
+          <form onSubmit={handleLogin} className="flex flex-col gap-4">
+            <div className="space-y-1.5">
+              <label className="ds-lbl">
+                Mobile number <span style={{ color: 'var(--ink-400)', fontWeight: 400 }}>or email</span>
+              </label>
+              <input
+                type="text"
+                inputMode="tel"
+                required
+                autoComplete="username"
+                value={login}
+                onChange={e => setLogin(e.target.value)}
+                placeholder="9876543210"
+                className="ds-field"
+              />
+              {isPhone && (
+                <p className="text-[11.5px]" style={{ color: 'var(--ink-400)' }}>
+                  Signing in as <span className="font-medium" style={{ color: 'var(--ink-600)' }}>{toAuthEmail(login.trim())}</span>
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="ds-lbl">Password</label>
+              <div className="relative">
+                <input
+                  type={showPass ? 'text' : 'password'}
+                  required
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="ds-field pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPass(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
+                  style={{ color: 'var(--ink-400)' }}
+                >
+                  {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </div>
+
+            {error && (
+              <div
+                className="px-4 py-3 rounded-[10px] border text-[13px]"
+                style={{ background: 'var(--bad-bg)', borderColor: 'var(--bad-bd)', color: 'var(--bad)' }}
+              >
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-[10px] font-semibold text-[14px] text-white transition-opacity disabled:opacity-50"
+              style={{ background: 'var(--brand-600)' }}
+            >
+              {loading
+                ? <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                : 'Sign in'
+              }
+            </button>
+          </form>
+        </div>
+      </div>
     </div>
   )
 }

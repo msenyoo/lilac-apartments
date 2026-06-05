@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRoleCtx } from '@/contexts/RoleContext'
 import { useForm, useFieldArray, Controller } from 'react-hook-form'
@@ -101,9 +101,12 @@ function expenseStatus(e: Expense) {
 }
 
 const STATUS_STYLE: Record<string, string> = {
-  Cash:          'bg-slate-100 text-slate-600',
+  Cash:          '',
   Reconciled:    'bg-green-100 text-green-700',
   Unreconciled:  'bg-amber-100 text-amber-700',
+}
+const STATUS_INLINE: Record<string, React.CSSProperties> = {
+  Cash: { background: 'var(--ink-100)', color: 'var(--ink-600)' },
 }
 
 // ── Page ──────────────────────────────────────────────────────
@@ -114,11 +117,11 @@ export default function ExpensesPage() {
   const [addOpen, setAddOpen] = useState(false)
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-5 fade-in">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
-          <h2 className="text-xl font-semibold">Expenses</h2>
-          <p className="text-sm text-slate-500 mt-0.5">Day book · Reconcile · Vendors · Staff</p>
+          <h1 className="text-[24px] font-extrabold">Expenses</h1>
+          <p className="text-[13.5px] mt-1" style={{ color: 'var(--ink-500)' }}>Day book · Reconcile · Vendors · Staff</p>
         </div>
         {canWrite && (
           <Button onClick={() => setAddOpen(true)} className="flex items-center gap-2">
@@ -128,13 +131,13 @@ export default function ExpensesPage() {
       </div>
 
       {!canWrite && (
-        <div className="flex items-center gap-2 px-3 py-2 mb-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+        <div className="flex items-center gap-2 px-3 py-2 mb-4 rounded-xl text-[13px]" style={{ background: 'var(--warn-bg)', border: '1px solid var(--warn-bd)', color: 'var(--warn)' }}>
           <span>Read-only access — contact the administrator to make changes.</span>
         </div>
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 overflow-x-auto">
+      <div className="flex gap-1 rounded-xl p-1 overflow-x-auto" style={{ background: 'var(--ink-100)' }}>
         {([
           { key: 'daybook',   label: 'Day Book',   icon: Receipt },
           { key: 'reconcile', label: 'Reconcile',  icon: GitMerge },
@@ -145,8 +148,9 @@ export default function ExpensesPage() {
         ] as { key: typeof tab; label: string; icon: any }[]).map(({ key, label, icon: Icon }) => (
           <button key={key} onClick={() => setTab(key)}
             className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-              tab === key ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'
-            }`}>
+              tab === key ? 'bg-white shadow-sm' : 'hover:bg-[var(--ink-50)]'
+            }`}
+            style={tab !== key ? { color: 'var(--ink-500)' } : undefined}>
             <Icon size={14} /> {label}
           </button>
         ))}
@@ -214,27 +218,27 @@ function DayBook() {
   const unreconciled = expenses.filter(e => expenseStatus(e) === 'Unreconciled').length
   const totalAll     = expenses.reduce((s, e) => s + e.amount, 0)
 
-  if (isLoading) return <div className="card h-48 animate-pulse bg-slate-100" />
+  if (isLoading) return <div className="surface h-48 animate-pulse" style={{ background: 'var(--ink-100)' }} />
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       {/* KPI strip */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="card p-4 bg-white">
-          <p className="text-xs text-slate-500 mb-1">This month</p>
-          <p className="text-xl font-bold text-slate-800">{formatINR(totalThisMonth)}</p>
+        <div className="surface !p-4">
+          <p className="text-xs mb-1" style={{ color: 'var(--ink-500)' }}>This month</p>
+          <p className="text-xl font-bold" style={{ color: 'var(--ink-800)' }}>{formatINR(totalThisMonth)}</p>
         </div>
-        <div className="card p-4 bg-white">
-          <p className="text-xs text-slate-500 mb-1">Total recorded</p>
-          <p className="text-xl font-bold text-slate-800">{formatINR(totalAll)}</p>
+        <div className="surface !p-4">
+          <p className="text-xs mb-1" style={{ color: 'var(--ink-500)' }}>Total recorded</p>
+          <p className="text-xl font-bold" style={{ color: 'var(--ink-800)' }}>{formatINR(totalAll)}</p>
         </div>
-        <div className={`card p-4 ${unreconciled > 0 ? 'bg-amber-50' : 'bg-white'}`}>
-          <p className="text-xs text-slate-500 mb-1">Unreconciled</p>
-          <p className={`text-xl font-bold ${unreconciled > 0 ? 'text-amber-600' : 'text-slate-400'}`}>{unreconciled}</p>
+        <div className="surface !p-4" style={unreconciled > 0 ? { background: 'var(--warn-bg)' } : undefined}>
+          <p className="text-xs mb-1" style={{ color: 'var(--ink-500)' }}>Unreconciled</p>
+          <p className={`text-xl font-bold ${unreconciled > 0 ? 'text-amber-600' : ''}`} style={unreconciled === 0 ? { color: 'var(--ink-400)' } : undefined}>{unreconciled}</p>
         </div>
-        <div className="card p-4 bg-white">
-          <p className="text-xs text-slate-500 mb-1">Total entries</p>
-          <p className="text-xl font-bold text-slate-800">{expenses.length}</p>
+        <div className="surface !p-4">
+          <p className="text-xs mb-1" style={{ color: 'var(--ink-500)' }}>Total entries</p>
+          <p className="text-xl font-bold" style={{ color: 'var(--ink-800)' }}>{expenses.length}</p>
         </div>
       </div>
 
@@ -247,19 +251,19 @@ function DayBook() {
       </div>
 
       {expenses.length === 0 ? (
-        <div className="card p-12 flex flex-col items-center justify-center text-center gap-4">
-          <div className="w-14 h-14 rounded-full bg-brand-100 flex items-center justify-center">
+        <div className="surface !p-12 flex flex-col items-center justify-center text-center gap-4">
+          <div className="w-14 h-14 rounded-full flex items-center justify-center" style={{ background: 'var(--brand-100)' }}>
             <Receipt size={26} className="text-brand-600" />
           </div>
           <div>
-            <p className="text-base font-medium text-slate-800">No expenses recorded yet</p>
-            <p className="text-sm text-slate-500 mt-1">Click "Add Expense" to record the first entry.</p>
+            <p className="text-base font-medium" style={{ color: 'var(--ink-800)' }}>No expenses recorded yet</p>
+            <p className="text-sm mt-1" style={{ color: 'var(--ink-500)' }}>Click "Add Expense" to record the first entry.</p>
           </div>
         </div>
       ) : (
         <div className="flex gap-4">
           {/* List */}
-          <div className="flex-1 min-w-0 card divide-y divide-slate-100">
+          <div className="flex-1 min-w-0 surface !p-0 divide-rows">
             {expenses.map(e => {
               const status = expenseStatus(e)
               const payeeName = e.payee_name_raw ?? e.vendor?.name ?? e.staff_member?.name ?? ''
@@ -267,34 +271,34 @@ function DayBook() {
                 <button
                   key={e.id}
                   onClick={() => setDetailId(d => d === e.id ? null : e.id)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 text-left transition-colors ${detailId === e.id ? 'bg-violet-50' : ''}`}
+                  className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-[var(--ink-50)] text-left transition-colors ${detailId === e.id ? 'bg-[var(--brand-50)]' : ''}`}
                 >
                   <div className="shrink-0 text-center w-10">
-                    <p className="text-xs font-bold text-slate-800 leading-tight">
+                    <p className="text-xs font-bold leading-tight" style={{ color: 'var(--ink-800)' }}>
                       {new Date(e.expense_date).getDate().toString().padStart(2, '0')}
                     </p>
-                    <p className="text-[10px] text-slate-400 uppercase">
+                    <p className="text-[10px] uppercase" style={{ color: 'var(--ink-400)' }}>
                       {new Date(e.expense_date).toLocaleString('en', { month: 'short' })}
                     </p>
                   </div>
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-baseline gap-2">
-                      <p className="text-sm font-medium text-slate-800 truncate">{e.description}</p>
+                      <p className="text-sm font-medium truncate" style={{ color: 'var(--ink-800)' }}>{e.description}</p>
                       {e.voucher_no && (
-                        <span className="text-[10px] text-slate-400 shrink-0">{e.voucher_no}</span>
+                        <span className="text-[10px] shrink-0" style={{ color: 'var(--ink-400)' }}>{e.voucher_no}</span>
                       )}
                     </div>
-                    <p className="text-xs text-slate-500 truncate mt-0.5">
+                    <p className="text-xs truncate mt-0.5" style={{ color: 'var(--ink-500)' }}>
                       {payeeName} · {e.category?.name ?? e.payment_mode}
                     </p>
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${STATUS_STYLE[status]}`}>
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${STATUS_STYLE[status]}`} style={STATUS_INLINE[status]}>
                       {status}
                     </span>
-                    <span className="text-sm font-semibold text-slate-800">{formatINR(e.amount)}</span>
+                    <span className="text-sm font-semibold" style={{ color: 'var(--ink-800)' }}>{formatINR(e.amount)}</span>
                   </div>
                 </button>
               )
@@ -319,21 +323,21 @@ function ExpenseDetailPanel({ expense: e, onClose }: { expense: Expense; onClose
   const lineTotal = e.line_items.reduce((s, li) => s + li.amount, 0)
 
   return (
-    <div className="w-80 shrink-0 space-y-3">
-      <div className="card p-4 space-y-3">
+    <div className="w-80 shrink-0 flex flex-col gap-3">
+      <div className="surface !p-4 flex flex-col gap-3">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <h3 className="font-semibold text-slate-800">{e.description}</h3>
-            {e.voucher_no && <p className="text-xs text-slate-400 mt-0.5">{e.voucher_no}</p>}
+            <h3 className="font-semibold" style={{ color: 'var(--ink-800)' }}>{e.description}</h3>
+            {e.voucher_no && <p className="text-xs mt-0.5" style={{ color: 'var(--ink-400)' }}>{e.voucher_no}</p>}
           </div>
-          <button onClick={onClose} className="p-1 rounded hover:bg-slate-100 shrink-0"><X size={15} /></button>
+          <button onClick={onClose} className="p-1 rounded hover:bg-[var(--ink-100)] shrink-0"><X size={15} /></button>
         </div>
 
-        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_STYLE[status]}`}>{status}</span>
+        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_STYLE[status]}`} style={STATUS_INLINE[status]}>{status}</span>
 
-        <div className="space-y-1.5 text-sm">
+        <div className="flex flex-col gap-1.5 text-sm">
           <Row label="Date"     value={e.expense_date} />
-          <Row label="Amount"   value={<span className="font-bold text-slate-800">{formatINR(e.amount)}</span>} />
+          <Row label="Amount"   value={<span className="font-bold" style={{ color: 'var(--ink-800)' }}>{formatINR(e.amount)}</span>} />
           <Row label="Payee"    value={payeeName} />
           <Row label="Mode"     value={e.payment_mode} />
           {e.reference_no   && <Row label="Reference" value={e.reference_no} />}
@@ -345,21 +349,21 @@ function ExpenseDetailPanel({ expense: e, onClose }: { expense: Expense; onClose
       </div>
 
       {e.line_items.length > 0 && (
-        <div className="card p-4 space-y-3">
+        <div className="surface !p-4 flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-medium">Line items</h4>
             {lineTotal !== e.amount && (
               <span className="text-xs text-red-500 font-medium">⚠ {formatINR(lineTotal)} / {formatINR(e.amount)}</span>
             )}
           </div>
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             {e.line_items.map(li => (
-              <div key={li.id} className="bg-slate-50 rounded-lg p-2.5 text-xs space-y-1">
+              <div key={li.id} className="rounded-lg p-2.5 text-xs flex flex-col gap-1" style={{ background: 'var(--ink-50)' }}>
                 <div className="flex justify-between font-medium">
-                  <span className="text-slate-700">{li.description}</span>
-                  <span className="text-slate-800">{formatINR(li.amount)}</span>
+                  <span style={{ color: 'var(--ink-700)' }}>{li.description}</span>
+                  <span style={{ color: 'var(--ink-800)' }}>{formatINR(li.amount)}</span>
                 </div>
-                <div className="text-slate-400 flex gap-2 flex-wrap">
+                <div className="flex gap-2 flex-wrap" style={{ color: 'var(--ink-400)' }}>
                   <span>{li.cost_center}</span>
                   {li.category && <span>· {li.category.name}</span>}
                   {li.utility_units != null && li.utility_rate != null && (
@@ -381,8 +385,8 @@ function ExpenseDetailPanel({ expense: e, onClose }: { expense: Expense; onClose
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex justify-between gap-2">
-      <span className="text-slate-500 shrink-0">{label}</span>
-      <span className="text-slate-800 text-right">{value}</span>
+      <span className="shrink-0" style={{ color: 'var(--ink-500)' }}>{label}</span>
+      <span className="text-right" style={{ color: 'var(--ink-800)' }}>{value}</span>
     </div>
   )
 }
@@ -512,31 +516,31 @@ function AddExpenseDialog({ open, onClose }: { open: boolean; onClose: () => voi
           <DialogTitle>Add Expense</DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit((d: any) => mutation.mutateAsync(d))} className="space-y-6">
+        <form onSubmit={handleSubmit((d: any) => mutation.mutateAsync(d))} className="flex flex-col gap-6">
           {/* ── Header ────────────────────────────────── */}
-          <section className="space-y-4">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Payment header</p>
+          <section className="flex flex-col gap-4">
+            <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-500)' }}>Payment header</p>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
+              <div className="flex flex-col gap-1">
                 <Label>Date *</Label>
                 <Input type="date" {...register('expense_date')} />
                 {errors.expense_date && <p className="text-xs text-red-500">{errors.expense_date.message}</p>}
               </div>
-              <div className="space-y-1">
+              <div className="flex flex-col gap-1">
                 <Label>Amount (₹) *</Label>
                 <Input type="number" placeholder="0" {...register('amount')} />
                 {errors.amount && <p className="text-xs text-red-500">{errors.amount.message}</p>}
               </div>
             </div>
 
-            <div className="space-y-1">
+            <div className="flex flex-col gap-1">
               <Label>Description *</Label>
               <Input placeholder="e.g. Security salary June 2026" {...register('description')} />
               {errors.description && <p className="text-xs text-red-500">{errors.description.message}</p>}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
+              <div className="flex flex-col gap-1">
                 <Label>Payee type *</Label>
                 <Controller name="payee_type" control={control} render={({ field }) => (
                   <Select value={field.value} onValueChange={field.onChange}>
@@ -547,7 +551,7 @@ function AddExpenseDialog({ open, onClose }: { open: boolean; onClose: () => voi
                   </Select>
                 )} />
               </div>
-              <div className="space-y-1">
+              <div className="flex flex-col gap-1">
                 {watchedPayeeType === 'Vendor' || watchedPayeeType === 'Intermediary' ? (
                   <>
                     <Label>Vendor</Label>
@@ -582,7 +586,7 @@ function AddExpenseDialog({ open, onClose }: { open: boolean; onClose: () => voi
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
+              <div className="flex flex-col gap-1">
                 <Label>Payment mode *</Label>
                 <Controller name="payment_mode" control={control} render={({ field }) => (
                   <Select value={field.value} onValueChange={field.onChange}>
@@ -593,7 +597,7 @@ function AddExpenseDialog({ open, onClose }: { open: boolean; onClose: () => voi
                   </Select>
                 )} />
               </div>
-              <div className="space-y-1">
+              <div className="flex flex-col gap-1">
                 {(watchedMode === 'Online' || watchedMode === 'Bank Transfer') ? (
                   <>
                     <Label>Reference / UTR</Label>
@@ -609,7 +613,7 @@ function AddExpenseDialog({ open, onClose }: { open: boolean; onClose: () => voi
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
+              <div className="flex flex-col gap-1">
                 <Label>Category</Label>
                 <Controller name="category_id" control={control} render={({ field }) => (
                   <Select value={field.value ?? ''} onValueChange={field.onChange}>
@@ -617,13 +621,13 @@ function AddExpenseDialog({ open, onClose }: { open: boolean; onClose: () => voi
                     <SelectContent>
                       {maintenanceCats.length > 0 && (
                         <>
-                          <p className="px-2 py-1 text-[10px] text-slate-400 font-semibold uppercase">Maintenance</p>
+                          <p className="px-2 py-1 text-[10px] font-semibold uppercase" style={{ color: 'var(--ink-400)' }}>Maintenance</p>
                           {maintenanceCats.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                         </>
                       )}
                       {corpusCats.length > 0 && (
                         <>
-                          <p className="px-2 py-1 text-[10px] text-slate-400 font-semibold uppercase">Corpus</p>
+                          <p className="px-2 py-1 text-[10px] font-semibold uppercase" style={{ color: 'var(--ink-400)' }}>Corpus</p>
                           {corpusCats.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                         </>
                       )}
@@ -632,7 +636,7 @@ function AddExpenseDialog({ open, onClose }: { open: boolean; onClose: () => voi
                 )} />
               </div>
               {corpusPlans.length > 0 && (
-                <div className="space-y-1">
+                <div className="flex flex-col gap-1">
                   <Label>Corpus plan (if applicable)</Label>
                   <Controller name="corpus_plan_id" control={control} render={({ field }) => (
                     <Select value={field.value ?? ''} onValueChange={field.onChange}>
@@ -646,16 +650,16 @@ function AddExpenseDialog({ open, onClose }: { open: boolean; onClose: () => voi
               )}
             </div>
 
-            <div className="space-y-1">
+            <div className="flex flex-col gap-1">
               <Label>Notes</Label>
               <Textarea placeholder="Optional remarks" rows={2} {...register('notes')} />
             </div>
           </section>
 
           {/* ── Line items ─────────────────────────────── */}
-          <section className="space-y-3">
+          <section className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Split / line items</p>
+              <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-500)' }}>Split / line items</p>
               <div className={`text-sm font-medium ${lineBalanceDiff === 0 ? 'text-green-600' : 'text-red-500'}`}>
                 {lineTotal > 0 && (
                   <span>
@@ -670,30 +674,30 @@ function AddExpenseDialog({ open, onClose }: { open: boolean; onClose: () => voi
               <p className="text-xs text-red-500">{errors.line_items.message}</p>
             )}
 
-            <div className="space-y-3">
+            <div className="flex flex-col gap-3">
               {fields.map((field, idx) => {
                 const catId = watch(`line_items.${idx}.category_id`)
                 const isUtility = getCategoryIsUtility(catId)
                 return (
-                  <div key={field.id} className="bg-slate-50 rounded-xl p-3 space-y-3">
+                  <div key={field.id} className="rounded-xl p-3 flex flex-col gap-3" style={{ background: 'var(--ink-50)' }}>
                     <div className="flex items-center justify-between">
-                      <p className="text-xs font-medium text-slate-600">Item {idx + 1}</p>
+                      <p className="text-xs font-medium" style={{ color: 'var(--ink-600)' }}>Item {idx + 1}</p>
                       {fields.length > 1 && (
-                        <button type="button" onClick={() => remove(idx)} className="text-slate-400 hover:text-red-500">
+                        <button type="button" onClick={() => remove(idx)} className="hover:text-red-500" style={{ color: 'var(--ink-400)' }}>
                           <Trash2 size={14} />
                         </button>
                       )}
                     </div>
 
                     <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1">
+                      <div className="flex flex-col gap-1">
                         <Label className="text-xs">Description *</Label>
                         <Input placeholder="What is this for?" {...register(`line_items.${idx}.description`)} />
                         {errors.line_items?.[idx]?.description && (
                           <p className="text-xs text-red-500">{errors.line_items[idx]?.description?.message}</p>
                         )}
                       </div>
-                      <div className="space-y-1">
+                      <div className="flex flex-col gap-1">
                         <Label className="text-xs">Amount (₹) *</Label>
                         <Input type="number" placeholder="0" {...register(`line_items.${idx}.amount`)} />
                         {errors.line_items?.[idx]?.amount && (
@@ -703,7 +707,7 @@ function AddExpenseDialog({ open, onClose }: { open: boolean; onClose: () => voi
                     </div>
 
                     <div className="grid grid-cols-3 gap-2">
-                      <div className="space-y-1">
+                      <div className="flex flex-col gap-1">
                         <Label className="text-xs">Category *</Label>
                         <Controller name={`line_items.${idx}.category_id`} control={control} render={({ field: f }) => (
                           <Select value={f.value} onValueChange={f.onChange}>
@@ -714,7 +718,7 @@ function AddExpenseDialog({ open, onClose }: { open: boolean; onClose: () => voi
                           </Select>
                         )} />
                       </div>
-                      <div className="space-y-1">
+                      <div className="flex flex-col gap-1">
                         <Label className="text-xs">Cost center *</Label>
                         <Controller name={`line_items.${idx}.cost_center`} control={control} render={({ field: f }) => (
                           <Select value={f.value} onValueChange={f.onChange}>
@@ -725,7 +729,7 @@ function AddExpenseDialog({ open, onClose }: { open: boolean; onClose: () => voi
                           </Select>
                         )} />
                       </div>
-                      <div className="space-y-1">
+                      <div className="flex flex-col gap-1">
                         <Label className="text-xs">Payee type</Label>
                         <Controller name={`line_items.${idx}.payee_type`} control={control} render={({ field: f }) => (
                           <Select value={f.value} onValueChange={f.onChange}>
@@ -741,11 +745,11 @@ function AddExpenseDialog({ open, onClose }: { open: boolean; onClose: () => voi
                     {/* Utility fields */}
                     {isUtility && (
                       <div className="grid grid-cols-2 gap-2">
-                        <div className="space-y-1">
+                        <div className="flex flex-col gap-1">
                           <Label className="text-xs">Units consumed</Label>
                           <Input type="number" step="0.01" placeholder="kWh / KL / trips" {...register(`line_items.${idx}.utility_units`)} />
                         </div>
-                        <div className="space-y-1">
+                        <div className="flex flex-col gap-1">
                           <Label className="text-xs">Rate per unit (₹)</Label>
                           <Input type="number" step="0.01" placeholder="₹/unit" {...register(`line_items.${idx}.utility_rate`)} />
                         </div>
@@ -754,11 +758,11 @@ function AddExpenseDialog({ open, onClose }: { open: boolean; onClose: () => voi
 
                     {/* Period */}
                     <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1">
+                      <div className="flex flex-col gap-1">
                         <Label className="text-xs">Period from</Label>
                         <Input type="date" {...register(`line_items.${idx}.period_from`)} />
                       </div>
-                      <div className="space-y-1">
+                      <div className="flex flex-col gap-1">
                         <Label className="text-xs">Period to</Label>
                         <Input type="date" {...register(`line_items.${idx}.period_to`)} />
                       </div>
@@ -876,11 +880,11 @@ function ReconcileTab() {
   const loading = loadingExp || loadingDR
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       {/* Summary strip */}
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-        <div className={`card p-4 ${expenses.length > 0 ? 'bg-amber-50' : 'bg-green-50'}`}>
-          <p className="text-xs text-slate-500 mb-1">Unreconciled expenses</p>
+        <div className="surface !p-4" style={expenses.length > 0 ? { background: 'var(--warn-bg)' } : { background: 'var(--ok-bg)' }}>
+          <p className="text-xs mb-1" style={{ color: 'var(--ink-500)' }}>Unreconciled expenses</p>
           <p className={`text-2xl font-bold ${expenses.length > 0 ? 'text-amber-600' : 'text-green-600'}`}>
             {expenses.length}
           </p>
@@ -890,19 +894,19 @@ function ReconcileTab() {
             </p>
           )}
         </div>
-        <div className="card p-4 bg-white">
-          <p className="text-xs text-slate-500 mb-1">Unmatched bank DRs</p>
-          <p className="text-2xl font-bold text-slate-700">{bankDRs.length}</p>
+        <div className="surface !p-4">
+          <p className="text-xs mb-1" style={{ color: 'var(--ink-500)' }}>Unmatched bank DRs</p>
+          <p className="text-2xl font-bold" style={{ color: 'var(--ink-700)' }}>{bankDRs.length}</p>
           {bankDRs.length > 0 && (
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs mt-0.5" style={{ color: 'var(--ink-400)' }}>
               {formatINR(bankDRs.reduce((s, t) => s + t.amount, 0))}
             </p>
           )}
         </div>
         {canMatch && (
-          <div className={`card p-4 ${amountMatch ? 'bg-green-50 border border-green-200' : 'bg-orange-50 border border-orange-200'}`}>
-            <p className="text-xs text-slate-500 mb-1">Selected match</p>
-            <p className="text-sm font-medium text-slate-700">
+          <div className="surface !p-4" style={amountMatch ? { background: 'var(--ok-bg)', border: '1px solid var(--ok)' } : { background: 'var(--warn-bg)', border: '1px solid var(--warn-bd)' }}>
+            <p className="text-xs mb-1" style={{ color: 'var(--ink-500)' }}>Selected match</p>
+            <p className="text-sm font-medium" style={{ color: 'var(--ink-700)' }}>
               {formatINR(selExp!.amount)} ↔ {formatINR(selTxn!.amount)}
             </p>
             {!amountMatch && (
@@ -916,10 +920,10 @@ function ReconcileTab() {
 
       {/* Action bar */}
       {canMatch && (
-        <div className="flex items-center gap-3 p-3 rounded-xl bg-violet-50 border border-violet-200">
-          <div className="flex-1 text-sm text-slate-700">
+        <div className="flex items-center gap-3 p-3 rounded-xl" style={{ background: 'var(--brand-50)', border: '1px solid var(--brand-100)' }}>
+          <div className="flex-1 text-sm" style={{ color: 'var(--ink-700)' }}>
             <span className="font-medium">{selExp!.voucher_no ?? selExp!.description.slice(0, 30)}</span>
-            <span className="text-slate-400 mx-2">↔</span>
+            <span className="mx-2" style={{ color: 'var(--ink-400)' }}>↔</span>
             <span className="font-medium">{selTxn!.txn_id ?? selTxn!.description.slice(0, 30)}</span>
           </div>
           {!amountMatch && (
@@ -938,7 +942,7 @@ function ReconcileTab() {
           )}
           <button
             onClick={() => { setSelectedExpenseId(null); setSelectedTxnId(null) }}
-            className="text-slate-400 hover:text-slate-600 shrink-0"
+            className="hover:text-[var(--ink-600)] shrink-0" style={{ color: 'var(--ink-400)' }}
           >
             <X size={15} />
           </button>
@@ -947,41 +951,41 @@ function ReconcileTab() {
 
       {loading ? (
         <div className="grid lg:grid-cols-2 gap-4">
-          <div className="card h-64 animate-pulse bg-slate-100" />
-          <div className="card h-64 animate-pulse bg-slate-100" />
+          <div className="surface h-64 animate-pulse" style={{ background: 'var(--ink-100)' }} />
+          <div className="surface h-64 animate-pulse" style={{ background: 'var(--ink-100)' }} />
         </div>
       ) : (
         <div className="grid lg:grid-cols-2 gap-4">
           {/* Left: unreconciled expenses */}
-          <div className="card">
-            <div className="px-4 py-3 border-b border-slate-100 bg-slate-50 rounded-t-xl">
-              <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+          <div className="surface !p-0">
+            <div className="px-4 py-3 border-b hairline rounded-t-xl" style={{ background: 'var(--ink-50)' }}>
+              <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-600)' }}>
                 Unreconciled expenses ({expenses.length})
               </p>
-              <p className="text-xs text-slate-400 mt-0.5">Select one to match with a bank DR</p>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--ink-400)' }}>Select one to match with a bank DR</p>
             </div>
             {expenses.length === 0 ? (
-              <p className="px-4 py-8 text-sm text-slate-400 text-center">All expenses reconciled ✓</p>
+              <p className="px-4 py-8 text-sm text-center" style={{ color: 'var(--ink-400)' }}>All expenses reconciled ✓</p>
             ) : (
-              <div className="divide-y divide-slate-100 max-h-[480px] overflow-y-auto">
+              <div className="divide-rows max-h-[480px] overflow-y-auto">
                 {expenses.map(e => (
                   <button
                     key={e.id}
                     onClick={() => setSelectedExpenseId(id => id === e.id ? null : e.id)}
-                    className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 text-left transition-colors ${
-                      selectedExpenseId === e.id ? 'bg-violet-50 border-l-2 border-violet-500' : ''
+                    className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-[var(--ink-50)] text-left transition-colors ${
+                      selectedExpenseId === e.id ? 'bg-[var(--brand-50)] border-l-2 border-violet-500' : ''
                     }`}
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-baseline justify-between gap-2">
-                        <p className="text-sm font-medium text-slate-800 truncate">{e.description}</p>
-                        <p className="text-sm font-bold text-slate-800 shrink-0">{formatINR(e.amount)}</p>
+                        <p className="text-sm font-medium truncate" style={{ color: 'var(--ink-800)' }}>{e.description}</p>
+                        <p className="text-sm font-bold shrink-0" style={{ color: 'var(--ink-800)' }}>{formatINR(e.amount)}</p>
                       </div>
                       <div className="flex gap-2 mt-0.5">
-                        <span className="text-xs text-slate-400">{e.expense_date}</span>
-                        {e.voucher_no && <span className="text-xs text-slate-400">{e.voucher_no}</span>}
-                        <span className="text-xs text-slate-400">{e.payment_mode}</span>
-                        {e.reference_no && <span className="text-xs text-slate-400 truncate">{e.reference_no}</span>}
+                        <span className="text-xs" style={{ color: 'var(--ink-400)' }}>{e.expense_date}</span>
+                        {e.voucher_no && <span className="text-xs" style={{ color: 'var(--ink-400)' }}>{e.voucher_no}</span>}
+                        <span className="text-xs" style={{ color: 'var(--ink-400)' }}>{e.payment_mode}</span>
+                        {e.reference_no && <span className="text-xs truncate" style={{ color: 'var(--ink-400)' }}>{e.reference_no}</span>}
                       </div>
                     </div>
                     {selectedExpenseId === e.id && (
@@ -994,34 +998,34 @@ function ReconcileTab() {
           </div>
 
           {/* Right: unmatched bank DRs */}
-          <div className="card">
-            <div className="px-4 py-3 border-b border-slate-100 bg-slate-50 rounded-t-xl">
-              <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+          <div className="surface !p-0">
+            <div className="px-4 py-3 border-b hairline rounded-t-xl" style={{ background: 'var(--ink-50)' }}>
+              <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-600)' }}>
                 Unmatched bank DRs ({bankDRs.length})
               </p>
-              <p className="text-xs text-slate-400 mt-0.5">Select one to match with an expense</p>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--ink-400)' }}>Select one to match with an expense</p>
             </div>
             {bankDRs.length === 0 ? (
-              <p className="px-4 py-8 text-sm text-slate-400 text-center">No unmatched bank debits</p>
+              <p className="px-4 py-8 text-sm text-center" style={{ color: 'var(--ink-400)' }}>No unmatched bank debits</p>
             ) : (
-              <div className="divide-y divide-slate-100 max-h-[480px] overflow-y-auto">
+              <div className="divide-rows max-h-[480px] overflow-y-auto">
                 {bankDRs.map(t => (
                   <button
                     key={t.id}
                     onClick={() => setSelectedTxnId(id => id === t.id ? null : t.id)}
-                    className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 text-left transition-colors ${
-                      selectedTxnId === t.id ? 'bg-violet-50 border-l-2 border-violet-500' : ''
+                    className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-[var(--ink-50)] text-left transition-colors ${
+                      selectedTxnId === t.id ? 'bg-[var(--brand-50)] border-l-2 border-violet-500' : ''
                     }`}
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-baseline justify-between gap-2">
-                        <p className="text-sm font-medium text-slate-800 truncate">{t.description}</p>
+                        <p className="text-sm font-medium truncate" style={{ color: 'var(--ink-800)' }}>{t.description}</p>
                         <p className="text-sm font-bold text-red-600 shrink-0">{formatINR(t.amount)}</p>
                       </div>
                       <div className="flex gap-2 mt-0.5">
-                        <span className="text-xs text-slate-400">{t.value_date}</span>
-                        {t.txn_id && <span className="text-xs text-slate-400">{t.txn_id}</span>}
-                        {t.category && <span className="text-xs text-slate-400">{t.category}</span>}
+                        <span className="text-xs" style={{ color: 'var(--ink-400)' }}>{t.value_date}</span>
+                        {t.txn_id && <span className="text-xs" style={{ color: 'var(--ink-400)' }}>{t.txn_id}</span>}
+                        {t.category && <span className="text-xs" style={{ color: 'var(--ink-400)' }}>{t.category}</span>}
                       </div>
                     </div>
                     {selectedTxnId === t.id && (
@@ -1058,10 +1062,10 @@ function VendorsTab() {
     },
   })
 
-  if (isLoading) return <div className="card h-32 animate-pulse bg-slate-100" />
+  if (isLoading) return <div className="surface h-32 animate-pulse" style={{ background: 'var(--ink-100)' }} />
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-3">
       {canWrite && (
         <div className="flex justify-end">
           <Button size="sm" onClick={() => setAddOpen(true)} className="flex items-center gap-1.5">
@@ -1071,23 +1075,23 @@ function VendorsTab() {
       )}
 
       {vendors.length === 0 ? (
-        <div className="card p-10 text-center text-slate-400">
+        <div className="surface !p-10 text-center" style={{ color: 'var(--ink-400)' }}>
           <Building size={28} className="mx-auto mb-2 opacity-40" />
           <p className="text-sm">No vendors added yet</p>
         </div>
       ) : (
-        <div className="card divide-y divide-slate-100">
+        <div className="surface !p-0 divide-rows">
           {vendors.map(v => (
             <div key={v.id} className="flex items-center gap-3 px-4 py-3">
-              <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
-                <Building size={14} className="text-slate-400" />
+              <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: 'var(--ink-100)' }}>
+                <Building size={14} style={{ color: 'var(--ink-400)' }} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-slate-800">{v.name}</p>
-                <p className="text-xs text-slate-400">
+                <p className="text-sm font-medium" style={{ color: 'var(--ink-800)' }}>{v.name}</p>
+                <p className="text-xs" style={{ color: 'var(--ink-400)' }}>
                   {v.type ?? 'Vendor'}{v.phone ? ` · ${v.phone}` : ''}{v.pan_number ? ` · PAN: ${v.pan_number}` : ''}
                 </p>
-                {v.notes && <p className="text-xs text-slate-400 truncate">{v.notes}</p>}
+                {v.notes && <p className="text-xs truncate" style={{ color: 'var(--ink-400)' }}>{v.notes}</p>}
               </div>
             </div>
           ))}
@@ -1116,10 +1120,10 @@ function StaffTab() {
   const active   = staffList.filter(s => !s.left_date)
   const inactive = staffList.filter(s => s.left_date)
 
-  if (isLoading) return <div className="card h-32 animate-pulse bg-slate-100" />
+  if (isLoading) return <div className="surface h-32 animate-pulse" style={{ background: 'var(--ink-100)' }} />
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-3">
       {canWrite && (
         <div className="flex justify-end">
           <Button size="sm" onClick={() => setAddOpen(true)} className="flex items-center gap-1.5">
@@ -1129,23 +1133,23 @@ function StaffTab() {
       )}
 
       {staffList.length === 0 ? (
-        <div className="card p-10 text-center text-slate-400">
+        <div className="surface !p-10 text-center" style={{ color: 'var(--ink-400)' }}>
           <Users size={28} className="mx-auto mb-2 opacity-40" />
           <p className="text-sm">No staff added yet</p>
         </div>
       ) : (<>
-      <div className="card divide-y divide-slate-100">
-        <div className="px-4 py-2 bg-slate-50 rounded-t-xl">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Active ({active.length})</p>
+      <div className="surface !p-0 divide-rows">
+        <div className="px-4 py-2 rounded-t-xl" style={{ background: 'var(--ink-50)' }}>
+          <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-500)' }}>Active ({active.length})</p>
         </div>
         {active.map(s => (
           <div key={s.id} className="flex items-center gap-3 px-4 py-3">
-            <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-full bg-[var(--brand-100)] flex items-center justify-center shrink-0">
               <Users size={14} className="text-violet-500" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-slate-800">{s.name}</p>
-              <p className="text-xs text-slate-400">{s.role}{s.assigned_area ? ` · ${s.assigned_area}` : ''}{s.phone ? ` · ${s.phone}` : ''}</p>
+              <p className="text-sm font-medium" style={{ color: 'var(--ink-800)' }}>{s.name}</p>
+              <p className="text-xs" style={{ color: 'var(--ink-400)' }}>{s.role}{s.assigned_area ? ` · ${s.assigned_area}` : ''}{s.phone ? ` · ${s.phone}` : ''}</p>
             </div>
             <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">Active</span>
           </div>
@@ -1153,18 +1157,18 @@ function StaffTab() {
       </div>
 
       {inactive.length > 0 && (
-        <div className="card divide-y divide-slate-100">
-          <div className="px-4 py-2 bg-slate-50 rounded-t-xl">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Former ({inactive.length})</p>
+        <div className="surface !p-0 divide-rows">
+          <div className="px-4 py-2 rounded-t-xl" style={{ background: 'var(--ink-50)' }}>
+            <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-500)' }}>Former ({inactive.length})</p>
           </div>
           {inactive.map(s => (
             <div key={s.id} className="flex items-center gap-3 px-4 py-3 opacity-60">
-              <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
-                <Users size={14} className="text-slate-400" />
+              <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: 'var(--ink-100)' }}>
+                <Users size={14} style={{ color: 'var(--ink-400)' }} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-slate-700">{s.name}</p>
-                <p className="text-xs text-slate-400">{s.role}{s.left_date ? ` · Left ${s.left_date}` : ''}</p>
+                <p className="text-sm font-medium" style={{ color: 'var(--ink-700)' }}>{s.name}</p>
+                <p className="text-xs" style={{ color: 'var(--ink-400)' }}>{s.role}{s.left_date ? ` · Left ${s.left_date}` : ''}</p>
               </div>
             </div>
           ))}
@@ -1210,13 +1214,13 @@ function AddVendorDialog({ open, onClose }: { open: boolean; onClose: () => void
     <Dialog open={open} onOpenChange={v => { if (!v) { reset(); onClose() } }}>
       <DialogContent className="max-w-md">
         <DialogHeader><DialogTitle>Add Vendor</DialogTitle></DialogHeader>
-        <div className="space-y-4">
-          <div className="space-y-1">
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1">
             <Label>Name *</Label>
             <Input value={name} onChange={e => setName(e.target.value)} placeholder="Vendor / company name" />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
+            <div className="flex flex-col gap-1">
               <Label>Type</Label>
               <Select value={type} onValueChange={setType}>
                 <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
@@ -1225,16 +1229,16 @@ function AddVendorDialog({ open, onClose }: { open: boolean; onClose: () => void
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
+            <div className="flex flex-col gap-1">
               <Label>Phone</Label>
               <Input value={phone} onChange={e => setPhone(e.target.value)} placeholder="Mobile number" />
             </div>
           </div>
-          <div className="space-y-1">
+          <div className="flex flex-col gap-1">
             <Label>PAN number</Label>
             <Input value={pan} onChange={e => setPan(e.target.value)} placeholder="For TDS tracking" />
           </div>
-          <div className="space-y-1">
+          <div className="flex flex-col gap-1">
             <Label>Notes</Label>
             <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Optional remarks" />
           </div>
@@ -1295,13 +1299,13 @@ function AddStaffDialog({ open, onClose }: { open: boolean; onClose: () => void 
     <Dialog open={open} onOpenChange={v => { if (!v) { reset(); onClose() } }}>
       <DialogContent className="max-w-md">
         <DialogHeader><DialogTitle>Add Staff Member</DialogTitle></DialogHeader>
-        <div className="space-y-4">
-          <div className="space-y-1">
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1">
             <Label>Full name *</Label>
             <Input value={form.name} onChange={set('name')} placeholder="e.g. Murugan" />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
+            <div className="flex flex-col gap-1">
               <Label>Role *</Label>
               <Select value={form.role} onValueChange={r => setForm(f => ({ ...f, role: r }))}>
                 <SelectTrigger><SelectValue placeholder="Select role" /></SelectTrigger>
@@ -1310,25 +1314,25 @@ function AddStaffDialog({ open, onClose }: { open: boolean; onClose: () => void 
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
+            <div className="flex flex-col gap-1">
               <Label>Assigned area</Label>
               <Input value={form.area} onChange={set('area')} placeholder="Block-A, Common, All..." />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
+            <div className="flex flex-col gap-1">
               <Label>Phone</Label>
               <Input value={form.phone} onChange={set('phone')} placeholder="Mobile number" />
             </div>
-            <div className="space-y-1">
+            <div className="flex flex-col gap-1">
               <Label>Joined date *</Label>
               <Input type="date" value={form.joined} onChange={set('joined')} />
             </div>
           </div>
-          <div className="space-y-1">
+          <div className="flex flex-col gap-1">
             <Label>Starting monthly salary (Rs)</Label>
             <Input type="number" value={salary} onChange={e => setSalary(e.target.value)} placeholder="Optional - can set later" />
-            <p className="text-xs text-slate-400">Added as initial salary history entry effective from joined date</p>
+            <p className="text-xs" style={{ color: 'var(--ink-400)' }}>Added as initial salary history entry effective from joined date</p>
           </div>
           {err && <p className="text-sm text-red-500">{err}</p>}
         </div>
@@ -1366,10 +1370,10 @@ function RecurringTab() {
     qc.invalidateQueries({ queryKey: ['recurring-templates'] })
   }
 
-  if (isLoading) return <div className="card h-40 animate-pulse bg-slate-100" />
+  if (isLoading) return <div className="surface h-40 animate-pulse" style={{ background: 'var(--ink-100)' }} />
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-3">
       {canWrite && (
         <div className="flex justify-end">
           <Button size="sm" onClick={() => setAddOpen(true)} className="flex items-center gap-1.5">
@@ -1379,51 +1383,53 @@ function RecurringTab() {
       )}
 
       {templates.length === 0 ? (
-        <div className="card p-12 flex flex-col items-center gap-3 text-center text-slate-400">
+        <div className="surface !p-12 flex flex-col items-center gap-3 text-center" style={{ color: 'var(--ink-400)' }}>
           <RefreshCcw size={28} className="opacity-40" />
           <div>
-            <p className="text-sm font-medium text-slate-700">No recurring templates</p>
+            <p className="text-sm font-medium" style={{ color: 'var(--ink-700)' }}>No recurring templates</p>
             <p className="text-xs mt-1">Add templates for monthly expenses like lift AMC, security agency contract, etc.</p>
           </div>
         </div>
       ) : (
-        <div className="card divide-y divide-slate-100">
+        <div className="surface !p-0 divide-rows">
           {templates.map(t => (
             <div key={t.id} className={`flex items-center gap-3 px-4 py-3 ${!t.active ? 'opacity-50' : ''}`}>
-              <div className="w-8 h-8 rounded-full bg-violet-50 flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: 'var(--brand-50)' }}>
                 <RefreshCcw size={14} className="text-violet-500" />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-slate-800">{t.name}</p>
+                  <p className="text-sm font-medium" style={{ color: 'var(--ink-800)' }}>{t.name}</p>
                   <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
                     t.frequency === 'Monthly' ? 'bg-blue-100 text-blue-700' :
                     t.frequency === 'Quarterly' ? 'bg-amber-100 text-amber-700' :
                     'bg-purple-100 text-purple-700'
                   }`}>{t.frequency}</span>
                 </div>
-                <p className="text-xs text-slate-400">
-                  {t.vendor?.name ?? 'No vendor'} {t.category ? 'Â· ' + t.category.name : ''}
-                  {t.description ? ' Â· ' + t.description : ''}
+                <p className="text-xs" style={{ color: 'var(--ink-400)' }}>
+                  {t.vendor?.name ?? 'No vendor'} {t.category ? '· ' + t.category.name : ''}
+                  {t.description ? ' · ' + t.description : ''}
                 </p>
               </div>
               <div className="flex items-center gap-3 shrink-0">
-                <span className="text-sm font-semibold text-slate-800">{formatINR(t.amount)}</span>
+                <span className="text-sm font-semibold" style={{ color: 'var(--ink-800)' }}>{formatINR(t.amount)}</span>
                 {canWrite ? (
                   <button
                     onClick={() => toggleActive(t.id, t.active)}
                     className={`text-xs px-2 py-0.5 rounded-full font-medium transition-colors ${
                       t.active
                         ? 'bg-green-100 text-green-700 hover:bg-red-100 hover:text-red-700'
-                        : 'bg-slate-100 text-slate-500 hover:bg-green-100 hover:text-green-700'
+                        : 'hover:bg-green-100 hover:text-green-700'
                     }`}
+                    style={!t.active ? { background: 'var(--ink-100)', color: 'var(--ink-500)' } : undefined}
                   >
                     {t.active ? 'Active' : 'Inactive'}
                   </button>
                 ) : (
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                    t.active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
-                  }`}>
+                  <span
+                    className={`text-xs px-2 py-0.5 rounded-full font-medium ${t.active ? 'bg-green-100 text-green-700' : ''}`}
+                    style={!t.active ? { background: 'var(--ink-100)', color: 'var(--ink-500)' } : undefined}
+                  >
                     {t.active ? 'Active' : 'Inactive'}
                   </span>
                 )}
@@ -1479,21 +1485,21 @@ function AddRecurringDialog({ open, onClose }: { open: boolean; onClose: () => v
     <Dialog open={open} onOpenChange={v => { if (!v) { reset(); onClose() } }}>
       <DialogContent className="max-w-md">
         <DialogHeader><DialogTitle>Add Recurring Template</DialogTitle></DialogHeader>
-        <div className="space-y-4">
-          <div className="space-y-1">
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1">
             <Label>Name *</Label>
             <Input value={form.name} onChange={e => set('name')(e.target.value)} placeholder="e.g. Lift AMC" />
           </div>
-          <div className="space-y-1">
+          <div className="flex flex-col gap-1">
             <Label>Description</Label>
             <Input value={form.description} onChange={e => set('description')(e.target.value)} placeholder="Optional details" />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
+            <div className="flex flex-col gap-1">
               <Label>Amount (Rs) *</Label>
               <Input type="number" value={form.amount} onChange={e => set('amount')(e.target.value)} placeholder="0" />
             </div>
-            <div className="space-y-1">
+            <div className="flex flex-col gap-1">
               <Label>Frequency</Label>
               <Select value={form.frequency} onValueChange={set('frequency')}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
@@ -1504,7 +1510,7 @@ function AddRecurringDialog({ open, onClose }: { open: boolean; onClose: () => v
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
+            <div className="flex flex-col gap-1">
               <Label>Vendor</Label>
               <Select value={form.vendor_id} onValueChange={set('vendor_id')}>
                 <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
@@ -1513,7 +1519,7 @@ function AddRecurringDialog({ open, onClose }: { open: boolean; onClose: () => v
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
+            <div className="flex flex-col gap-1">
               <Label>Category</Label>
               <Select value={form.category_id} onValueChange={set('category_id')}>
                 <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
@@ -1523,7 +1529,7 @@ function AddRecurringDialog({ open, onClose }: { open: boolean; onClose: () => v
               </Select>
             </div>
           </div>
-          <div className="space-y-1">
+          <div className="flex flex-col gap-1">
             <Label>Payment mode</Label>
             <Select value={form.payment_mode} onValueChange={set('payment_mode')}>
               <SelectTrigger><SelectValue /></SelectTrigger>
@@ -1584,17 +1590,17 @@ function PettyCashTab() {
     qc.invalidateQueries({ queryKey: ['petty-cash'] })
   }
 
-  if (isLoading) return <div className="card h-40 animate-pulse bg-slate-100" />
+  if (isLoading) return <div className="surface h-40 animate-pulse" style={{ background: 'var(--ink-100)' }} />
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       <div className="flex items-start justify-between gap-3">
-        <div className="card p-4 flex-1 bg-white">
-          <p className="text-xs text-slate-500 mb-1">Current balance</p>
-          <p className={`text-2xl font-bold ${balance >= 0 ? 'text-slate-800' : 'text-red-600'}`}>
+        <div className="surface !p-4 flex-1">
+          <p className="text-xs mb-1" style={{ color: 'var(--ink-500)' }}>Current balance</p>
+          <p className={`text-2xl font-bold ${balance >= 0 ? '' : 'text-red-600'}`} style={balance >= 0 ? { color: 'var(--ink-800)' } : undefined}>
             {formatINR(balance)}
           </p>
-          <p className="text-xs text-slate-400 mt-0.5">{txns.length} entries</p>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--ink-400)' }}>{txns.length} entries</p>
         </div>
         {canWrite && (
           <Button size="sm" onClick={() => setAddOpen(true)} className="flex items-center gap-1.5 mt-1">
@@ -1604,31 +1610,31 @@ function PettyCashTab() {
       </div>
 
       {txns.length === 0 ? (
-        <div className="card p-12 flex flex-col items-center gap-3 text-center text-slate-400">
+        <div className="surface !p-12 flex flex-col items-center gap-3 text-center" style={{ color: 'var(--ink-400)' }}>
           <Coins size={28} className="opacity-40" />
           <div>
-            <p className="text-sm font-medium text-slate-700">No petty cash entries</p>
+            <p className="text-sm font-medium" style={{ color: 'var(--ink-700)' }}>No petty cash entries</p>
             <p className="text-xs mt-1">Start with an Opening entry to set the initial balance.</p>
           </div>
         </div>
       ) : (
-        <div className="card divide-y divide-slate-100">
+        <div className="surface !p-0 divide-rows">
           {txns.map(t => (
             <div key={t.id} className="flex items-center gap-3 px-4 py-3">
               <div className="shrink-0 w-10 text-center">
-                <p className="text-xs font-bold text-slate-800 leading-tight">
+                <p className="text-xs font-bold leading-tight" style={{ color: 'var(--ink-800)' }}>
                   {new Date(t.txn_date).getDate().toString().padStart(2, '0')}
                 </p>
-                <p className="text-[10px] text-slate-400 uppercase">
+                <p className="text-[10px] uppercase" style={{ color: 'var(--ink-400)' }}>
                   {new Date(t.txn_date).toLocaleString('en', { month: 'short' })}
                 </p>
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${TXN_TYPE_STYLE[t.txn_type] ?? 'bg-slate-100 text-slate-600'}`}>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${TXN_TYPE_STYLE[t.txn_type] ?? ''}`} style={!TXN_TYPE_STYLE[t.txn_type] ? { background: 'var(--ink-100)', color: 'var(--ink-600)' } : undefined}>
                     {t.txn_type}
                   </span>
-                  {t.notes && <span className="text-xs text-slate-500 truncate">{t.notes}</span>}
+                  {t.notes && <span className="text-xs truncate" style={{ color: 'var(--ink-500)' }}>{t.notes}</span>}
                 </div>
               </div>
               <span className={`text-sm font-semibold shrink-0 ${t.txn_type === 'Disbursement' ? 'text-red-600' : 'text-green-700'}`}>
@@ -1668,13 +1674,13 @@ function AddPettyCashDialog({ open, onClose, onSave }: {
     <Dialog open={open} onOpenChange={v => { if (!v) { reset(); onClose() } }}>
       <DialogContent className="max-w-sm">
         <DialogHeader><DialogTitle>Add Petty Cash Entry</DialogTitle></DialogHeader>
-        <div className="space-y-4">
+        <div className="flex flex-col gap-4">
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
+            <div className="flex flex-col gap-1">
               <Label>Date *</Label>
               <Input type="date" value={form.txn_date} onChange={e => set('txn_date')(e.target.value)} />
             </div>
-            <div className="space-y-1">
+            <div className="flex flex-col gap-1">
               <Label>Type *</Label>
               <Select value={form.txn_type} onValueChange={set('txn_type')}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
@@ -1684,11 +1690,11 @@ function AddPettyCashDialog({ open, onClose, onSave }: {
               </Select>
             </div>
           </div>
-          <div className="space-y-1">
+          <div className="flex flex-col gap-1">
             <Label>Amount (Rs) *</Label>
             <Input type="number" value={form.amount} onChange={e => set('amount')(e.target.value)} placeholder="0" />
           </div>
-          <div className="space-y-1">
+          <div className="flex flex-col gap-1">
             <Label>Notes</Label>
             <Input value={form.notes} onChange={e => set('notes')(e.target.value)} placeholder="What was the purpose?" />
           </div>
@@ -1764,28 +1770,28 @@ function AttachmentsSection({ expenseId }: { expenseId: string }) {
   }
 
   return (
-    <div className="card p-4 space-y-3">
+    <div className="surface !p-4 flex flex-col gap-3">
       <div className="flex items-center gap-2">
-        <Paperclip size={14} className="text-slate-400" />
+        <Paperclip size={14} style={{ color: 'var(--ink-400)' }} />
         <h4 className="text-sm font-medium">Attachments</h4>
         {attachments.length > 0 && (
-          <span className="text-xs text-slate-400">{attachments.length} file{attachments.length > 1 ? 's' : ''}</span>
+          <span className="text-xs" style={{ color: 'var(--ink-400)' }}>{attachments.length} file{attachments.length > 1 ? 's' : ''}</span>
         )}
       </div>
 
       {attachments.length > 0 && (
-        <div className="space-y-1">
+        <div className="flex flex-col gap-1">
           {attachments.map(att => (
-            <div key={att.id} className="flex items-center gap-2 p-2 rounded-lg bg-slate-50 text-xs">
-              <span className="flex-1 truncate text-slate-700">{att.file_name}</span>
+            <div key={att.id} className="flex items-center gap-2 p-2 rounded-lg text-xs" style={{ background: 'var(--ink-50)' }}>
+              <span className="flex-1 truncate" style={{ color: 'var(--ink-700)' }}>{att.file_name}</span>
               {att.file_size != null && (
-                <span className="text-slate-400 shrink-0">{(att.file_size / 1024).toFixed(0)} KB</span>
+                <span className="shrink-0" style={{ color: 'var(--ink-400)' }}>{(att.file_size / 1024).toFixed(0)} KB</span>
               )}
               <button onClick={() => handleDownload(att)} className="text-violet-600 hover:text-violet-800 shrink-0">
                 <Download size={12} />
               </button>
               {canWrite && (
-                <button onClick={() => handleDelete(att)} className="text-slate-400 hover:text-red-500 shrink-0">
+                <button onClick={() => handleDelete(att)} className="hover:text-red-500 shrink-0" style={{ color: 'var(--ink-400)' }}>
                   <Trash size={12} />
                 </button>
               )}
@@ -1799,16 +1805,16 @@ function AttachmentsSection({ expenseId }: { expenseId: string }) {
           <div
             {...getRootProps()}
             className={`border-2 border-dashed rounded-lg p-3 text-center cursor-pointer transition-colors text-xs ${
-              isDragActive ? 'border-violet-400 bg-violet-50' : 'border-slate-200 hover:border-violet-300 hover:bg-slate-50'
+              isDragActive ? 'border-violet-400 bg-[var(--brand-50)]' : 'border-[var(--ink-200,#e2e8f0)] hover:border-violet-300 hover:bg-[var(--ink-50)]'
             }`}
           >
             <input {...getInputProps()} />
             {uploading ? (
-              <div className="flex items-center justify-center gap-1.5 text-slate-500">
+              <div className="flex items-center justify-center gap-1.5" style={{ color: 'var(--ink-500)' }}>
                 <Loader2 size={13} className="animate-spin" /> Uploading...
               </div>
             ) : (
-              <div className="flex items-center justify-center gap-1.5 text-slate-400">
+              <div className="flex items-center justify-center gap-1.5" style={{ color: 'var(--ink-400)' }}>
                 <Upload size={13} />
                 {isDragActive ? 'Drop to upload' : 'Drop files or click - PDF, JPG, PNG (max 10 MB)'}
               </div>

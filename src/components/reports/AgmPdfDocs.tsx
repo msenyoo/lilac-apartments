@@ -30,8 +30,14 @@ const S = StyleSheet.create({
 })
 
 function formatINR(n: number) {
-  if (n === 0) return '—'
-  return '₹' + n.toLocaleString('en-IN')
+  if (n === 0) return '-'
+  // toLocaleString not reliable in pdf renderer; manual Indian grouping
+  const abs = Math.abs(Math.round(n))
+  const s = abs.toString()
+  const last3 = s.slice(-3)
+  const rest = s.slice(0, -3)
+  const grouped = rest ? rest.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + ',' + last3 : last3
+  return (n < 0 ? '-' : '') + 'Rs.' + grouped
 }
 
 function PageFooter({ generated }: { generated: string }) {

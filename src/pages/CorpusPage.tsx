@@ -116,12 +116,12 @@ export default function CorpusPage() {
     : `All active plans (${activePlans.length})`
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-5 fade-in">
       {/* Header + plan selector */}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h2 className="text-xl font-semibold">Corpus fund</h2>
-          <p className="text-sm text-slate-500 mt-0.5">{planLabel}</p>
+          <h1 className="text-[24px] font-extrabold">Corpus fund</h1>
+          <p className="text-[13.5px] mt-1" style={{ color: 'var(--ink-500)' }}>{planLabel}</p>
         </div>
         <PlanSelector
           plans={activePlans}
@@ -131,7 +131,7 @@ export default function CorpusPage() {
       </div>
 
       {!canWrite && (
-        <div className="flex items-center gap-2 px-3 py-2 mb-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+        <div className="flex items-center gap-2 px-3 py-2 mb-4 rounded-xl text-[13px]" style={{ background: 'var(--warn-bg)', border: '1px solid var(--warn-bd)', color: 'var(--warn)' }}>
           <span>Read-only access — contact the administrator to make changes.</span>
         </div>
       )}
@@ -150,22 +150,22 @@ export default function CorpusPage() {
       </div>
 
       {/* Progress bar */}
-      <div className="card p-4">
+      <div className="surface !p-4">
         <div className="flex justify-between text-sm mb-2">
-          <span className="text-slate-500">Collection progress</span>
+          <span style={{ color: 'var(--ink-500)' }}>Collection progress</span>
           <span className="font-semibold">{pct}%</span>
         </div>
-        <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
-          <div className="h-3 bg-brand-600 rounded-full transition-all" style={{ width: `${Math.min(pct, 100)}%` }} />
+        <div className="ds-track">
+          <div className="ds-track-fill" style={{ width: `${Math.min(pct, 100)}%`, background: 'var(--brand-500)' }} />
         </div>
-        <div className="flex justify-between mt-1.5 text-xs text-slate-400">
+        <div className="flex justify-between mt-1.5 text-xs" style={{ color: 'var(--ink-400)' }}>
           <span>{formatINR(totalCollected)} collected</span>
           <span>{formatINR(totalTarget)} target</span>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 flex-wrap">
+      <div className="flex gap-1 rounded-xl p-1 flex-wrap" style={{ background: 'var(--ink-100)' }}>
         {([
           { key: 'collection',  label: 'By Flat' },
           { key: 'plan',        label: 'Installment Plan', disabled: selectedPlanId === '__all__' },
@@ -174,11 +174,18 @@ export default function CorpusPage() {
           <button key={key} onClick={() => !disabled && setTab(key)} disabled={disabled}
             className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
               tab === key
-                ? 'bg-white shadow-sm text-slate-900'
+                ? 'bg-white shadow-sm'
                 : disabled
-                ? 'text-slate-300 cursor-not-allowed'
-                : 'text-slate-500 hover:text-slate-700'
-            }`}>
+                ? 'cursor-not-allowed'
+                : ''
+            }`}
+            style={
+              tab === key
+                ? { color: 'var(--ink-900)' }
+                : disabled
+                ? { color: 'var(--ink-300)' }
+                : { color: 'var(--ink-500)' }
+            }>
             {label}
           </button>
         ))}
@@ -238,14 +245,14 @@ function ConsolidatedBanner({ plans, allCorpus }: { plans: CorpusPlan[]; allCorp
   })
 
   return (
-    <div className="card p-4 bg-violet-50 border border-violet-100">
+    <div className="surface !p-4" style={{ background: 'var(--brand-50)' }}>
       <p className="text-xs font-semibold text-violet-700 uppercase tracking-wide mb-3">Consolidated corpus pool</p>
-      <div className="divide-y divide-violet-100">
+      <div className="divide-rows">
         {planSummaries.map(({ plan, target, collected, balance }) => (
           <div key={plan.id} className="flex items-center gap-3 py-2 text-sm">
             <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_BADGE[plan.status]}`}>{plan.status}</span>
-            <span className="font-medium text-slate-800 flex-1">{plan.name}</span>
-            <span className="text-slate-500">{formatINR(collected)} / {formatINR(target)}</span>
+            <span className="font-medium flex-1" style={{ color: 'var(--ink-800)' }}>{plan.name}</span>
+            <span style={{ color: 'var(--ink-500)' }}>{formatINR(collected)} / {formatINR(target)}</span>
             <span className={`font-semibold ${balance > 0 ? 'text-amber-600' : 'text-green-600'}`}>{balance > 0 ? formatINR(balance) : '✓'}</span>
           </div>
         ))}
@@ -258,8 +265,8 @@ function ConsolidatedBanner({ plans, allCorpus }: { plans: CorpusPlan[]; allCorp
 
 function SummaryCard({ label, value, color, bg }: { label: string; value: string; color: string; bg: string }) {
   return (
-    <div className={`card p-4 ${bg}`}>
-      <p className="text-xs text-slate-500 mb-1">{label}</p>
+    <div className={`surface !p-4 ${bg}`}>
+      <p className="text-xs mb-1" style={{ color: 'var(--ink-500)' }}>{label}</p>
       <p className={`text-xl font-bold ${color}`}>{value}</p>
     </div>
   )
@@ -313,19 +320,19 @@ function CollectionGrid({ corpus, isLoading, multiPlan }: { corpus: CorpusEntry[
     XLSX.writeFile(wb, 'Corpus_Collection.xlsx')
   }
 
-  if (isLoading) return <div className="card h-64 animate-pulse bg-slate-100" />
+  if (isLoading) return <div className="surface h-64 animate-pulse" style={{ background: 'var(--ink-100)' }} />
 
   return (
     <div className="space-y-2">
       <div className="flex justify-end">
         <button onClick={handleExport} disabled={!corpus.length}
-          className="flex items-center gap-1.5 text-sm text-brand-700 hover:text-brand-900 disabled:opacity-40">
+          className="flex items-center gap-1.5 text-[13px] font-medium disabled:opacity-40" style={{ color: 'var(--brand-700)' }}>
           <Download size={14} /> Export
         </button>
       </div>
       <div className="flex flex-col lg:flex-row gap-4">
         <div className="flex-1 min-w-0">
-          <div className="rounded-xl overflow-hidden border border-slate-200" style={{ height: 480 }}>
+          <div className="overflow-hidden border hairline" style={{ borderRadius: 'var(--ds-radius)', height: 480 }}>
             <AgGridReact
               ref={gridRef}
               rowData={corpus}
@@ -333,7 +340,7 @@ function CollectionGrid({ corpus, isLoading, multiPlan }: { corpus: CorpusEntry[
               defaultColDef={{ sortable: true, resizable: true, filter: true, floatingFilter: true }}
               rowSelection={{ mode: 'singleRow' }}
               onRowClicked={e => setSelectedFlat(e.data)}
-              getRowStyle={(p: any) => p.data?.flat_code === selectedFlat?.flat_code ? { background: '#eff6ff' } : undefined}
+              getRowStyle={(p: any) => p.data?.flat_code === selectedFlat?.flat_code ? { background: 'var(--brand-50)' } : undefined}
             />
           </div>
         </div>
@@ -422,17 +429,17 @@ function PlanGrid({ planFlats, installments, flatInstallments, corpus }: {
     XLSX.writeFile(wb, 'Corpus_Plan.xlsx')
   }
 
-  if (!rows.length) return <p className="text-sm text-slate-400 card p-6 text-center">No plan data available</p>
+  if (!rows.length) return <p className="text-sm surface !p-6 text-center" style={{ color: 'var(--ink-400)' }}>No plan data available</p>
 
   return (
     <div className="space-y-2">
       <div className="flex justify-end">
         <button onClick={handleExport}
-          className="flex items-center gap-1.5 text-sm text-brand-700 hover:text-brand-900">
+          className="flex items-center gap-1.5 text-[13px] font-medium" style={{ color: 'var(--brand-700)' }}>
           <Download size={14} /> Export
         </button>
       </div>
-      <div className="rounded-xl overflow-hidden border border-slate-200" style={{ height: 480 }}>
+      <div className="overflow-hidden border hairline" style={{ borderRadius: 'var(--ds-radius)', height: 480 }}>
         <AgGridReact
           ref={gridRef}
           rowData={rows}
@@ -463,63 +470,66 @@ function FlatCorpusPanel({ flat, onClose }: { flat: CorpusEntry; onClose: () => 
 
   return (
     <div className="w-full lg:w-72 shrink-0 space-y-3">
-      <div className="card p-4 space-y-3">
+      <div className="surface !p-4 space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold">{flat.flat_code}</h3>
-          <button onClick={onClose} className="p-1 rounded hover:bg-slate-100"><X size={15} /></button>
+          <button onClick={onClose} className="p-1 rounded hover:bg-[var(--ink-100)]"><X size={15} /></button>
         </div>
-        <p className="text-xs text-slate-400">{flat.plan_name}</p>
+        <p className="text-xs" style={{ color: 'var(--ink-400)' }}>{flat.plan_name}</p>
 
         <div className="space-y-1.5 text-sm">
           <div className="flex justify-between">
-            <span className="text-slate-500">Target</span>
+            <span style={{ color: 'var(--ink-500)' }}>Target</span>
             <span className="font-medium">{formatINR(flat.corpus_target)}</span>
           </div>
           {flat.carry_forward_amount > 0 && (
             <div className="flex justify-between">
-              <span className="text-slate-500">Carry-forward</span>
+              <span style={{ color: 'var(--ink-500)' }}>Carry-forward</span>
               <span className="font-medium text-violet-600">+{formatINR(flat.carry_forward_amount)}</span>
             </div>
           )}
           {flat.pre_payment > 0 && (
             <div className="flex justify-between">
-              <span className="text-slate-500">Pre-payment</span>
+              <span style={{ color: 'var(--ink-500)' }}>Pre-payment</span>
               <span className="font-medium text-green-700">{formatINR(flat.pre_payment)}</span>
             </div>
           )}
           <div className="flex justify-between">
-            <span className="text-slate-500">Collected</span>
+            <span style={{ color: 'var(--ink-500)' }}>Collected</span>
             <span className="font-medium text-green-700">{formatINR(flat.collected)}</span>
           </div>
-          <div className="flex justify-between border-t border-slate-100 pt-1.5">
-            <span className="text-slate-500">Balance</span>
+          <div className="flex justify-between border-t hairline pt-1.5">
+            <span style={{ color: 'var(--ink-500)' }}>Balance</span>
             <span className={`font-semibold ${flat.balance <= 0 ? 'text-green-600' : 'text-amber-600'}`}>
               {flat.balance <= 0 ? '✓ Done' : formatINR(flat.balance)}
             </span>
           </div>
         </div>
 
-        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+        <div className="ds-track">
           <div
-            className={`h-2 rounded-full transition-all ${flat.status === 'Done' ? 'bg-green-500' : flat.status === 'Partial' ? 'bg-amber-400' : 'bg-slate-300'}`}
-            style={{ width: `${Math.min(100, flat.pct_paid ?? 0)}%` }}
+            className="ds-track-fill"
+            style={{
+              width: `${Math.min(100, flat.pct_paid ?? 0)}%`,
+              background: flat.status === 'Done' ? 'var(--ok)' : flat.status === 'Partial' ? 'var(--warn)' : 'var(--ink-300)',
+            }}
           />
         </div>
       </div>
 
-      <div className="card p-4">
+      <div className="surface !p-4">
         <h4 className="font-medium text-sm mb-3 flex items-center gap-1.5">
-          <TrendingDown size={14} className="text-slate-400" /> Payment history
+          <TrendingDown size={14} style={{ color: 'var(--ink-400)' }} /> Payment history
         </h4>
         {!payments.length ? (
-          <p className="text-sm text-slate-400">No payments yet</p>
+          <p className="text-sm" style={{ color: 'var(--ink-400)' }}>No payments yet</p>
         ) : (
           <div className="space-y-2">
             {payments.map((p: any) => (
               <div key={p.id} className="flex justify-between text-sm">
                 <div>
                   <p className="font-medium">{p.fiscal_label}</p>
-                  <p className="text-xs text-slate-400">{p.value_date}</p>
+                  <p className="text-xs" style={{ color: 'var(--ink-400)' }}>{p.value_date}</p>
                 </div>
                 <p className="font-semibold text-green-700">{formatINR(p.amount)}</p>
               </div>
@@ -539,31 +549,31 @@ function ExpenditureView({ expenditures, plan }: { expenditures: any[]; plan: Co
   const totalBudget = budget.reduce((s, b) => s + b.budget, 0)
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        <div className="card p-4 bg-slate-50">
-          <p className="text-xs text-slate-500 mb-1">Total budget</p>
-          <p className="text-xl font-bold text-slate-800">{formatINR(totalBudget)}</p>
+        <div className="surface !p-4 bg-slate-50">
+          <p className="text-xs mb-1" style={{ color: 'var(--ink-500)' }}>Total budget</p>
+          <p className="text-xl font-bold" style={{ color: 'var(--ink-800)' }}>{formatINR(totalBudget)}</p>
         </div>
-        <div className="card p-4 bg-red-50">
-          <p className="text-xs text-slate-500 mb-1">Spent so far</p>
+        <div className="surface !p-4 bg-red-50">
+          <p className="text-xs mb-1" style={{ color: 'var(--ink-500)' }}>Spent so far</p>
           <p className="text-xl font-bold text-red-600">{formatINR(totalSpent)}</p>
         </div>
-        <div className="card p-4 bg-green-50">
-          <p className="text-xs text-slate-500 mb-1">Remaining budget</p>
+        <div className="surface !p-4 bg-green-50">
+          <p className="text-xs mb-1" style={{ color: 'var(--ink-500)' }}>Remaining budget</p>
           <p className="text-xl font-bold text-green-700">{formatINR(Math.max(0, totalBudget - totalSpent))}</p>
         </div>
       </div>
 
       {budget.length > 0 && (
-        <div className="card">
-          <div className="px-4 py-3 border-b border-slate-100">
+        <div className="surface !p-0">
+          <div className="px-4 py-3 border-b hairline">
             <h3 className="font-semibold text-sm">Budget breakdown</h3>
           </div>
-          <div className="divide-y divide-slate-100">
+          <div className="divide-rows">
             {budget.map(b => (
               <div key={b.category} className="flex justify-between px-4 py-3 text-sm">
-                <span className="text-slate-600">{b.category}</span>
+                <span style={{ color: 'var(--ink-600)' }}>{b.category}</span>
                 <span className="font-semibold">{formatINR(b.budget)}</span>
               </div>
             ))}
@@ -571,19 +581,19 @@ function ExpenditureView({ expenditures, plan }: { expenditures: any[]; plan: Co
         </div>
       )}
 
-      <div className="card">
-        <div className="px-4 py-3 border-b border-slate-100">
+      <div className="surface !p-0">
+        <div className="px-4 py-3 border-b hairline">
           <h3 className="font-semibold text-sm">Actual expenditure transactions</h3>
         </div>
         {expenditures.length === 0 ? (
-          <p className="px-4 py-6 text-sm text-slate-400 text-center">No corpus expenditure recorded</p>
+          <p className="px-4 py-6 text-sm text-center" style={{ color: 'var(--ink-400)' }}>No corpus expenditure recorded</p>
         ) : (
-          <div className="divide-y divide-slate-100">
+          <div className="divide-rows">
             {expenditures.map((e: any) => (
               <div key={e.id} className="flex justify-between items-start px-4 py-3 text-sm">
                 <div>
-                  <p className="font-medium text-slate-800">{e.category}</p>
-                  <p className="text-xs text-slate-400 mt-0.5">{e.value_date} · {e.description?.slice(0, 60)}</p>
+                  <p className="font-medium" style={{ color: 'var(--ink-800)' }}>{e.category}</p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--ink-400)' }}>{e.value_date} · {e.description?.slice(0, 60)}</p>
                 </div>
                 <p className="font-semibold text-red-600 shrink-0 ml-3">{formatINR(e.amount)}</p>
               </div>
@@ -601,24 +611,24 @@ function PlanHistory({ plans }: { plans: CorpusPlan[] }) {
   const [open, setOpen] = useState(false)
 
   return (
-    <div className="card">
+    <div className="surface !p-0">
       <button
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-slate-600 hover:bg-slate-50 rounded-xl"
+        className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium hover:bg-[var(--ink-50)] rounded-xl" style={{ color: 'var(--ink-600)' }}
       >
         <span>Closed plans ({plans.length})</span>
         <ChevronDown size={16} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <div className="divide-y divide-slate-100 border-t border-slate-100">
+        <div className="divide-rows border-t hairline">
           {plans.map(p => (
             <div key={p.id} className="flex items-center gap-3 px-4 py-3 text-sm">
               <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_BADGE[p.status]}`}>{p.status}</span>
               <span className="font-medium flex-1">{p.name}</span>
-              <span className="text-slate-400 text-xs">
+              <span className="text-[11px]" style={{ color: 'var(--ink-400)' }}>
                 FY {p.start_fiscal_year}-{String((p.start_fiscal_year ?? 0) + 1).slice(-2)} – {p.end_fiscal_year}-{String((p.end_fiscal_year ?? 0) + 1).slice(-2)}
               </span>
-              {p.closed_at && <span className="text-slate-400 text-xs">Closed {p.closed_at.slice(0, 10)}</span>}
+              {p.closed_at && <span className="text-[11px]" style={{ color: 'var(--ink-400)' }}>Closed {p.closed_at.slice(0, 10)}</span>}
             </div>
           ))}
         </div>

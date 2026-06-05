@@ -161,16 +161,16 @@ export default function ReportPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-5 fade-in">
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h2 className="text-xl font-semibold">Reports</h2>
-          <p className="text-sm text-slate-500 mt-0.5">Monthly summaries, flat statements &amp; AGM reports</p>
+          <h1 className="text-[24px] font-extrabold">Reports</h1>
+          <p className="text-[13.5px] mt-1" style={{ color: 'var(--ink-500)' }}>Monthly summaries, flat statements &amp; AGM reports</p>
         </div>
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 overflow-x-auto">
+      <div className="flex gap-1 rounded-xl p-1 overflow-x-auto" style={{ background: 'var(--ink-100)' }}>
         {([
           { key: 'monthly',     label: 'Monthly summary' },
           { key: 'flat',        label: 'Flat statement' },
@@ -181,7 +181,8 @@ export default function ReportPage() {
         ] as { key: ReportTab; label: string }[]).map(({ key, label }) => (
           <button key={key} onClick={() => setTab(key)}
             className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors
-              ${tab === key ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}>
+              ${tab === key ? 'bg-white shadow-sm' : 'hover:bg-[var(--ink-50)]'}`}
+            style={{ color: tab === key ? 'var(--ink-900)' : 'var(--ink-500)' }}>
             {label}
           </button>
         ))}
@@ -193,22 +194,22 @@ export default function ReportPage() {
       {tab === 'utility'     && <UtilityTab />}
       {tab === 'expenditure' && <ExpenditureReportsTab />}
       {tab === 'monthly' && (
-        <div className="space-y-4 max-w-3xl">
+        <div className="flex flex-col gap-4 max-w-3xl">
           <div className="flex items-center justify-between flex-wrap gap-3">
-            <p className="text-sm text-slate-500">Summary for committee &amp; residents</p>
+            <p className="text-sm" style={{ color: 'var(--ink-500)' }}>Summary for committee &amp; residents</p>
             <select value={month} onChange={e => setMonth(e.target.value)}
-              className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white">
+              className="ds-field">
               {FISCAL_MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
             </select>
           </div>
 
           {/* Summary card */}
-          <div className="card overflow-hidden">
-            <div className="px-5 py-4 text-white" style={{ background: 'linear-gradient(135deg, #1a3c5e, #2e75b6)' }}>
-              <p className="text-xs opacity-75 uppercase tracking-wide">The Lilac Apartment Association</p>
+          <div className="surface !p-0 overflow-hidden">
+            <div className="px-5 py-4 text-white" style={{ background: 'linear-gradient(160deg, var(--brand-700), var(--brand-500))' }}>
+              <p className="text-[11px] opacity-80 uppercase tracking-widest font-medium">The Lilac Apartment Association</p>
               <p className="font-bold text-lg mt-0.5">Monthly Statement — {month}</p>
             </div>
-            <div className="divide-y divide-slate-100">
+            <div className="divide-rows">
               {[
                 { label: 'Maintenance collected', value: formatINR(summary?.maintenance_collected ?? 0) },
                 { label: 'Flats paid',            value: `${summary?.flats_paid ?? 0} of 44` },
@@ -217,8 +218,8 @@ export default function ReportPage() {
                 { label: 'Corpus target (total)',  value: formatINR(totalCorpusTarget) },
               ].map(({ label, value }) => (
                 <div key={label} className="flex justify-between px-5 py-3 text-sm">
-                  <span className="text-slate-500">{label}</span>
-                  <span className="font-semibold text-slate-800">{value}</span>
+                  <span style={{ color: 'var(--ink-500)' }}>{label}</span>
+                  <span className="font-semibold" style={{ color: 'var(--ink-800)' }}>{value}</span>
                 </div>
               ))}
             </div>
@@ -226,13 +227,13 @@ export default function ReportPage() {
 
           {/* Expenses */}
           {expenses && expenses.length > 0 && (
-            <div className="card">
-              <div className="px-5 py-3 border-b border-slate-100">
+            <div className="surface !p-0">
+              <div className="px-5 py-3 border-b hairline">
                 <h3 className="font-semibold text-sm">Expenses — {month}</h3>
               </div>
               {expenses.map((e: any) => (
-                <div key={e.category} className="flex justify-between px-5 py-2.5 border-b border-slate-50 text-sm">
-                  <span className="text-slate-600">{e.category}</span>
+                <div key={e.category} className="flex justify-between px-5 py-2.5 border-b hairline text-sm">
+                  <span style={{ color: 'var(--ink-600)' }}>{e.category}</span>
                   <span className="font-semibold">{formatINR(e.total_amount)}</span>
                 </div>
               ))}
@@ -240,15 +241,15 @@ export default function ReportPage() {
           )}
 
           {/* Collections by flat */}
-          <div className="card">
-            <div className="px-5 py-3 border-b border-slate-100">
+          <div className="surface !p-0">
+            <div className="px-5 py-3 border-b hairline">
               <h3 className="font-semibold text-sm">Collections by flat — {month}</h3>
             </div>
-            <div className="divide-y divide-slate-50 max-h-64 overflow-y-auto">
+            <div className="divide-rows max-h-64 overflow-y-auto">
               {(flatsData ?? []).map((f: any) => (
                 <div key={f.flat_code} className="flex justify-between items-center px-5 py-2 text-sm">
                   <span className="font-medium w-12">{f.flat_code}</span>
-                  <span className="text-slate-500 flex-1 px-2">{formatINR(f.maintenance_amt)}</span>
+                  <span className="flex-1 px-2" style={{ color: 'var(--ink-500)' }}>{formatINR(f.maintenance_amt)}</span>
                   <span className={f.collected > 0 ? 'font-semibold text-green-700' : 'text-slate-300'}>
                     {f.collected > 0 ? formatINR(f.collected) : '—'}
                   </span>
@@ -259,13 +260,13 @@ export default function ReportPage() {
 
           {/* Pending */}
           {unpaidFlats.length > 0 && (
-            <div className="card">
-              <div className="px-5 py-3 border-b border-slate-100 flex items-center gap-2">
+            <div className="surface !p-0">
+              <div className="px-5 py-3 border-b hairline flex items-center gap-2">
                 <AlertTriangle size={15} className="text-amber-500" />
                 <h3 className="font-semibold text-sm">Pending maintenance — {month}</h3>
               </div>
               {unpaidFlats.map((f: any) => (
-                <div key={f.flat_code} className="flex justify-between px-5 py-2.5 border-b border-slate-50 text-sm">
+                <div key={f.flat_code} className="flex justify-between px-5 py-2.5 border-b hairline text-sm">
                   <span className="font-medium">{f.flat_code}</span>
                   <span className="text-red-600 font-semibold">{formatINR(f.maintenance_amt - f.collected)} due</span>
                 </div>
@@ -347,20 +348,20 @@ function DuesAgingTab() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       {/* Controls */}
       <div className="flex items-center gap-3 flex-wrap">
         <select
           value={selectedFyYear}
           onChange={e => setSelectedFyYear(Number(e.target.value))}
-          className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white"
+          className="ds-field"
         >
           {FISCAL_YEARS.map(f => <option key={f.year} value={f.year}>{f.label}</option>)}
         </select>
 
         <div className="ml-auto flex items-center gap-2">
           <button onClick={handleExcel} disabled={!dues?.length}
-            className="flex items-center gap-1.5 text-sm text-violet-700 hover:text-violet-900 disabled:opacity-40">
+            className="flex items-center gap-1.5 text-sm hover:opacity-80 disabled:opacity-40" style={{ color: 'var(--brand-700)' }}>
             <Download size={14} /> Export Excel
           </button>
           <button onClick={handlePdf} disabled={!dues?.length || generating}
@@ -390,29 +391,29 @@ function DuesAgingTab() {
 
       {/* Table */}
       {isLoading ? (
-        <div className="card h-64 animate-pulse bg-slate-100" />
+        <div className="h-64 animate-pulse rounded-[var(--ds-radius)]" style={{ background: 'var(--ink-100)' }} />
       ) : !dues?.length ? (
-        <div className="card p-10 text-center text-sm text-slate-400">
+        <div className="surface !p-10 text-center text-[13px]" style={{ color: 'var(--ink-400)' }}>
           No pending dues for {selectedFy.label}
         </div>
       ) : (
-        <div className="card overflow-hidden">
+        <div className="surface !p-0 overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="bg-slate-50 border-b border-slate-200">
+            <thead className="border-b hairline" style={{ background: 'var(--ink-50)' }}>
               <tr>
-                <th className="text-left px-4 py-2.5 font-semibold text-slate-600">Flat</th>
-                <th className="text-left px-4 py-2.5 font-semibold text-slate-600">Block</th>
-                <th className="text-right px-4 py-2.5 font-semibold text-slate-600">Annual Due</th>
-                <th className="text-right px-4 py-2.5 font-semibold text-slate-600">Collected</th>
-                <th className="text-right px-4 py-2.5 font-semibold text-slate-600">Pending</th>
-                <th className="text-left px-4 py-2.5 font-semibold text-slate-600">Status</th>
+                <th className="text-left px-4 py-2.5 font-semibold" style={{ color: 'var(--ink-600)' }}>Flat</th>
+                <th className="text-left px-4 py-2.5 font-semibold" style={{ color: 'var(--ink-600)' }}>Block</th>
+                <th className="text-right px-4 py-2.5 font-semibold" style={{ color: 'var(--ink-600)' }}>Annual Due</th>
+                <th className="text-right px-4 py-2.5 font-semibold" style={{ color: 'var(--ink-600)' }}>Collected</th>
+                <th className="text-right px-4 py-2.5 font-semibold" style={{ color: 'var(--ink-600)' }}>Pending</th>
+                <th className="text-left px-4 py-2.5 font-semibold" style={{ color: 'var(--ink-600)' }}>Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-50">
+            <tbody className="divide-rows">
               {dues.map((r, i) => (
                 <tr key={r.flat_code} className={i % 2 === 1 ? 'bg-slate-50/50' : ''}>
                   <td className="px-4 py-2.5 font-semibold">{r.flat_code}</td>
-                  <td className="px-4 py-2.5 text-slate-600">{r.block}</td>
+                  <td className="px-4 py-2.5" style={{ color: 'var(--ink-600)' }}>{r.block}</td>
                   <td className="px-4 py-2.5 text-right">{formatINR(r.annual_due)}</td>
                   <td className="px-4 py-2.5 text-right text-green-700">{r.collected_fy > 0 ? formatINR(r.collected_fy) : '—'}</td>
                   <td className="px-4 py-2.5 text-right font-semibold text-red-600">{formatINR(r.pending)}</td>
@@ -426,7 +427,7 @@ function DuesAgingTab() {
                 </tr>
               ))}
             </tbody>
-            <tfoot className="border-t-2 border-slate-300 bg-slate-50">
+            <tfoot className="border-t-2 hairline" style={{ background: 'var(--ink-50)' }}>
               <tr>
                 <td className="px-4 py-3 font-bold" colSpan={4}>Total outstanding</td>
                 <td className="px-4 py-3 text-right font-bold text-red-600">{formatINR(totalPending)}</td>
@@ -692,33 +693,33 @@ function AGMReportsTab() {
   ]
 
   return (
-    <div className="space-y-5">
+    <div className="flex flex-col gap-5">
       {/* FY selector */}
       <div className="flex items-center gap-3">
-        <label className="text-sm font-medium text-slate-600">Financial Year</label>
+        <label className="text-sm font-medium" style={{ color: 'var(--ink-600)' }}>Financial Year</label>
         <select
           value={selectedFyYear}
           onChange={e => setSelectedFyYear(Number(e.target.value))}
-          className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white"
+          className="ds-field"
         >
           {FISCAL_YEARS.map(f => <option key={f.year} value={f.year}>{f.label}</option>)}
         </select>
-        <span className="text-xs text-slate-400">Corpus Fund Statement is for all active/completed plans regardless of FY</span>
+        <span className="text-xs" style={{ color: 'var(--ink-400)' }}>Corpus Fund Statement is for all active/completed plans regardless of FY</span>
       </div>
 
       {/* Report cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {reports.map(r => (
-          <div key={r.key} className="card p-5 flex flex-col gap-3">
+          <div key={r.key} className="surface !p-5 flex flex-col gap-3">
             <div className="flex items-start gap-3">
               <FileText size={20} className="text-violet-500 shrink-0 mt-0.5" />
               <div className="min-w-0">
-                <h3 className="font-semibold text-slate-800 text-sm leading-snug">{r.title}</h3>
-                <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{r.desc}</p>
+                <h3 className="font-semibold text-sm leading-snug" style={{ color: 'var(--ink-800)' }}>{r.title}</h3>
+                <p className="text-xs mt-0.5 leading-relaxed" style={{ color: 'var(--ink-500)' }}>{r.desc}</p>
               </div>
             </div>
 
-            <p className="text-xs text-slate-400 border-t border-slate-100 pt-2">{r.meta}</p>
+            <p className="text-xs border-t hairline pt-2" style={{ color: 'var(--ink-400)' }}>{r.meta}</p>
 
             <button
               onClick={r.onDownload}
@@ -734,7 +735,7 @@ function AGMReportsTab() {
         ))}
       </div>
 
-      <p className="text-xs text-slate-400 text-center">
+      <p className="text-xs text-center" style={{ color: 'var(--ink-400)' }}>
         PDFs are generated in-browser — no data leaves your device.
       </p>
     </div>
@@ -861,7 +862,7 @@ function FlatStatementTab() {
   const outstandingAmt = duesEntry ? Number(duesEntry.pending) : null
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-3">
         <select value={flatCode} onChange={e => setFlatCode(e.target.value)}
@@ -887,7 +888,7 @@ function FlatStatementTab() {
           <div className="flex items-center gap-2">
             <input type="date" value={draftStart} onChange={e => setDraftStart(e.target.value)}
               className="border border-slate-200 rounded-lg px-2 py-1 text-sm" />
-            <span className="text-slate-400 text-sm">to</span>
+            <span className="text-sm" style={{ color: 'var(--ink-400)' }}>to</span>
             <input type="date" value={draftEnd} onChange={e => setDraftEnd(e.target.value)}
               className="border border-slate-200 rounded-lg px-2 py-1 text-sm" />
             <button onClick={() => { setApplied(draftStart || null); setAppliedEnd(draftEnd || null) }}
@@ -898,38 +899,38 @@ function FlatStatementTab() {
         )}
 
         <button onClick={handleExport} disabled={!txns?.length}
-          className="ml-auto flex items-center gap-1.5 text-sm text-violet-700 hover:text-violet-900 disabled:opacity-40">
+          className="ml-auto flex items-center gap-1.5 text-sm hover:opacity-80 disabled:opacity-40" style={{ color: 'var(--brand-700)' }}>
           <Download size={14} /> Export Excel
         </button>
       </div>
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="card p-4 bg-slate-50">
-          <p className="text-xs text-slate-500 mb-1">Rate / month</p>
-          <p className="text-xl font-bold text-slate-800">{formatINR(flatInfo?.maintenance_amt ?? 0)}</p>
+        <div className="surface !p-4" style={{ background: 'var(--ink-50)' }}>
+          <p className="text-[12px] mb-1" style={{ color: 'var(--ink-500)' }}>Rate / month</p>
+          <p className="text-xl font-bold" style={{ color: 'var(--ink-800)' }}>{formatINR(flatInfo?.maintenance_amt ?? 0)}</p>
         </div>
 
-        <div className="card p-4 bg-green-50">
-          <p className="text-xs text-slate-500 mb-1">Maintenance collected</p>
+        <div className="surface !p-4" style={{ background: 'var(--ok-bg)' }}>
+          <p className="text-[12px] mb-1" style={{ color: 'var(--ink-500)' }}>Maintenance collected</p>
           <p className="text-xl font-bold text-green-700">{formatINR(maintenanceCollected)}</p>
         </div>
 
         {duesEntry && (
-          <div className={`card p-4 ${outstandingAmt! > 0 ? 'bg-red-50' : 'bg-green-50'}`}>
-            <p className="text-xs text-slate-500 mb-1">Outstanding</p>
+          <div className="surface !p-4" style={{ background: outstandingAmt! > 0 ? 'var(--bad-bg)' : 'var(--ok-bg)' }}>
+            <p className="text-[12px] mb-1" style={{ color: 'var(--ink-500)' }}>Outstanding</p>
             <p className={`text-xl font-bold ${outstandingAmt! > 0 ? 'text-red-600' : 'text-green-600'}`}>
               {outstandingAmt! > 0 ? formatINR(outstandingAmt!) : '✓ Clear'}
             </p>
-            <p className="text-xs text-slate-400 mt-0.5">all dues since Apr-{String(duesEntry.start_fiscal_year).slice(-2)}</p>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--ink-400)' }}>all dues since Apr-{String(duesEntry.start_fiscal_year).slice(-2)}</p>
           </div>
         )}
 
         {corpusTotals && (
-          <div className="card p-4 bg-purple-50">
-            <p className="text-xs text-slate-500 mb-1">Corpus collected</p>
+          <div className="surface !p-4" style={{ background: 'var(--brand-50)' }}>
+            <p className="text-[12px] mb-1" style={{ color: 'var(--ink-500)' }}>Corpus collected</p>
             <p className="text-xl font-bold text-purple-700">{formatINR(corpusTotals.collected)}</p>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs mt-0.5" style={{ color: 'var(--ink-400)' }}>
               of {formatINR(corpusTotals.target)} target
               {corpusTotals.plans > 1 && ` · ${corpusTotals.plans} plans`}
             </p>
@@ -939,21 +940,21 @@ function FlatStatementTab() {
 
       {/* Transaction ledger */}
       {isLoading ? (
-        <div className="card h-40 animate-pulse bg-slate-100" />
+        <div className="h-40 animate-pulse rounded-[var(--ds-radius)]" style={{ background: 'var(--ink-100)' }} />
       ) : !txns?.length ? (
-        <div className="card p-10 text-center text-sm text-slate-400">No transactions found for this flat in the selected period</div>
+        <div className="surface !p-10 text-center text-[13px]" style={{ color: 'var(--ink-400)' }}>No transactions found for this flat in the selected period</div>
       ) : (
-        <div className="card">
-          <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
+        <div className="surface !p-0">
+          <div className="px-5 py-3 border-b hairline flex items-center justify-between">
             <h3 className="font-semibold text-sm">{flatCode} — transaction history</h3>
-            <span className="text-xs text-slate-400">{txns.length} transactions</span>
+            <span className="text-xs" style={{ color: 'var(--ink-400)' }}>{txns.length} transactions</span>
           </div>
-          <div className="divide-y divide-slate-50 max-h-[560px] overflow-y-auto">
+          <div className="divide-rows max-h-[560px] overflow-y-auto">
             {grouped.map(([monthLabel, rows]) => (
               <div key={monthLabel}>
-                <div className="px-5 py-2 bg-slate-50 text-xs font-semibold text-slate-500 uppercase tracking-wide sticky top-0">
+                <div className="px-5 py-2 text-xs font-semibold uppercase tracking-wide sticky top-0" style={{ background: 'var(--ink-50)', color: 'var(--ink-500)' }}>
                   {monthLabel}
-                  <span className="ml-2 font-normal normal-case text-slate-400">
+                  <span className="ml-2 font-normal normal-case" style={{ color: 'var(--ink-400)' }}>
                     {formatINR(rows.filter(r => r.cr_dr === 'CR').reduce((s, r) => s + r.amount, 0))} CR
                   </span>
                 </div>
@@ -965,14 +966,14 @@ function FlatStatementTab() {
                           {t.cr_dr}
                         </span>
                         <span className="font-semibold">{formatINR(t.amount)}</span>
-                        <span className="text-slate-400 text-xs">{t.value_date}</span>
+                        <span className="text-xs" style={{ color: 'var(--ink-400)' }}>{t.value_date}</span>
                         <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
                           t.category === 'Corpus' ? 'bg-purple-100 text-purple-700' :
                           t.category === 'Maintenance' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
                         }`}>{t.category}</span>
                         {t.row_type === 'SPLIT' && <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-medium">SPLIT</span>}
                       </div>
-                      <p className="text-xs text-slate-400 mt-1 truncate max-w-lg">{t.description}</p>
+                      <p className="text-xs mt-1 truncate max-w-lg" style={{ color: 'var(--ink-400)' }}>{t.description}</p>
                     </div>
                   </div>
                 ))}
@@ -1102,7 +1103,7 @@ function ExpenditureReportsTab() {
   const tdsVendors       = (vendorExpenses ?? []).filter(r => r.tdsRequired).length
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       {/* Controls */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex gap-1 bg-slate-100 rounded-lg p-0.5 text-sm flex-wrap">
@@ -1119,28 +1120,28 @@ function ExpenditureReportsTab() {
           ))}
         </div>
         <select value={selectedFyYear} onChange={e => setSelectedFyYear(Number(e.target.value))}
-          className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white">
+          className="ds-field">
           {FISCAL_YEARS.map(f => <option key={f.year} value={f.year}>{f.label}</option>)}
         </select>
       </div>
 
       {/* KPI strip */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="card p-4 bg-rose-50">
-          <p className="text-xs text-slate-500 mb-1">Total expenses</p>
+        <div className="surface !p-4" style={{ background: 'var(--bad-bg)' }}>
+          <p className="text-[12px] mb-1" style={{ color: 'var(--ink-500)' }}>Total expenses</p>
           <p className="text-xl font-bold text-rose-600">{totalExpenses > 0 ? formatINR(totalExpenses) : '—'}</p>
         </div>
-        <div className="card p-4 bg-blue-50">
-          <p className="text-xs text-slate-500 mb-1">Maintenance expenses</p>
+        <div className="surface !p-4" style={{ background: 'var(--info-bg)' }}>
+          <p className="text-[12px] mb-1" style={{ color: 'var(--ink-500)' }}>Maintenance expenses</p>
           <p className="text-xl font-bold text-blue-700">{maintenanceTotal > 0 ? formatINR(maintenanceTotal) : '—'}</p>
         </div>
-        <div className="card p-4 bg-violet-50">
-          <p className="text-xs text-slate-500 mb-1">Corpus expenses</p>
+        <div className="surface !p-4" style={{ background: 'var(--brand-50)' }}>
+          <p className="text-[12px] mb-1" style={{ color: 'var(--ink-500)' }}>Corpus expenses</p>
           <p className="text-xl font-bold text-violet-700">{corpusTotal > 0 ? formatINR(corpusTotal) : '—'}</p>
         </div>
-        <div className={`card p-4 ${tdsVendors > 0 ? 'bg-amber-50' : 'bg-white'}`}>
-          <p className="text-xs text-slate-500 mb-1">TDS required vendors</p>
-          <p className={`text-xl font-bold ${tdsVendors > 0 ? 'text-amber-600' : 'text-slate-400'}`}>
+        <div className="surface !p-4" style={{ background: tdsVendors > 0 ? 'var(--warn-bg, #fffbeb)' : undefined }}>
+          <p className="text-[12px] mb-1" style={{ color: 'var(--ink-500)' }}>TDS required vendors</p>
+          <p className={`text-xl font-bold ${tdsVendors > 0 ? 'text-amber-600' : ''}`} style={tdsVendors === 0 ? { color: 'var(--ink-400)' } : undefined}>
             {tdsVendors > 0 ? tdsVendors : '—'}
           </p>
           {tdsVendors > 0 && <p className="text-xs text-amber-500 mt-0.5">Vendors paid &gt;₹30K</p>}
@@ -1149,9 +1150,9 @@ function ExpenditureReportsTab() {
 
       {/* By category */}
       {subTab === 'category' && (
-        <div className="space-y-4">
+        <div className="flex flex-col gap-4">
           {catExpenses && catExpenses.length > 0 && (
-            <div className="card p-4">
+            <div className="surface !p-4">
               <h3 className="font-semibold text-sm mb-3">Category breakdown — {selectedFy.label}</h3>
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart
@@ -1167,28 +1168,28 @@ function ExpenditureReportsTab() {
             </div>
           )}
           {loadingCat ? (
-            <div className="card h-40 animate-pulse bg-slate-100" />
+            <div className="h-40 animate-pulse rounded-[var(--ds-radius)]" style={{ background: 'var(--ink-100)' }} />
           ) : !catExpenses?.length ? (
-            <div className="card p-10 text-center text-sm text-slate-400">No expenses recorded for {selectedFy.label}</div>
+            <div className="surface !p-10 text-center text-[13px]" style={{ color: 'var(--ink-400)' }}>No expenses recorded for {selectedFy.label}</div>
           ) : (
-            <div className="card overflow-hidden">
-              <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+            <div className="surface !p-0 overflow-hidden">
+              <div className="px-4 py-3 border-b hairline flex items-center justify-between">
                 <h3 className="font-semibold text-sm">Expenses by category</h3>
                 <button onClick={handleExcelCategory}
-                  className="flex items-center gap-1.5 text-sm text-violet-700 hover:text-violet-900">
+                  className="flex items-center gap-1.5 text-sm hover:opacity-80" style={{ color: 'var(--brand-700)' }}>
                   <Download size={14} /> Export Excel
                 </button>
               </div>
               <table className="w-full text-sm">
-                <thead className="bg-slate-50 border-b border-slate-200">
+                <thead className="border-b hairline" style={{ background: 'var(--ink-50)' }}>
                   <tr>
-                    <th className="text-left px-4 py-2.5 font-semibold text-slate-600">Category</th>
-                    <th className="text-left px-4 py-2.5 font-semibold text-slate-600">Type</th>
-                    <th className="text-right px-4 py-2.5 font-semibold text-slate-600">Amount</th>
-                    <th className="text-right px-4 py-2.5 font-semibold text-slate-600">% of total</th>
+                    <th className="text-left px-4 py-2.5 font-semibold" style={{ color: 'var(--ink-600)' }}>Category</th>
+                    <th className="text-left px-4 py-2.5 font-semibold" style={{ color: 'var(--ink-600)' }}>Type</th>
+                    <th className="text-right px-4 py-2.5 font-semibold" style={{ color: 'var(--ink-600)' }}>Amount</th>
+                    <th className="text-right px-4 py-2.5 font-semibold" style={{ color: 'var(--ink-600)' }}>% of total</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-50">
+                <tbody className="divide-rows">
                   {catExpenses.map((r, i) => (
                     <tr key={r.category} className={i % 2 === 1 ? 'bg-slate-50/50' : ''}>
                       <td className="px-4 py-2.5 font-medium">{r.category}</td>
@@ -1198,13 +1199,13 @@ function ExpenditureReportsTab() {
                         }`}>{r.budget_type}</span>
                       </td>
                       <td className="px-4 py-2.5 text-right font-semibold">{formatINR(r.amount)}</td>
-                      <td className="px-4 py-2.5 text-right text-slate-500">
+                      <td className="px-4 py-2.5 text-right" style={{ color: 'var(--ink-500)' }}>
                         {totalExpenses > 0 ? `${((r.amount / totalExpenses) * 100).toFixed(1)}%` : '—'}
                       </td>
                     </tr>
                   ))}
                 </tbody>
-                <tfoot className="border-t-2 border-slate-300 bg-slate-50">
+                <tfoot className="border-t-2 hairline" style={{ background: 'var(--ink-50)' }}>
                   <tr>
                     <td className="px-4 py-3 font-bold" colSpan={2}>Total</td>
                     <td className="px-4 py-3 text-right font-bold">{formatINR(totalExpenses)}</td>
@@ -1220,12 +1221,12 @@ function ExpenditureReportsTab() {
       {/* By vendor */}
       {subTab === 'vendor' && (
         loadingVendor ? (
-          <div className="card h-40 animate-pulse bg-slate-100" />
+          <div className="h-40 animate-pulse rounded-[var(--ds-radius)]" style={{ background: 'var(--ink-100)' }} />
         ) : !vendorExpenses?.length ? (
-          <div className="card p-10 text-center text-sm text-slate-400">No expenses for {selectedFy.label}</div>
+          <div className="surface !p-10 text-center text-[13px]" style={{ color: 'var(--ink-400)' }}>No expenses for {selectedFy.label}</div>
         ) : (
-          <div className="card overflow-hidden">
-            <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+          <div className="surface !p-0 overflow-hidden">
+            <div className="px-4 py-3 border-b hairline flex items-center justify-between">
               <div>
                 <h3 className="font-semibold text-sm">Payments by vendor / payee</h3>
                 {tdsVendors > 0 && (
@@ -1233,19 +1234,19 @@ function ExpenditureReportsTab() {
                 )}
               </div>
               <button onClick={handleExcelVendor}
-                className="flex items-center gap-1.5 text-sm text-violet-700 hover:text-violet-900">
+                className="flex items-center gap-1.5 text-sm hover:opacity-80" style={{ color: 'var(--brand-700)' }}>
                 <Download size={14} /> Export Excel
               </button>
             </div>
             <table className="w-full text-sm">
-              <thead className="bg-slate-50 border-b border-slate-200">
+              <thead className="border-b hairline" style={{ background: 'var(--ink-50)' }}>
                 <tr>
-                  <th className="text-left px-4 py-2.5 font-semibold text-slate-600">Vendor / Payee</th>
-                  <th className="text-right px-4 py-2.5 font-semibold text-slate-600">Amount paid</th>
-                  <th className="text-left px-4 py-2.5 font-semibold text-slate-600">TDS</th>
+                  <th className="text-left px-4 py-2.5 font-semibold" style={{ color: 'var(--ink-600)' }}>Vendor / Payee</th>
+                  <th className="text-right px-4 py-2.5 font-semibold" style={{ color: 'var(--ink-600)' }}>Amount paid</th>
+                  <th className="text-left px-4 py-2.5 font-semibold" style={{ color: 'var(--ink-600)' }}>TDS</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-50">
+              <tbody className="divide-rows">
                 {vendorExpenses.map((r, i) => (
                   <tr key={r.vendor} className={i % 2 === 1 ? 'bg-slate-50/50' : ''}>
                     <td className="px-4 py-2.5 font-medium">{r.vendor}</td>
@@ -1253,13 +1254,13 @@ function ExpenditureReportsTab() {
                     <td className="px-4 py-2.5">
                       {r.tdsRequired
                         ? <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">TDS required</span>
-                        : <span className="text-xs text-slate-300">—</span>
+                        : <span className="text-xs" style={{ color: 'var(--ink-300)' }}>—</span>
                       }
                     </td>
                   </tr>
                 ))}
               </tbody>
-              <tfoot className="border-t-2 border-slate-300 bg-slate-50">
+              <tfoot className="border-t-2 hairline" style={{ background: 'var(--ink-50)' }}>
                 <tr>
                   <td className="px-4 py-3 font-bold">Total</td>
                   <td className="px-4 py-3 text-right font-bold">{formatINR(vendorExpenses.reduce((s,r) => s + r.amount, 0))}</td>
@@ -1274,9 +1275,9 @@ function ExpenditureReportsTab() {
       {/* Monthly trend */}
       {subTab === 'trend' && (
         loadingTrend ? (
-          <div className="card h-64 animate-pulse bg-slate-100" />
+          <div className="h-64 animate-pulse rounded-[var(--ds-radius)]" style={{ background: 'var(--ink-100)' }} />
         ) : (
-          <div className="card p-4">
+          <div className="surface !p-4">
             <h3 className="font-semibold text-sm mb-3">Monthly expenditure — {selectedFy.label}</h3>
             <ResponsiveContainer width="100%" height={260}>
               <BarChart data={monthlyTrend} margin={{ top: 4, right: 8, bottom: 4, left: 8 }}>
@@ -1286,7 +1287,7 @@ function ExpenditureReportsTab() {
                 <Bar dataKey="amount" fill="#f43f5e" radius={[3, 3, 0, 0]} maxBarSize={32} name="Expenses" />
               </BarChart>
             </ResponsiveContainer>
-            <div className="mt-3 text-xs text-slate-400 text-right">
+            <div className="mt-3 text-xs text-right" style={{ color: 'var(--ink-400)' }}>
               Total: {formatINR((monthlyTrend ?? []).reduce((s, r) => s + r.amount, 0))}
             </div>
           </div>
@@ -1318,7 +1319,7 @@ function UtilityTab() {
   const displayCat = utilityCats.find(c => c.id === activeCatId) ?? utilityCats[0]
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex gap-1 bg-slate-100 rounded-lg p-0.5 text-sm flex-wrap">
           {utilityCats.map(cat => (
@@ -1330,14 +1331,14 @@ function UtilityTab() {
           ))}
         </div>
         <select value={fyYear} onChange={e => setFyYear(Number(e.target.value))}
-          className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white">
+          className="ds-field">
           {FISCAL_YEARS.map(f => <option key={f.year} value={f.year}>{f.label}</option>)}
         </select>
       </div>
 
       {displayCat
         ? <UtilityReport catId={displayCat.id} catName={displayCat.name} unitLabel={displayCat.unit_label} fyYear={fyYear} />
-        : <div className="card h-48 animate-pulse bg-slate-100" />
+        : <div className="h-48 animate-pulse rounded-[var(--ds-radius)]" style={{ background: 'var(--ink-100)' }} />
       }
     </div>
   )
@@ -1406,47 +1407,47 @@ function UtilityReport({ catId, catName, unitLabel: unitLabelProp, fyYear }: {
     XLSX.writeFile(wb, `${catName.replace(/[^a-zA-Z0-9]/g, '_')}_${fy.label.replace(/\s/g, '_')}.xlsx`)
   }
 
-  if (isLoading) return <div className="card h-64 animate-pulse bg-slate-100" />
+  if (isLoading) return <div className="h-64 animate-pulse rounded-[var(--ds-radius)]" style={{ background: 'var(--ink-100)' }} />
 
   if (!items?.length) return (
-    <div className="card p-10 text-center">
-      <Zap size={32} className="mx-auto text-slate-200 mb-3" />
-      <p className="text-sm text-slate-400">No {catName} line items recorded for {fy.label}.</p>
-      <p className="text-xs text-slate-300 mt-1">Add expenses in Expenses with category "{catName}" and line items.</p>
+    <div className="surface !p-10 text-center">
+      <Zap size={32} className="mx-auto mb-3" style={{ color: 'var(--ink-200)' }} />
+      <p className="text-sm" style={{ color: 'var(--ink-400)' }}>No {catName} line items recorded for {fy.label}.</p>
+      <p className="text-xs mt-1" style={{ color: 'var(--ink-300)' }}>Add expenses in Expenses with category "{catName}" and line items.</p>
     </div>
   )
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       {/* Summary cards */}
       <div className={`grid grid-cols-2 gap-3 ${hasUnits ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
-        <div className="card p-4 bg-violet-50">
-          <p className="text-xs text-slate-500 mb-1">Total cost</p>
+        <div className="surface !p-4" style={{ background: 'var(--brand-50)' }}>
+          <p className="text-[12px] mb-1" style={{ color: 'var(--ink-500)' }}>Total cost</p>
           <p className="text-xl font-bold text-violet-700">{formatINR(totalAmt)}</p>
         </div>
         {hasUnits && (
           <>
-            <div className="card p-4 bg-blue-50">
-              <p className="text-xs text-slate-500 mb-1">Total {unitLabel}</p>
+            <div className="surface !p-4" style={{ background: 'var(--info-bg)' }}>
+              <p className="text-[12px] mb-1" style={{ color: 'var(--ink-500)' }}>Total {unitLabel}</p>
               <p className="text-xl font-bold text-blue-700">{totalUnits.toLocaleString('en-IN')}</p>
             </div>
-            <div className="card p-4 bg-slate-50">
-              <p className="text-xs text-slate-500 mb-1">Avg rate / {unitLabel}</p>
-              <p className="text-xl font-bold text-slate-700">
+            <div className="surface !p-4" style={{ background: 'var(--ink-50)' }}>
+              <p className="text-[12px] mb-1" style={{ color: 'var(--ink-500)' }}>Avg rate / {unitLabel}</p>
+              <p className="text-xl font-bold" style={{ color: 'var(--ink-700)' }}>
                 {totalUnits > 0 ? `₹${(totalAmt / totalUnits).toFixed(2)}` : '—'}
               </p>
             </div>
           </>
         )}
-        <div className="card p-4 bg-slate-50">
-          <p className="text-xs text-slate-500 mb-1">Areas tracked</p>
-          <p className="text-xl font-bold text-slate-700">{blocks.length}</p>
+        <div className="surface !p-4" style={{ background: 'var(--ink-50)' }}>
+          <p className="text-[12px] mb-1" style={{ color: 'var(--ink-500)' }}>Areas tracked</p>
+          <p className="text-xl font-bold" style={{ color: 'var(--ink-700)' }}>{blocks.length}</p>
         </div>
       </div>
 
       {/* Monthly amount by block — bar chart */}
       {chartData.length > 0 && blocks.length > 0 && (
-        <div className="card p-4">
+        <div className="surface !p-4">
           <h3 className="font-semibold text-sm mb-3">Monthly cost by area — {fy.label}</h3>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={chartData} margin={{ top: 4, right: 8, bottom: 4, left: 8 }}>
@@ -1464,43 +1465,43 @@ function UtilityReport({ catId, catName, unitLabel: unitLabelProp, fyYear }: {
       )}
 
       {/* Detail table */}
-      <div className="card overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+      <div className="surface !p-0 overflow-hidden">
+        <div className="px-4 py-3 border-b hairline flex items-center justify-between">
           <h3 className="font-semibold text-sm">Line-item detail</h3>
           <button onClick={handleExcel}
-            className="flex items-center gap-1.5 text-sm text-violet-700 hover:text-violet-900">
+            className="flex items-center gap-1.5 text-sm hover:opacity-80" style={{ color: 'var(--brand-700)' }}>
             <Download size={14} /> Export Excel
           </button>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-slate-50 border-b border-slate-200">
+            <thead className="border-b hairline" style={{ background: 'var(--ink-50)' }}>
               <tr>
-                <th className="text-left px-4 py-2 font-semibold text-slate-600">Period</th>
-                <th className="text-left px-4 py-2 font-semibold text-slate-600">Area / Block</th>
+                <th className="text-left px-4 py-2 font-semibold" style={{ color: 'var(--ink-600)' }}>Period</th>
+                <th className="text-left px-4 py-2 font-semibold" style={{ color: 'var(--ink-600)' }}>Area / Block</th>
                 {hasUnits && <>
-                  <th className="text-right px-4 py-2 font-semibold text-slate-600">{unitLabel}</th>
-                  <th className="text-right px-4 py-2 font-semibold text-slate-600">Rate</th>
+                  <th className="text-right px-4 py-2 font-semibold" style={{ color: 'var(--ink-600)' }}>{unitLabel}</th>
+                  <th className="text-right px-4 py-2 font-semibold" style={{ color: 'var(--ink-600)' }}>Rate</th>
                 </>}
-                <th className="text-right px-4 py-2 font-semibold text-slate-600">Amount</th>
-                <th className="text-left px-4 py-2 font-semibold text-slate-600">Notes</th>
+                <th className="text-right px-4 py-2 font-semibold" style={{ color: 'var(--ink-600)' }}>Amount</th>
+                <th className="text-left px-4 py-2 font-semibold" style={{ color: 'var(--ink-600)' }}>Notes</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-50">
+            <tbody className="divide-rows">
               {(items ?? []).map((item: any, i: number) => (
                 <tr key={item.id} className={i % 2 === 1 ? 'bg-slate-50/50' : ''}>
-                  <td className="px-4 py-2.5 text-slate-600">{item.period_from ?? '—'}</td>
+                  <td className="px-4 py-2.5" style={{ color: 'var(--ink-600)' }}>{item.period_from ?? '—'}</td>
                   <td className="px-4 py-2.5 font-medium">{item.cost_center ?? '—'}</td>
                   {hasUnits && <>
                     <td className="px-4 py-2.5 text-right">{item.utility_units != null ? Number(item.utility_units).toLocaleString('en-IN') : '—'}</td>
-                    <td className="px-4 py-2.5 text-right text-slate-500">{item.utility_rate != null ? `₹${item.utility_rate}` : '—'}</td>
+                    <td className="px-4 py-2.5 text-right" style={{ color: 'var(--ink-500)' }}>{item.utility_rate != null ? `₹${item.utility_rate}` : '—'}</td>
                   </>}
                   <td className="px-4 py-2.5 text-right font-semibold">{formatINR(item.amount)}</td>
-                  <td className="px-4 py-2.5 text-slate-500 text-xs max-w-xs truncate">{item.description ?? ''}</td>
+                  <td className="px-4 py-2.5 text-xs max-w-xs truncate" style={{ color: 'var(--ink-500)' }}>{item.description ?? ''}</td>
                 </tr>
               ))}
             </tbody>
-            <tfoot className="border-t-2 border-slate-300 bg-slate-50">
+            <tfoot className="border-t-2 hairline" style={{ background: 'var(--ink-50)' }}>
               <tr>
                 <td className="px-4 py-3 font-bold" colSpan={hasUnits ? 2 : 2}>Total</td>
                 {hasUnits && <>

@@ -15,22 +15,23 @@ export default function FlatsPage() {
   const [tab, setTab] = useState<Tab>('flats')
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-5 fade-in">
       <div>
-        <h2 className="text-xl font-semibold">Flats & Residents</h2>
-        <p className="text-sm text-slate-500 mt-0.5">Manage flat details, maintenance rates, owners and tenants</p>
+        <h1 className="text-[24px] font-extrabold">Flats &amp; Residents</h1>
+        <p className="text-[13.5px] mt-1" style={{ color: 'var(--ink-500)' }}>Manage flat details, maintenance rates, owners and tenants</p>
       </div>
 
       {!canWrite && (
-        <div className="flex items-center gap-2 px-3 py-2 mb-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+        <div className="flex items-center gap-2 px-3 py-2 mb-4 rounded-xl text-[13px]" style={{ background: 'var(--warn-bg)', border: '1px solid var(--warn-bd)', color: 'var(--warn)' }}>
           <span>Read-only access — contact the administrator to make changes.</span>
         </div>
       )}
 
-      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 w-fit">
+      <div className="flex gap-1 rounded-xl p-1 w-fit" style={{ background: 'var(--ink-100)' }}>
         {([{ key: 'flats', label: 'Flats' }, { key: 'residents', label: 'Residents' }] as { key: Tab; label: string }[]).map(({ key, label }) => (
           <button key={key} onClick={() => setTab(key)}
-            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${tab === key ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}>
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${tab === key ? 'bg-white shadow-sm' : ''}`}
+            style={{ color: tab === key ? 'var(--ink-900)' : 'var(--ink-500)' }}>
             {label}
           </button>
         ))}
@@ -88,15 +89,15 @@ function FlatsTab() {
     <div className="flex flex-col lg:flex-row gap-4">
       <div className="flex-1 min-w-0">
         {isLoading ? (
-          <div className="card h-64 animate-pulse bg-slate-100" />
+          <div className="surface h-64 animate-pulse" style={{ background: 'var(--ink-100)' }} />
         ) : (
-          <div className="rounded-xl overflow-hidden border border-slate-200" style={{ height: 480 }}>
+          <div className="overflow-hidden border hairline" style={{ borderRadius: 'var(--ds-radius)', height: 480 }}>
             <AgGridReact
               rowData={flats ?? []}
               columnDefs={colDefs}
               defaultColDef={{ sortable: true, resizable: true, filter: true, floatingFilter: true }}
               rowSelection={{ mode: 'singleRow' }}
-              getRowStyle={(p: any) => p.data?.id === selected?.id ? { background: '#eff6ff' } : undefined}
+              getRowStyle={(p: any) => p.data?.id === selected?.id ? { background: 'var(--brand-50)' } : undefined}
               onRowClicked={e => setSelected(e.data ?? null)}
             />
           </div>
@@ -106,10 +107,10 @@ function FlatsTab() {
       {/* Detail panel */}
       {selected && (
         <div className="w-full lg:w-72 shrink-0 space-y-3">
-          <div className="card p-4 space-y-3">
+          <div className="surface !p-4 flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-lg">{selected.code}</h3>
-              <button onClick={() => setSelected(null)} className="p-1 rounded hover:bg-slate-100"><X size={15} /></button>
+              <button onClick={() => setSelected(null)} className="p-1 rounded hover:bg-[var(--ink-100)]"><X size={15} /></button>
             </div>
             <div className="space-y-1.5 text-sm">
               <Detail label="Block"       value={selected.block} />
@@ -129,16 +130,16 @@ function FlatsTab() {
 
           {/* Rate history */}
           {rateHistory && rateHistory.length > 0 && (
-            <div className="card p-4">
+            <div className="surface !p-4">
               <h4 className="font-medium text-sm mb-3">Rate history</h4>
               <div className="space-y-2">
                 {rateHistory.map((r: any) => (
                   <div key={r.id} className="flex justify-between text-sm">
                     <div>
                       <p className="font-medium">{formatINR(r.monthly_rate)}/mo</p>
-                      <p className="text-xs text-slate-400">{r.effective_from}{r.effective_to ? ` → ${r.effective_to}` : ' → now'}</p>
+                      <p className="text-[11px]" style={{ color: 'var(--ink-400)' }}>{r.effective_from}{r.effective_to ? ` → ${r.effective_to}` : ' → now'}</p>
                     </div>
-                    {r.notes && <p className="text-xs text-slate-400 max-w-[120px] text-right">{r.notes}</p>}
+                    {r.notes && <p className="text-[11px] max-w-[120px] text-right" style={{ color: 'var(--ink-400)' }}>{r.notes}</p>}
                   </div>
                 ))}
               </div>
@@ -157,8 +158,8 @@ function FlatsTab() {
 function Detail({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between">
-      <span className="text-slate-500">{label}</span>
-      <span className="font-medium text-slate-800">{value}</span>
+      <span style={{ color: 'var(--ink-500)' }}>{label}</span>
+      <span className="font-medium" style={{ color: 'var(--ink-800)' }}>{value}</span>
     </div>
   )
 }
@@ -190,30 +191,30 @@ function RateChangeModal({ flat, onClose, onSaved }: { flat: Flat; onClose: () =
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
-        <div className="flex items-center justify-between p-5 border-b border-slate-100">
+        <div className="flex items-center justify-between p-5 border-b hairline">
           <h3 className="font-semibold">Change rate — {flat.code}</h3>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100"><X size={18} /></button>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[var(--ink-100)]"><X size={18} /></button>
         </div>
         <div className="p-5 space-y-4">
           <div>
-            <label className="text-sm text-slate-600 block mb-1.5">New monthly rate (₹)</label>
+            <label className="ds-lbl">New monthly rate (₹)</label>
             <input type="number" value={rate} onChange={e => setRate(e.target.value)}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm" />
+              className="ds-field w-full" />
           </div>
           <div>
-            <label className="text-sm text-slate-600 block mb-1.5">Effective from</label>
+            <label className="ds-lbl">Effective from</label>
             <input type="date" value={from} onChange={e => setFrom(e.target.value)}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm" />
+              className="ds-field w-full" />
           </div>
           <div>
-            <label className="text-sm text-slate-600 block mb-1.5">Notes (optional)</label>
+            <label className="ds-lbl">Notes (optional)</label>
             <input type="text" value={notes} onChange={e => setNotes(e.target.value)}
               placeholder="e.g. Annual revision FY2027-28"
-              className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm" />
+              className="ds-field w-full" />
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
         </div>
-        <div className="flex gap-2 p-5 border-t border-slate-100">
+        <div className="flex gap-2 p-5 border-t hairline">
           <button onClick={onClose} className="btn-secondary flex-1">Cancel</button>
           <button onClick={handleSave} disabled={saving} className="btn-primary flex-1">{saving ? 'Saving…' : 'Save'}</button>
         </div>
@@ -294,11 +295,11 @@ function ResidentsTab() {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-500">
+        <p className="text-sm" style={{ color: 'var(--ink-500)' }}>
           {residents?.filter(r => r.is_active).length ?? 0} active residents
-          <span className="text-slate-300 mx-1">·</span>
+          <span className="mx-1" style={{ color: 'var(--ink-300)' }}>·</span>
           UPI IDs stored here auto-match payments on upload
         </p>
         {isAdmin && (
@@ -309,9 +310,9 @@ function ResidentsTab() {
       </div>
 
       {isLoading ? (
-        <div className="card h-64 animate-pulse bg-slate-100" />
+        <div className="h-64 animate-pulse rounded-[var(--ds-radius)]" style={{ background: 'var(--ink-100)' }} />
       ) : (
-        <div className="rounded-xl overflow-hidden border border-slate-200" style={{ height: 520 }}>
+        <div className="overflow-hidden border hairline" style={{ borderRadius: 'var(--ds-radius)', height: 520 }}>
           <AgGridReact
             rowData={residents ?? []}
             columnDefs={colDefs}
@@ -361,22 +362,22 @@ function AddResidentModal({ flats, onClose, onSaved }: { flats: any[]; onClose: 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-5 border-b border-slate-100">
+        <div className="flex items-center justify-between p-5 border-b hairline">
           <h3 className="font-semibold">Add resident</h3>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100"><X size={18} /></button>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[var(--ink-100)]"><X size={18} /></button>
         </div>
         <div className="p-5 space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-sm text-slate-600 block mb-1.5">Flat *</label>
-              <select value={flatId} onChange={e => setFlatId(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm">
+              <label className="ds-lbl">Flat *</label>
+              <select value={flatId} onChange={e => setFlatId(e.target.value)} className="ds-field w-full">
                 <option value="">— Select —</option>
                 {flats.map(f => <option key={f.id} value={f.id}>{f.code}</option>)}
               </select>
             </div>
             <div>
-              <label className="text-sm text-slate-600 block mb-1.5">Type</label>
-              <select value={type} onChange={e => setType(e.target.value as 'Owner' | 'Tenant')} className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm">
+              <label className="ds-lbl">Type</label>
+              <select value={type} onChange={e => setType(e.target.value as 'Owner' | 'Tenant')} className="ds-field w-full">
                 <option value="Owner">Owner</option>
                 <option value="Tenant">Tenant</option>
               </select>
@@ -388,17 +389,17 @@ function AddResidentModal({ flats, onClose, onSaved }: { flats: any[]; onClose: 
             <Field label="Email" value={email} onChange={setEmail} placeholder="optional" />
           </div>
           <div>
-            <label className="text-sm text-slate-600 block mb-1.5">UPI IDs</label>
+            <label className="ds-lbl">UPI IDs</label>
             <input type="text" value={upiRaw} onChange={e => setUpiRaw(e.target.value)}
               placeholder="upiid1@bank, upiid2@bank (comma separated)"
-              className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm" />
-            <p className="text-xs text-slate-400 mt-1">These auto-match future payments from this payer</p>
+              className="ds-field w-full" />
+            <p className="text-[11px] mt-1" style={{ color: 'var(--ink-400)' }}>These auto-match future payments from this payer</p>
           </div>
           <Field label="Moved in (date)" value={movedIn} onChange={setMovedIn} type="date" />
           <Field label="Notes" value={notes} onChange={setNotes} placeholder="optional" />
           {error && <p className="text-sm text-red-600">{error}</p>}
         </div>
-        <div className="flex gap-2 p-5 border-t border-slate-100">
+        <div className="flex gap-2 p-5 border-t hairline">
           <button onClick={onClose} className="btn-secondary flex-1">Cancel</button>
           <button onClick={handleSave} disabled={saving} className="btn-primary flex-1">{saving ? 'Saving…' : 'Add resident'}</button>
         </div>
@@ -412,10 +413,10 @@ function Field({ label, value, onChange, placeholder, type = 'text' }: {
 }) {
   return (
     <div>
-      <label className="text-sm text-slate-600 block mb-1.5">{label}</label>
+      <label className="ds-lbl">{label}</label>
       <input type={type} value={value} onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm" />
+        className="ds-field w-full" />
     </div>
   )
 }

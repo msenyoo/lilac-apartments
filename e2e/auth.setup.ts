@@ -16,7 +16,7 @@ setup('authenticate', async ({ page }) => {
 
   await page.goto('/')
 
-  await page.fill('input[type="email"]', email)
+  await page.fill('input[type="text"]', email)
   await page.fill('input[type="password"]', password)
   await page.click('button[type="submit"]')
 

@@ -42,26 +42,27 @@ export default function TransactionsPage() {
   ]
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-5 fade-in">
       <div>
-        <h2 className="text-xl font-semibold">Transactions</h2>
-        <p className="text-sm text-slate-500 mt-0.5">Upload statements, review unknowns, browse all data</p>
+        <h1 className="text-[24px] font-extrabold">Transactions</h1>
+        <p className="text-[13.5px] mt-1" style={{ color: 'var(--ink-500)' }}>Upload statements, review unknowns, browse all data</p>
       </div>
 
       {!canWrite && (
-        <div className="flex items-center gap-2 px-3 py-2 mb-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+        <div className="flex items-center gap-2 px-3 py-2 mb-4 rounded-xl text-[13px]" style={{ background: 'var(--warn-bg)', border: '1px solid var(--warn-bd)', color: 'var(--warn)' }}>
           <span>Read-only access — contact the administrator to make changes.</span>
         </div>
       )}
 
       {/* Tab bar */}
-      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 flex-wrap">
+      <div className="flex gap-1 rounded-xl p-1 flex-wrap" style={{ background: 'var(--ink-100)' }}>
         {visibleTabs.map(({ key, label }) => (
           <button
             key={key}
             onClick={() => setTab(key)}
             className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors
-              ${tab === key ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
+              ${tab === key ? 'bg-white shadow-sm' : 'hover:bg-[var(--ink-50)]'}`}
+            style={tab === key ? { color: 'var(--ink-900)' } : { color: 'var(--ink-500)' }}
           >
             {label}
           </button>
@@ -208,12 +209,13 @@ function UploadTab({ onImported }: { onImported: () => void }) {
   }, [])
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       {stage === 'idle' && (
         <label
           className={`flex flex-col items-center justify-center gap-3 p-10 rounded-2xl cursor-pointer
                       border-2 border-dashed transition-colors bg-white max-w-2xl
-                      ${dragging ? 'border-brand-500 bg-brand-50' : 'border-slate-200 hover:border-brand-300'}`}
+                      ${dragging ? 'border-brand-500 bg-brand-50' : 'hover:border-[var(--brand-300)]'}`}
+          style={dragging ? undefined : { borderColor: 'var(--ink-200)' }}
           onDragOver={e => { e.preventDefault(); setDragging(true) }}
           onDragLeave={() => setDragging(false)}
           onDrop={onDrop}
@@ -230,7 +232,7 @@ function UploadTab({ onImported }: { onImported: () => void }) {
       )}
 
       {(stage === 'parsing' || stage === 'importing') && (
-        <div className="card p-10 flex flex-col items-center gap-4 max-w-2xl">
+        <div className="surface !p-10 flex flex-col items-center gap-4 max-w-2xl">
           <div className="w-12 h-12 border-4 border-brand-500 border-t-transparent rounded-full animate-spin" />
           <p className="font-semibold text-slate-700">{stage === 'parsing' ? 'Reading file…' : 'Importing…'}</p>
           {stage === 'parsing' && <p className="text-sm text-slate-400">Auto-tagging flat codes, matching UPI IDs</p>}
@@ -238,7 +240,7 @@ function UploadTab({ onImported }: { onImported: () => void }) {
       )}
 
       {error && (
-        <div className="card p-4 bg-red-50 border border-red-200 flex gap-3 max-w-2xl">
+        <div className="surface !p-4 bg-red-50 border border-red-200 flex gap-3 max-w-2xl">
           <AlertTriangle size={20} className="text-red-600 shrink-0 mt-0.5" />
           <div><p className="font-medium text-red-800">Error</p><p className="text-sm text-red-600 mt-1">{error}</p></div>
         </div>
@@ -254,23 +256,25 @@ function UploadTab({ onImported }: { onImported: () => void }) {
       )}
 
       {stage === 'done' && result && (
-        <div className="space-y-3 max-w-2xl">
-          <div className="card p-4 bg-green-50 border border-green-200 flex gap-3">
+        <div className="flex flex-col gap-3 max-w-2xl">
+          <div className="surface !p-4 bg-green-50 border border-green-200 flex gap-3">
             <CheckCircle size={20} className="text-green-600 shrink-0 mt-0.5" />
             <p className="font-semibold text-green-800">Import complete — {result.monthLabel}</p>
           </div>
-          <div className="card divide-y divide-slate-100">
-            {[
-              { label: 'Transactions in file', value: result.total,      cls: '' },
-              { label: 'New rows added',        value: result.added,     cls: 'text-green-700 font-semibold' },
-              { label: 'Duplicates skipped',    value: result.duplicates,cls: 'text-slate-400' },
-              { label: 'Needs review',          value: result.review,    cls: result.review > 0 ? 'text-orange-600 font-semibold' : '' },
-            ].map(({ label, value, cls }) => (
-              <div key={label} className="flex justify-between px-4 py-3 text-sm">
-                <span className="text-slate-600">{label}</span>
-                <span className={cls}>{value}</span>
-              </div>
-            ))}
+          <div className="surface !p-0">
+            <div className="divide-rows">
+              {[
+                { label: 'Transactions in file', value: result.total,      cls: '' },
+                { label: 'New rows added',        value: result.added,     cls: 'text-green-700 font-semibold' },
+                { label: 'Duplicates skipped',    value: result.duplicates,cls: 'text-slate-400' },
+                { label: 'Needs review',          value: result.review,    cls: result.review > 0 ? 'text-orange-600 font-semibold' : '' },
+              ].map(({ label, value, cls }) => (
+                <div key={label} className="flex justify-between px-4 py-3 text-sm">
+                  <span className="text-slate-600">{label}</span>
+                  <span className={cls}>{value}</span>
+                </div>
+              ))}
+            </div>
           </div>
           <button onClick={reset} className="btn-secondary w-full">Import another file</button>
         </div>
@@ -313,21 +317,21 @@ function ImportPreview({ preview, fileName, onConfirm, onCancel }: {
   ], [])
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="card p-4 bg-slate-50">
+        <div className="surface !p-4 bg-slate-50">
           <p className="text-xs text-slate-500 mb-1">In file</p>
           <p className="text-2xl font-bold text-slate-800">{preview.totalInFile}</p>
         </div>
-        <div className="card p-4 bg-green-50">
+        <div className="surface !p-4 bg-green-50">
           <p className="text-xs text-slate-500 mb-1">To import</p>
           <p className="text-2xl font-bold text-green-700">{preview.rows.length}</p>
         </div>
-        <div className="card p-4 bg-slate-50">
+        <div className="surface !p-4 bg-slate-50">
           <p className="text-xs text-slate-500 mb-1">Duplicates (skip)</p>
           <p className="text-2xl font-bold text-slate-400">{preview.duplicates}</p>
         </div>
-        <div className={`card p-4 ${reviewCount > 0 ? 'bg-amber-50' : 'bg-green-50'}`}>
+        <div className={`surface !p-4 ${reviewCount > 0 ? 'bg-amber-50' : 'bg-green-50'}`}>
           <p className="text-xs text-slate-500 mb-1">Needs review</p>
           <p className={`text-2xl font-bold ${reviewCount > 0 ? 'text-amber-600' : 'text-green-600'}`}>{reviewCount}</p>
         </div>
@@ -338,7 +342,7 @@ function ImportPreview({ preview, fileName, onConfirm, onCancel }: {
         {reviewCount > 0 && <span className="ml-2 text-amber-600">· Amber rows need manual tagging after import</span>}
       </p>
 
-      <div className="rounded-xl overflow-hidden border border-slate-200" style={{ height: 440 }}>
+      <div className="rounded-xl overflow-hidden border hairline" style={{ height: 440 }}>
         <AgGridReact
           rowData={preview.rows}
           columnDefs={colDefs}
@@ -380,28 +384,28 @@ function UploadHistory() {
   return (
     <div>
       {!show ? (
-        <button onClick={() => { setShow(true); refetch() }} className="flex items-center gap-1.5 text-sm text-brand-700 hover:text-brand-900">
+        <button onClick={() => { setShow(true); refetch() }} style={{ color: 'var(--brand-700)' }} className="flex items-center gap-1.5 text-sm hover:opacity-80">
           <FileText size={14} /> Show import history
         </button>
       ) : (
-        <div className="card">
-          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+        <div className="surface !p-0">
+          <div className="px-4 py-3 border-b hairline flex items-center justify-between">
             <h3 className="font-semibold text-sm">Import history</h3>
             <button onClick={() => setShow(false)} className="text-slate-400 hover:text-slate-600"><X size={14} /></button>
           </div>
           {!data?.length ? (
             <p className="px-4 py-6 text-sm text-slate-400 text-center">No imports yet</p>
           ) : (
-            <div className="divide-y divide-slate-100">
+            <div className="divide-rows">
               {data.map((u: any) => (
                 <div key={u.id} className="px-4 py-3 flex justify-between items-start text-sm">
                   <div>
                     <p className="font-medium">{u.month_label || '—'}</p>
-                    <p className="text-xs text-slate-400 mt-0.5 truncate max-w-xs">{u.original_name}</p>
+                    <p className="text-[11px] mt-0.5 truncate max-w-xs" style={{ color: 'var(--ink-400)' }}>{u.original_name}</p>
                   </div>
                   <div className="text-right">
                     <p className="text-slate-500">{u.new_txns} added</p>
-                    {u.review_count > 0 && <span className="badge-review">{u.review_count} review</span>}
+                    {u.review_count > 0 && <span className="ds-badge-warn">{u.review_count} review</span>}
                   </div>
                 </div>
               ))}
@@ -432,9 +436,9 @@ function ReviewTab() {
     },
   })
 
-  if (isLoading) return <div className="space-y-2">{[...Array(5)].map((_, i) => <div key={i} className="card h-16 animate-pulse bg-slate-100" />)}</div>
+  if (isLoading) return <div className="flex flex-col gap-2">{[...Array(5)].map((_, i) => <div key={i} className="h-16 animate-pulse rounded-[var(--ds-radius)]" style={{ background: 'var(--ink-100)' }} />)}</div>
   if (!items?.length) return (
-    <div className="card p-12 flex flex-col items-center gap-3">
+    <div className="surface !p-12 flex flex-col items-center gap-3">
       <CheckCircle size={40} className="text-green-500" />
       <p className="font-semibold text-lg">All clear!</p>
       <p className="text-slate-500 text-sm">No transactions need review</p>
@@ -442,10 +446,10 @@ function ReviewTab() {
   )
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
         <h3 className="font-semibold">Review queue</h3>
-        <span className="badge-review">{items.length} pending</span>
+        <span className="ds-badge-warn">{items.length} pending</span>
       </div>
       <p className="text-sm text-slate-500">
         {canWrite
@@ -494,7 +498,7 @@ function ReviewItem({ item, flats, onSaved }: { item: ReviewEntry; flats: any[];
   }
 
   if (saved) return (
-    <div className="card p-3 bg-green-50 flex items-center gap-2 text-sm">
+    <div className="surface !p-3 bg-green-50 flex items-center gap-2 text-sm">
       <CheckCircle size={15} className="text-green-600" />
       <span className="text-green-700">Tagged as {flatCode} · {category}</span>
     </div>
@@ -502,7 +506,7 @@ function ReviewItem({ item, flats, onSaved }: { item: ReviewEntry; flats: any[];
 
   return (
     <>
-      <div className="card p-4 space-y-3">
+      <div className="surface !p-4 flex flex-col gap-3">
         {/* Header */}
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
@@ -520,14 +524,14 @@ function ReviewItem({ item, flats, onSaved }: { item: ReviewEntry; flats: any[];
         {/* Controls */}
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <label className="text-xs text-slate-500 mb-1 block">Flat / Category</label>
+            <label className="ds-lbl">Flat / Category</label>
             <select
               value={flatCode}
               onChange={e => {
                 setFlatCode(e.target.value)
                 if (!FLAT_CODES.includes(e.target.value)) setCategory(e.target.value)
               }}
-              className="w-full border border-slate-200 rounded-lg px-2 py-2 text-sm bg-white"
+              className="w-full ds-field bg-white"
             >
               <option value="">— Select —</option>
               <optgroup label="Flats">{FLAT_CODES.map(f => <option key={f} value={f}>{f}</option>)}</optgroup>
@@ -536,11 +540,11 @@ function ReviewItem({ item, flats, onSaved }: { item: ReviewEntry; flats: any[];
           </div>
           {isFlat && (
             <div>
-              <label className="text-xs text-slate-500 mb-1 block">Category</label>
+              <label className="ds-lbl">Category</label>
               <select
                 value={category}
                 onChange={e => { setCategory(e.target.value); if (e.target.value === 'Corpus') setCorpus('YES') }}
-                className="w-full border border-slate-200 rounded-lg px-2 py-2 text-sm bg-white"
+                className="w-full ds-field bg-white"
               >
                 <option value="Maintenance">Maintenance</option>
                 <option value="Corpus">Corpus</option>
@@ -634,17 +638,17 @@ function EditModal({ txn, flats, onClose, onSaved, onSplit, onVoided }: {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
-        <div className="flex items-center justify-between p-5 border-b border-slate-100">
+        <div className="flex items-center justify-between p-5 border-b hairline">
           <div>
             <h3 className="font-semibold">Edit transaction</h3>
             <p className="text-sm text-slate-500 mt-0.5">{txn.value_date} · {formatINR(txn.amount)}</p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100"><X size={18} /></button>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[var(--ink-100)]"><X size={18} /></button>
         </div>
 
         <div className="p-5 space-y-4">
           {/* Full description + copy */}
-          <div className="bg-slate-50 rounded-lg p-3">
+          <div className="rounded-lg p-3" style={{ background: 'var(--ink-50)' }}>
             <p className="text-xs text-slate-600 break-words">{txn.description}</p>
             <button onClick={handleCopy}
               className="flex items-center gap-1 mt-2 text-xs text-slate-400 hover:text-slate-600 transition-colors">
@@ -657,9 +661,9 @@ function EditModal({ txn, flats, onClose, onSaved, onSplit, onVoided }: {
           </div>
 
           <div>
-            <label className="text-sm text-slate-600 block mb-1.5">Flat / Category</label>
+            <label className="ds-lbl">Flat / Category</label>
             <select value={flatCode} onChange={e => handleFlatChange(e.target.value)}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
+              className="w-full ds-field">
               <option value="">— Select —</option>
               <optgroup label="Flats">{FLAT_CODES.map(f => <option key={f} value={f}>{f}</option>)}</optgroup>
               <optgroup label="Expenses">{EXPENSE_CATS.map(c => <option key={c} value={c}>{c}</option>)}</optgroup>
@@ -668,9 +672,9 @@ function EditModal({ txn, flats, onClose, onSaved, onSplit, onVoided }: {
 
           {isFlat(flatCode) && (
             <div>
-              <label className="text-sm text-slate-600 block mb-1.5">Type</label>
+              <label className="ds-lbl">Type</label>
               <select value={category} onChange={e => handleCategoryChange(e.target.value)}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm">
+                className="w-full ds-field">
                 <option value="Maintenance">Maintenance</option>
                 <option value="Corpus">Corpus</option>
               </select>
@@ -695,10 +699,10 @@ function EditModal({ txn, flats, onClose, onSaved, onSplit, onVoided }: {
           </div>
 
           {/* Secondary actions */}
-          <div className="border-t border-slate-100 pt-3 flex gap-2">
+          <div className="border-t hairline pt-3 flex gap-2">
             {txn.cr_dr === 'CR' && (
               <button onClick={onSplit}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 text-sm text-slate-600 hover:bg-slate-50 flex-1 justify-center">
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 text-sm text-slate-600 hover:bg-[var(--ink-100)] flex-1 justify-center">
                 <Scissors size={13} /> Split
               </button>
             )}
@@ -715,7 +719,7 @@ function EditModal({ txn, flats, onClose, onSaved, onSplit, onVoided }: {
                   {voiding ? 'Voiding…' : 'Yes, void'}
                 </button>
                 <button onClick={() => setConfirmVoid(false)}
-                  className="px-3 py-1.5 rounded-lg border border-slate-300 text-sm hover:bg-slate-50">
+                  className="px-3 py-1.5 rounded-lg border border-slate-300 text-sm hover:bg-[var(--ink-100)]">
                   No
                 </button>
               </div>
@@ -780,19 +784,19 @@ function SplitModal({ txn, onClose, onSaved, flats }: {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-5 border-b border-slate-100">
+        <div className="flex items-center justify-between p-5 border-b hairline">
           <div>
             <h3 className="font-semibold">Split transaction</h3>
             <p className="text-sm text-slate-500 mt-0.5">Original: {formatINR(txn.amount)}</p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100"><X size={18} /></button>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[var(--ink-100)]"><X size={18} /></button>
         </div>
 
         <div className="p-5 space-y-3">
           {rows.map((row, i) => (
             <div key={i} className="flex gap-2 items-end">
               <div className="flex-1">
-                <label className="text-xs text-slate-500 block mb-1">Flat / Category</label>
+                <label className="ds-lbl">Flat / Category</label>
                 <select
                   value={row.flatCode}
                   onChange={e => {
@@ -800,7 +804,7 @@ function SplitModal({ txn, onClose, onSaved, flats }: {
                     updateRow(i, 'flatCode', v)
                     if (!FLAT_CODES.includes(v)) updateRow(i, 'category', v)
                   }}
-                  className="w-full border border-slate-200 rounded-lg px-2 py-2 text-sm"
+                  className="w-full ds-field"
                 >
                   <option value="">— Select —</option>
                   <optgroup label="Flats">{FLAT_CODES.map(f => <option key={f} value={f}>{f}</option>)}</optgroup>
@@ -809,14 +813,14 @@ function SplitModal({ txn, onClose, onSaved, flats }: {
               </div>
               {FLAT_CODES.includes(row.flatCode) && (
                 <div className="w-28">
-                  <label className="text-xs text-slate-500 block mb-1">Type</label>
+                  <label className="ds-lbl">Type</label>
                   <select
                     value={row.category}
                     onChange={e => {
                       updateRow(i, 'category', e.target.value)
                       updateRow(i, 'corpus', e.target.value === 'Corpus' ? 'YES' : 'NO')
                     }}
-                    className="w-full border border-slate-200 rounded-lg px-2 py-2 text-sm"
+                    className="w-full ds-field"
                   >
                     <option value="Maintenance">Maintenance</option>
                     <option value="Corpus">Corpus</option>
@@ -824,11 +828,11 @@ function SplitModal({ txn, onClose, onSaved, flats }: {
                 </div>
               )}
               <div className="w-28">
-                <label className="text-xs text-slate-500 block mb-1">Amount</label>
+                <label className="ds-lbl">Amount</label>
                 <input
                   type="number" value={row.amount} placeholder="0"
                   onChange={e => updateRow(i, 'amount', e.target.value)}
-                  className="w-full border border-slate-200 rounded-lg px-2 py-2 text-sm"
+                  className="w-full ds-field"
                 />
               </div>
               {rows.length > 2 && (
@@ -840,7 +844,7 @@ function SplitModal({ txn, onClose, onSaved, flats }: {
           ))}
 
           <button onClick={() => setRows(r => [...r, { flatCode: '', category: 'Maintenance', corpus: 'NO', amount: '' }])}
-            className="flex items-center gap-1.5 text-sm text-brand-700 hover:text-brand-900">
+            style={{ color: 'var(--brand-700)' }} className="flex items-center gap-1.5 text-sm hover:opacity-80">
             <Plus size={14} /> Add row
           </button>
 
@@ -852,7 +856,7 @@ function SplitModal({ txn, onClose, onSaved, flats }: {
           {error && <p className="text-sm text-red-600">{error}</p>}
         </div>
 
-        <div className="flex gap-2 p-5 border-t border-slate-100">
+        <div className="flex gap-2 p-5 border-t hairline">
           <button onClick={onClose} className="btn-secondary flex-1">Cancel</button>
           <button onClick={handleSave} disabled={saving || Math.abs(remaining) > 0.01} className="btn-primary flex-1">
             {saving ? 'Saving…' : 'Apply split'}
@@ -986,11 +990,11 @@ function AllTransactionsTab() {
   }), [])
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-3">
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-3">
         {/* Mode toggle */}
-        <div className="flex gap-1 bg-slate-100 rounded-lg p-0.5 text-sm">
+        <div className="flex gap-1 rounded-lg p-0.5 text-sm" style={{ background: 'var(--ink-100)' }}>
           {([
             { key: 'fy',     label: fy.label },
             { key: 'custom', label: 'Custom' },
@@ -1000,7 +1004,8 @@ function AllTransactionsTab() {
               key={key}
               onClick={() => setMode(key)}
               className={`px-3 py-1 rounded-md font-medium transition-colors
-                ${mode === key ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
+                ${mode === key ? 'bg-white shadow-sm' : 'hover:bg-[var(--ink-50)]'}`}
+              style={mode === key ? { color: 'var(--ink-900)' } : { color: 'var(--ink-500)' }}
             >
               {label}
             </button>
@@ -1013,13 +1018,13 @@ function AllTransactionsTab() {
             <input
               type="date" value={draftStart}
               onChange={e => setDraftStart(e.target.value)}
-              className="border border-slate-200 rounded-lg px-2 py-1 text-sm"
+              className="ds-field"
             />
-            <span className="text-slate-400 text-sm">to</span>
+            <span className="text-sm" style={{ color: 'var(--ink-400)' }}>to</span>
             <input
               type="date" value={draftEnd}
               onChange={e => setDraftEnd(e.target.value)}
-              className="border border-slate-200 rounded-lg px-2 py-1 text-sm"
+              className="ds-field"
             />
             <button
               onClick={handleApply}
@@ -1042,7 +1047,7 @@ function AllTransactionsTab() {
           <span className="text-sm text-slate-500">
             {data?.length ?? 0} rows{mode === 'all' ? ' (capped 2000)' : ''}
           </span>
-          <button onClick={handleExport} disabled={!data?.length} className="flex items-center gap-1.5 text-sm text-brand-700 hover:text-brand-900 disabled:opacity-40">
+          <button onClick={handleExport} disabled={!data?.length} style={{ color: 'var(--brand-700)' }} className="flex items-center gap-1.5 text-sm hover:opacity-80 disabled:opacity-40">
             <Download size={14} /> Export
           </button>
           <button onClick={() => refetch()} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700">
@@ -1053,7 +1058,7 @@ function AllTransactionsTab() {
 
       {/* Selected row action strip */}
       {selectedTxn && (
-        <div className="flex flex-wrap items-center gap-3 px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-xl text-sm">
+        <div className="flex flex-wrap items-center gap-3 px-4 py-2.5 rounded-xl text-sm" style={{ background: 'var(--brand-50)', border: '1px solid var(--brand-100)' }}>
           <div className="flex-1 min-w-0">
             <span className="font-semibold text-slate-800">{selectedTxn.flat_code}</span>
             <span className="mx-1.5 text-slate-400">·</span>
@@ -1072,7 +1077,8 @@ function AllTransactionsTab() {
           <div className="flex items-center gap-2 shrink-0">
             {canWrite && selectedTxn.row_type !== 'VOIDED' && (
               <button onClick={() => setShowEdit(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-brand-500 text-brand-600 text-sm font-medium hover:bg-brand-50">
+                style={{ borderColor: 'var(--brand-500)', color: 'var(--brand-600)' }}
+                className="flex items-center gap-1.5 border rounded-lg px-3 py-1.5 text-sm font-medium hover:bg-[var(--brand-50)]">
                 Edit
               </button>
             )}
@@ -1096,9 +1102,9 @@ function AllTransactionsTab() {
       )}
 
       {isLoading ? (
-        <div className="card h-64 animate-pulse bg-slate-100" />
+        <div className="h-64 animate-pulse rounded-[var(--ds-radius)]" style={{ background: 'var(--ink-100)' }} />
       ) : (
-        <div className="rounded-xl overflow-hidden border border-slate-200" style={{ height: 520 }}>
+        <div className="rounded-xl overflow-hidden border hairline" style={{ height: 520 }}>
           <AgGridReact
             ref={gridRef}
             rowData={data ?? []}
@@ -1114,7 +1120,7 @@ function AllTransactionsTab() {
               setShowEdit(false)
             }}
             getRowStyle={(params: any) => {
-              if (params.data?.id === selectedTxn?.id) return { background: '#eff6ff', opacity: 1, textDecoration: 'none' }
+              if (params.data?.id === selectedTxn?.id) return { background: 'var(--brand-50)', opacity: 1, textDecoration: 'none' }
               if (params.data?.row_type === 'VOIDED') return { background: '', opacity: 0.4, textDecoration: 'line-through' }
               return undefined
             }}
