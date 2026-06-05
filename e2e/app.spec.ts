@@ -256,6 +256,93 @@ test.describe('Flats', () => {
 })
 
 // ─────────────────────────────────────────────
+// Phase 9: RBAC & User Management
+// ─────────────────────────────────────────────
+
+test.describe('Phase 9 — Settings: Users tab', () => {
+  test.beforeEach(async ({ page }) => { await page.goto('/settings') })
+
+  test('Users tab is visible for admin', async ({ page }) => {
+    // The Users tab is adminOnly — the test user is admin@lilac.com (admin role)
+    await expect(page.getByRole('button', { name: /^users$/i })).toBeVisible({ timeout: 10_000 })
+  })
+
+  test('Users tab shows user grid with Add User button', async ({ page }) => {
+    await page.getByRole('button', { name: /^users$/i }).click()
+    // Grid header and Add User button should appear once the tab loads
+    await expect(page.getByRole('button', { name: /add user/i })).toBeVisible({ timeout: 10_000 })
+    // The user grid should show at least one row (the logged-in admin)
+    await expect(page.getByText(/admin@lilac\.com|admin/i).first()).toBeVisible({ timeout: 10_000 })
+  })
+
+  test('Add User dialog opens with required fields', async ({ page }) => {
+    await page.getByRole('button', { name: /^users$/i }).click()
+    await page.getByRole('button', { name: /add user/i }).click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible({ timeout: 5_000 })
+    // Dialog title
+    await expect(dialog.getByText(/add user/i)).toBeVisible()
+    // Required fields: Name, Mobile, Password, Role
+    await expect(dialog.getByLabel(/^name/i)).toBeVisible()
+    await expect(dialog.getByLabel(/^mobile/i)).toBeVisible()
+    await expect(dialog.getByLabel(/^password/i)).toBeVisible()
+    await expect(dialog.getByLabel(/^role/i)).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(dialog).not.toBeVisible()
+  })
+
+  test('Mobile hint appears in Add User dialog when mobile typed', async ({ page }) => {
+    await page.getByRole('button', { name: /^users$/i }).click()
+    await page.getByRole('button', { name: /add user/i }).click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible({ timeout: 5_000 })
+    // Type a 10-digit mobile — hint "Will log in as XXXXXXXXXX@lilac.com" should appear
+    await dialog.getByLabel(/^mobile/i).fill('9876543210')
+    await expect(dialog.getByText(/9876543210@lilac\.com/i)).toBeVisible({ timeout: 3_000 })
+    await page.keyboard.press('Escape')
+  })
+
+  test('Edit User dialog opens from pencil icon in user row', async ({ page }) => {
+    await page.getByRole('button', { name: /^users$/i }).click()
+    // Wait for at least one user row to render
+    await expect(page.getByRole('button', { name: /add user/i })).toBeVisible({ timeout: 10_000 })
+    // Click the first edit (pencil) button in the list
+    const editBtn = page.locator('button[title="Edit user"]').first()
+    await editBtn.waitFor({ timeout: 10_000 })
+    await editBtn.click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible({ timeout: 5_000 })
+    await expect(dialog.getByText(/edit user/i)).toBeVisible()
+    // Role select should be present
+    await expect(dialog.getByLabel(/^role/i)).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(dialog).not.toBeVisible()
+  })
+})
+
+test.describe('Phase 9 — Sidebar role badge', () => {
+  test('sidebar footer shows role badge for logged-in admin', async ({ page }) => {
+    await page.goto('/dashboard')
+    // On desktop (default viewport) the sidebar is always visible
+    // The role badge sits in the sidebar footer — look for "admin" text in that area
+    const sidebar = page.locator('aside')
+    await expect(sidebar).toBeVisible({ timeout: 10_000 })
+    // Role badge text is the raw role string ("admin" / "committee" / "auditor")
+    await expect(sidebar.getByText(/^admin$/i)).toBeVisible({ timeout: 5_000 })
+  })
+
+  test('sidebar footer shows user identifier', async ({ page }) => {
+    await page.goto('/dashboard')
+    const sidebar = page.locator('aside')
+    await expect(sidebar).toBeVisible({ timeout: 10_000 })
+    // The user label is the email without the @domain suffix, or full email
+    // For admin@lilac.com it strips the domain → "admin"
+    // We just assert that some non-empty user identifier text is visible
+    await expect(sidebar.locator('.text-slate-300').first()).toBeVisible({ timeout: 5_000 })
+  })
+})
+
+// ─────────────────────────────────────────────
 // Mobile: no horizontal overflow
 // ─────────────────────────────────────────────
 
