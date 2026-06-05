@@ -2,17 +2,28 @@ import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Building2, Eye, EyeOff, LogIn } from 'lucide-react'
 
+// 10-digit Indian mobile → number@lilac.com so Supabase email auth works transparently
+function toAuthEmail(input: string): string {
+  const digits = input.replace(/\D/g, '')
+  if (/^\d{10}$/.test(digits)) return `${digits}@lilac.com`
+  if (/^91\d{10}$/.test(digits)) return `${digits.slice(2)}@lilac.com`
+  return input // already an email
+}
+
 export default function LoginPage() {
-  const [email, setEmail]         = useState('')
-  const [password, setPassword]   = useState('')
-  const [showPass, setShowPass]   = useState(false)
-  const [loading, setLoading]     = useState(false)
-  const [error, setError]         = useState('')
+  const [login, setLogin]       = useState('')
+  const [password, setPassword] = useState('')
+  const [showPass, setShowPass] = useState(false)
+  const [loading, setLoading]   = useState(false)
+  const [error, setError]       = useState('')
+
+  const isPhone = /^\+?[\d\s-]{7,}$/.test(login) && !login.includes('@')
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     setError('')
+    const email = toAuthEmail(login.trim())
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     setLoading(false)
     if (error) setError(error.message)
@@ -24,8 +35,7 @@ export default function LoginPage() {
 
       {/* Logo block */}
       <div className="text-center mb-8 select-none">
-        <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl mb-5
-                        shadow-xl"
+        <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl mb-5 shadow-xl"
              style={{ background: 'rgba(255,255,255,0.12)', backdropFilter: 'blur(8px)' }}>
           <Building2 size={38} className="text-white" />
         </div>
@@ -39,7 +49,6 @@ export default function LoginPage() {
       <div className="w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden"
            style={{ background: 'rgba(255,255,255,0.97)' }}>
 
-        {/* Card header bar */}
         <div className="h-1.5 w-full" style={{ background: 'linear-gradient(90deg, #1a3c5e, #2e75b6)' }} />
 
         <form onSubmit={handleLogin} className="p-7 space-y-5">
@@ -48,20 +57,29 @@ export default function LoginPage() {
             <p className="text-slate-400 text-sm mt-1">Enter your credentials to continue</p>
           </div>
 
-          {/* Email */}
+          {/* Mobile / Email */}
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-slate-700">Email</label>
+            <label className="block text-sm font-medium text-slate-700">
+              Mobile number
+              <span className="text-slate-400 font-normal ml-1">(or email)</span>
+            </label>
             <input
-              type="email"
+              type="text"
+              inputMode="tel"
               required
-              autoComplete="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              placeholder="admin@example.com"
+              autoComplete="username"
+              value={login}
+              onChange={e => setLogin(e.target.value)}
+              placeholder="9876543210"
               className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm
                          bg-slate-50 focus:bg-white focus:outline-none focus:ring-2
                          focus:ring-brand-500 focus:border-transparent transition-all"
             />
+            {isPhone && (
+              <p className="text-xs text-slate-400">
+                Signing in as <span className="font-medium text-slate-600">{toAuthEmail(login.trim())}</span>
+              </p>
+            )}
           </div>
 
           {/* Password */}
@@ -90,14 +108,12 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {/* Error */}
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
               <p className="text-red-700 text-sm">{error}</p>
             </div>
           )}
 
-          {/* Submit */}
           <button
             type="submit"
             disabled={loading}
@@ -106,18 +122,15 @@ export default function LoginPage() {
                        disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ background: 'linear-gradient(135deg, #1a3c5e, #2e75b6)' }}
           >
-            {loading ? (
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            ) : (
-              <><LogIn size={16} /> Sign in</>
-            )}
+            {loading
+              ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              : <><LogIn size={16} /> Sign in</>
+            }
           </button>
         </form>
       </div>
 
-      <p className="mt-6 text-blue-300/60 text-xs">
-        Rajakil Pakkam · Chennai
-      </p>
+      <p className="mt-6 text-blue-300/60 text-xs">Rajakil Pakkam · Chennai</p>
     </div>
   )
 }

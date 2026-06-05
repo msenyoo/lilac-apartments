@@ -902,7 +902,7 @@ function UsersTab() {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-slate-500">Manage user roles. Changes take effect on next sign-in.</p>
+      <p className="text-sm text-slate-500">Manage user roles. Changes take effect immediately.</p>
 
       {isLoading ? (
         <div className="card h-40 animate-pulse bg-slate-100" />
@@ -912,28 +912,31 @@ function UsersTab() {
         </div>
       ) : (
         <div className="card overflow-hidden">
-          <div className="grid grid-cols-[1.5fr_0.8fr_1fr_1fr] px-4 py-2 bg-slate-50 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wide gap-3">
+          <div className="grid grid-cols-[2fr_1fr_0.8fr_0.8fr_1fr] px-4 py-2 bg-slate-50 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wide gap-3">
+            <span>Name / Mobile</span>
             <span>Email</span>
             <span>Role</span>
             <span>Last sign in</span>
-            <span>Joined</span>
+            <span>Change role</span>
           </div>
           <div className="divide-y divide-slate-100">
-            {(users as any[]).map(user => (
-              <div key={user.id} className="grid grid-cols-[1.5fr_0.8fr_1fr_1fr] px-4 py-3 text-sm gap-3 items-center">
-                <span className="text-slate-700 truncate text-xs">{user.email}</span>
-                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold w-fit ${userRoleBadgeClass(user.role)}`}>
-                  {user.role ?? '—'}
-                </span>
-                <span className="text-slate-400 text-xs">
-                  {user.last_sign_in_at
-                    ? new Date(user.last_sign_in_at).toLocaleDateString('en-IN', { dateStyle: 'short' })
-                    : '—'}
-                </span>
-                <div className="flex items-center justify-between gap-2">
+            {(users as any[]).map(user => {
+              const loginId = (user.auth_email ?? user.email ?? '')
+              const isMobile = loginId.endsWith('@lilac.com')
+              const mobileNum = isMobile ? loginId.replace('@lilac.com', '') : null
+              return (
+                <div key={user.id} className="grid grid-cols-[2fr_1fr_0.8fr_0.8fr_1fr] px-4 py-3 text-sm gap-3 items-center">
+                  <div>
+                    <p className="text-slate-800 text-xs font-medium">{user.display_name ?? '—'}</p>
+                    <p className="text-slate-400 text-xs">{mobileNum ?? loginId}</p>
+                  </div>
+                  <span className="text-slate-500 text-xs truncate">{user.contact_email ?? (isMobile ? '—' : loginId)}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold w-fit ${userRoleBadgeClass(user.role)}`}>
+                    {user.role ?? '—'}
+                  </span>
                   <span className="text-slate-400 text-xs">
-                    {user.created_at
-                      ? new Date(user.created_at).toLocaleDateString('en-IN', { dateStyle: 'short' })
+                    {user.last_sign_in_at
+                      ? new Date(user.last_sign_in_at).toLocaleDateString('en-IN', { dateStyle: 'short' })
                       : '—'}
                   </span>
                   <select
@@ -947,8 +950,8 @@ function UsersTab() {
                     ))}
                   </select>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}
