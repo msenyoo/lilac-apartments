@@ -10,7 +10,7 @@ import {
 import * as XLSX from 'xlsx'
 import { supabase, Transaction, ReviewEntry } from '@/lib/supabase'
 import {
-  parsePipeStatement, tagTransaction, getFiscalLabel,
+  parseStatement, tagTransaction, getFiscalLabel,
   getFiscalYear, getFiscalMonth, bankDateToISO, formatINR, FLAT_CODES,
 } from '@/lib/tagger'
 import { useRoleCtx } from '@/contexts/RoleContext'
@@ -112,8 +112,8 @@ function UploadTab({ onImported }: { onImported: () => void }) {
     setStage('parsing'); setError('')
     try {
       const text = await file.text()
-      const parsed = parsePipeStatement(text)
-      if (parsed.length === 0) throw new Error('No transactions found. Check this is a pipe-delimited bank statement.')
+      const parsed = parseStatement(text)
+      if (parsed.length === 0) throw new Error('No transactions found. Supported formats: ICICI PSV (.txt/.psv), or any CSV with Date / Description / Debit / Credit columns.')
 
       const { data: existingRaw } = await supabase.from('transactions').select('txn_id').not('txn_id', 'is', null)
       const existingIds = new Set((existingRaw ?? []).map(r => r.txn_id))
@@ -223,7 +223,7 @@ function UploadTab({ onImported }: { onImported: () => void }) {
           </div>
           <div className="text-center">
             <p className="font-semibold text-slate-700">Click to select or drag & drop</p>
-            <p className="text-sm text-slate-400 mt-1">Pipe-delimited .txt or .psv from ICICI bank</p>
+            <p className="text-sm text-slate-400 mt-1">ICICI PSV (.txt / .psv) or any bank CSV with Date, Description, Debit/Credit columns</p>
           </div>
           <input type="file" accept=".txt,.psv,.csv" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) parseFile(f) }} />
         </label>

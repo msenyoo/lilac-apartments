@@ -137,16 +137,75 @@ export function getFiscalMonth(dateStr: string): string {
   return MONTHS[d.getMonth()]
 }
 
-// ── PIPE FILE PARSER ──────────────────────────────────────────
+// ── STATEMENT PARSERS ─────────────────────────────────────────
 export interface ParsedTransaction {
   txnId:       string
-  valueDate:   string
-  postedDate:  string
+  valueDate:   string   // DD/MM/YYYY
+  postedDate:  string   // DD/MM/YYYY
   description: string
   crDr:        'CR' | 'DR'
   amount:      number
 }
 
+// Convert any common date format → DD/MM/YYYY for downstream consistency
+function normaliseToDMY(raw: string): string {
+  const s = raw.trim()
+  // Already DD/MM/YYYY
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) return s
+  // DD-MM-YYYY
+  if (/^\d{2}-\d{2}-\d{4}$/.test(s)) return s.replace(/-/g, '/')
+  // YYYY-MM-DD (ISO)
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`
+  // DD/MM/YY
+  const dmy2 = s.match(/^(\d{1,2})[/\-](\d{1,2})[/\-](\d{2})$/)
+  if (dmy2) {
+    const yr = parseInt(dmy2[3]) > 50 ? `19${dmy2[3]}` : `20${dmy2[3]}`
+    return `${dmy2[1].padStart(2,'0')}/${dmy2[2].padStart(2,'0')}/${yr}`
+  }
+  // DD MMM YYYY (e.g. "01 Jan 2024")
+  const dMonY = s.match(/^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})$/)
+  if (dMonY) {
+    const MM: Record<string,string> = {
+      jan:'01',feb:'02',mar:'03',apr:'04',may:'05',jun:'06',
+      jul:'07',aug:'08',sep:'09',oct:'10',nov:'11',dec:'12',
+    }
+    const mm = MM[dMonY[2].toLowerCase()] ?? '01'
+    return `${dMonY[1].padStart(2,'0')}/${mm}/${dMonY[3]}`
+  }
+  return s
+}
+
+// Split a CSV line respecting double-quoted fields
+function splitCsvLine(line: string, delim = ','): string[] {
+  const fields: string[] = []
+  let inQ = false, cur = ''
+  for (const ch of line) {
+    if (ch === '"') { inQ = !inQ }
+    else if (ch === delim && !inQ) { fields.push(cur.trim()); cur = '' }
+    else cur += ch
+  }
+  fields.push(cur.trim())
+  return fields
+}
+
+interface ColMap { date: number; desc: number; debit: number; credit: number; txnId: number }
+
+function detectCsvCols(headers: string[]): ColMap | null {
+  const h = headers.map(s => s.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').trim())
+  const find = (...terms: string[]) => h.findIndex(s => terms.some(t => s.includes(t)))
+
+  const date   = find('value date', 'txn date', 'transaction date', 'date')
+  const desc   = find('transaction remarks', 'narration', 'description', 'particulars', 'remark')
+  const debit  = find('withdrawal', 'debit', ' dr ')
+  const credit = find('deposit', 'credit', ' cr ')
+  const txnId  = find('transaction id', 'ref no', 'chq no', 'cheque no', 'reference')
+
+  if (date < 0 || desc < 0 || (debit < 0 && credit < 0)) return null
+  return { date, desc, debit, credit, txnId }
+}
+
+// ICICI pipe-delimited PSV (legacy format)
 export function parsePipeStatement(rawText: string): ParsedTransaction[] {
   const lines = rawText.split(/\r?\n/)
   const results: ParsedTransaction[] = []
@@ -156,17 +215,14 @@ export function parsePipeStatement(rawText: string): ParsedTransaction[] {
     const trimmed = line.trim()
     if (!trimmed) continue
     if (trimmed.includes('Transaction ID') && trimmed.includes('Description')) {
-      headerFound = true
-      continue
+      headerFound = true; continue
     }
     if (!headerFound) continue
     const cols = trimmed.split('|')
     if (cols.length < 8) continue
     if (!/^\d+$/.test(cols[0].trim())) continue
-
     const crDr = cols[6].trim().toUpperCase()
     if (crDr !== 'CR' && crDr !== 'DR') continue
-
     results.push({
       txnId:       cols[1].trim(),
       valueDate:   cols[2].trim(),
@@ -176,8 +232,67 @@ export function parsePipeStatement(rawText: string): ParsedTransaction[] {
       amount:      parseFloat(cols[7].trim().replace(/,/g, '')) || 0,
     })
   }
-
   return results
+}
+
+// Generic CSV (comma or semicolon delimited) — auto-detects columns from header row
+export function parseCsvStatement(rawText: string): ParsedTransaction[] {
+  const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+
+  // Detect delimiter
+  const sample = lines.slice(0, 5).join('\n')
+  const delim = (sample.match(/;/g)?.length ?? 0) > (sample.match(/,/g)?.length ?? 0) ? ';' : ','
+
+  // Find header row (within first 20 lines)
+  let headerIdx = -1
+  let map: ColMap | null = null
+  for (let i = 0; i < Math.min(lines.length, 20); i++) {
+    const cols = splitCsvLine(lines[i], delim)
+    map = detectCsvCols(cols)
+    if (map) { headerIdx = i; break }
+  }
+  if (headerIdx < 0 || !map) return []
+
+  const m = map
+  const results: ParsedTransaction[] = []
+
+  for (let i = headerIdx + 1; i < lines.length; i++) {
+    const cols = splitCsvLine(lines[i], delim)
+    if (cols.length <= Math.max(m.date, m.desc)) continue
+
+    const dateRaw = cols[m.date] ?? ''
+    const desc    = cols[m.desc] ?? ''
+    if (!dateRaw || !desc) continue
+
+    const debitAmt  = m.debit  >= 0 ? parseFloat((cols[m.debit]  ?? '').replace(/,/g, '')) || 0 : 0
+    const creditAmt = m.credit >= 0 ? parseFloat((cols[m.credit] ?? '').replace(/,/g, '')) || 0 : 0
+    if (debitAmt === 0 && creditAmt === 0) continue
+
+    const crDr: 'CR' | 'DR' = creditAmt > 0 ? 'CR' : 'DR'
+    const dmy = normaliseToDMY(dateRaw)
+
+    results.push({
+      txnId:       m.txnId >= 0 ? (cols[m.txnId] ?? '') : '',
+      valueDate:   dmy,
+      postedDate:  dmy,
+      description: desc,
+      crDr,
+      amount:      creditAmt > 0 ? creditAmt : debitAmt,
+    })
+  }
+  return results
+}
+
+// Auto-detect format and parse
+export function parseStatement(rawText: string): ParsedTransaction[] {
+  const head = rawText.slice(0, 2000)
+  const pipeCount  = (head.match(/\|/g) ?? []).length
+  const commaCount = (head.match(/,/g)  ?? []).length
+  if (pipeCount > commaCount) return parsePipeStatement(rawText)
+  const csvRows = parseCsvStatement(rawText)
+  if (csvRows.length > 0) return csvRows
+  // Fallback: try PSV even if fewer pipes
+  return parsePipeStatement(rawText)
 }
 
 export function formatINR(amount: number): string {
