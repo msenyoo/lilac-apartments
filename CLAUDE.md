@@ -82,8 +82,9 @@ npx playwright test --project="Mobile Chrome"
 | `src/contexts/RoleContext.tsx` | `useRoleCtx()` — role available app-wide |
 | `src/components/HelpButton.tsx` | Floating ? help panel (context-aware per page) |
 | `src/components/reports/AgmPdfDocs.tsx` | AGM PDF templates (lazy-loaded) |
-| `supabase/migrations/` | All schema migrations (001–013) |
-| `e2e/app.spec.ts` | Playwright e2e (36 tests, all passing) |
+| `supabase/migrations/` | All schema migrations (001–014) |
+| `supabase/functions/create-user/index.ts` | Edge Function: admin-only user creation |
+| `e2e/app.spec.ts` | Playwright e2e (43 tests, all passing) |
 
 ---
 
@@ -130,16 +131,7 @@ const { isAdmin, canWrite, canApprove } = useRoleCtx()
 
 ## Migrations — Apply Order
 
-Migrations 001–011 are applied to production.
-Migrations 012–013 are written but **not yet applied**:
-
-1. **012_audit_log.sql** — safe to apply anytime (additive only)
-2. **013_user_roles.sql** — ⚠️ SEED ADMIN FIRST or all writes break:
-   ```sql
-   INSERT INTO public.user_roles (user_id, role)
-   SELECT id, 'admin' FROM auth.users WHERE email = 'msenyoo@gmail.com'
-   ON CONFLICT (user_id) DO UPDATE SET role = 'admin';
-   ```
+All migrations 001–014 are applied to production.
 
 ---
 
