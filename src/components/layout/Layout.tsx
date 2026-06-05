@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useQuery } from '@tanstack/react-query'
+import HelpButton from '@/components/HelpButton'
 
 const NAV = [
   { to: '/dashboard',    icon: LayoutDashboard,  label: 'Dashboard' },
@@ -181,6 +182,9 @@ export default function Layout() {
           </div>
         </main>
       </div>
+
+      {/* ── Floating help button ────────────────────────────────── */}
+      <HelpButton />
 
       {/* ── Mobile bottom nav bar ─────────────────────────────── */}
       <nav className="fixed bottom-0 inset-x-0 z-40 lg:hidden bg-white border-t border-slate-200">
