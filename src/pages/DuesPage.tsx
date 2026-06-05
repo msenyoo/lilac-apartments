@@ -87,33 +87,57 @@ export default function DuesPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-5 fade-in">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
-          <h2 className="text-xl font-semibold">Dues tracker</h2>
-          <p className="text-sm text-slate-500 mt-0.5">{fyLabel} maintenance outstanding{!sameYear && ' (carry-forward)'}</p>
+          <h1 className="text-[24px] font-extrabold">Dues tracker</h1>
+          <p className="text-[13.5px] mt-1" style={{ color: 'var(--ink-500)' }}>
+            {fyLabel} maintenance outstanding{!sameYear && ' (carry-forward)'}
+          </p>
         </div>
-        <button onClick={handleExport} disabled={!data?.length}
-          className="flex items-center gap-1.5 text-sm text-brand-700 hover:text-brand-900 disabled:opacity-40">
+        <button
+          onClick={handleExport}
+          disabled={!data?.length}
+          className="flex items-center gap-2 px-3.5 py-2 rounded-[10px] border hairline font-semibold text-[13.5px] disabled:opacity-40"
+          style={{ color: 'var(--ink-700)' }}
+        >
           <Download size={14} /> Export
         </button>
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <SummaryCard label="Total pending" value={formatINR(totalPending)} color="text-red-600" bg="bg-red-50" />
-        <SummaryCard label="Due (0 paid)"  value={String(counts.Due)}     color="text-red-600"   bg="bg-red-50" />
-        <SummaryCard label="Partial"        value={String(counts.Partial)} color="text-amber-600" bg="bg-amber-50" />
-        <SummaryCard label="Clear"          value={String(counts.Clear)}   color="text-green-600" bg="bg-green-50" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+        {[
+          { label: 'Total pending', value: formatINR(totalPending), tone: 'bad' },
+          { label: 'Due (0 paid)',  value: String(counts.Due),      tone: 'bad' },
+          { label: 'Partial',       value: String(counts.Partial),  tone: 'warn' },
+          { label: 'Clear',         value: String(counts.Clear),    tone: 'ok' },
+        ].map(({ label, value, tone }) => (
+          <div
+            key={label}
+            className="surface !p-4"
+            style={{
+              background: tone === 'bad' ? 'var(--bad-bg)' : tone === 'warn' ? 'var(--warn-bg)' : tone === 'ok' ? 'var(--ok-bg)' : '#fff',
+            }}
+          >
+            <p className="text-[12px] font-medium mb-1" style={{ color: 'var(--ink-500)' }}>{label}</p>
+            <p
+              className="text-[26px] font-bold leading-tight tnum"
+              style={{ color: tone === 'bad' ? 'var(--bad)' : tone === 'warn' ? 'var(--warn)' : tone === 'ok' ? 'var(--ok)' : 'var(--ink-800)' }}
+            >
+              {value}
+            </p>
+          </div>
+        ))}
       </div>
 
-      {/* Grid + detail panel — stacks vertically on mobile */}
+      {/* Grid + detail panel */}
       <div className="flex flex-col lg:flex-row gap-4">
         <div className="flex-1 min-w-0">
           {isLoading ? (
-            <div className="card h-64 animate-pulse bg-slate-100" />
+            <div className="surface h-64 animate-pulse" style={{ background: 'var(--ink-100)' }} />
           ) : (
-            <div className="rounded-xl overflow-hidden border border-slate-200" style={{ height: 480 }}>
+            <div className="overflow-hidden border hairline" style={{ borderRadius: 'var(--ds-radius)', height: 480 }}>
               <AgGridReact
                 ref={gridRef}
                 rowData={data ?? []}
@@ -121,26 +145,16 @@ export default function DuesPage() {
                 defaultColDef={{ sortable: true, resizable: true, filter: true, floatingFilter: true }}
                 rowSelection={{ mode: 'singleRow' }}
                 onRowClicked={e => setSelectedFlat(e.data)}
-                getRowStyle={(p: any) => p.data?.flat_code === selectedFlat?.flat_code ? { background: '#eff6ff' } : undefined}
+                getRowStyle={(p: any) => p.data?.flat_code === selectedFlat?.flat_code ? { background: 'var(--brand-50)' } : undefined}
               />
             </div>
           )}
         </div>
 
-        {/* Flat detail panel */}
         {selectedFlat && (
           <FlatPaymentPanel flat={selectedFlat} fiscalYear={parseInt(fiscalYear)} startFiscalYear={parseInt(startFY)} onClose={() => setSelectedFlat(null)} />
         )}
       </div>
-    </div>
-  )
-}
-
-function SummaryCard({ label, value, color, bg }: { label: string; value: string; color: string; bg: string }) {
-  return (
-    <div className={`card p-4 ${bg}`}>
-      <p className="text-xs text-slate-500 mb-1">{label}</p>
-      <p className={`text-2xl font-bold ${color}`}>{value}</p>
     </div>
   )
 }
@@ -201,49 +215,52 @@ function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat
   }
 
   return (
-    <div className="w-full lg:w-72 shrink-0 space-y-3">
-      <div className="card p-4 space-y-3">
+    <div className="w-full lg:w-72 shrink-0 flex flex-col gap-3">
+      <div className="surface !p-4 flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="font-semibold">{flat.flat_code} — {flat.bhk_type}</h3>
-            <p className="text-xs text-slate-400 mt-0.5">Block {flat.block}</p>
+            <h3 className="font-bold text-[15px]">{flat.flat_code} — {flat.bhk_type}</h3>
+            <p className="text-[12px] mt-0.5" style={{ color: 'var(--ink-400)' }}>Block {flat.block}</p>
           </div>
-          <button onClick={onClose} className="p-1 rounded hover:bg-slate-100"><X size={15} /></button>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[var(--ink-100)]" style={{ color: 'var(--ink-500)' }}>
+            <X size={15} />
+          </button>
         </div>
 
-        <div className="space-y-1.5 text-sm">
-          <div className="flex justify-between">
-            <span className="text-slate-500">Rate/mo</span>
-            <span className="font-medium">{formatINR(flat.maintenance_amt)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-slate-500">Annual due</span>
-            <span className="font-medium">{formatINR(flat.annual_due)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-slate-500">Collected</span>
-            <span className="font-medium text-green-700">{formatINR(flat.collected_fy)}</span>
-          </div>
-          <div className="flex justify-between border-t border-slate-100 pt-1.5">
-            <span className="text-slate-500">Pending</span>
-            <span className={`font-semibold ${flat.pending > 0 ? 'text-red-600' : 'text-green-600'}`}>
+        <div className="flex flex-col gap-1.5 text-[13.5px]">
+          {[
+            { label: 'Rate/mo',    val: formatINR(flat.maintenance_amt), special: '' },
+            { label: 'Annual due', val: formatINR(flat.annual_due),      special: '' },
+            { label: 'Collected',  val: formatINR(flat.collected_fy),    special: 'ok' },
+          ].map(({ label, val, special }) => (
+            <div key={label} className="flex justify-between">
+              <span style={{ color: 'var(--ink-500)' }}>{label}</span>
+              <span className="font-medium" style={{ color: special === 'ok' ? 'var(--ok)' : 'var(--ink-800)' }}>{val}</span>
+            </div>
+          ))}
+          <div className="flex justify-between border-t hairline pt-1.5">
+            <span style={{ color: 'var(--ink-500)' }}>Pending</span>
+            <span className="font-bold" style={{ color: flat.pending > 0 ? 'var(--bad)' : 'var(--ok)' }}>
               {flat.pending > 0 ? formatINR(flat.pending) : '✓ Clear'}
             </span>
           </div>
         </div>
 
-        {/* Progress bar */}
-        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+        <div className="ds-track">
           <div
-            className={`h-2 rounded-full transition-all ${flat.status === 'Clear' ? 'bg-green-500' : flat.status === 'Partial' ? 'bg-amber-400' : 'bg-red-400'}`}
-            style={{ width: `${Math.min(100, (flat.collected_fy / flat.annual_due) * 100)}%` }}
+            className="ds-track-fill"
+            style={{
+              width: `${Math.min(100, (flat.collected_fy / flat.annual_due) * 100)}%`,
+              background: flat.status === 'Clear' ? 'var(--ok)' : flat.status === 'Partial' ? 'var(--warn)' : 'var(--bad)',
+            }}
           />
         </div>
 
         {flat.pending > 0 && (
           <button
             onClick={handleCopyReminder}
-            className="w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-green-200 bg-green-50 text-green-700 text-sm font-medium hover:bg-green-100 transition-colors"
+            className="w-full flex items-center justify-center gap-2 py-2 rounded-[10px] border font-medium text-[13px] transition-colors"
+            style={{ borderColor: 'var(--ok-bd)', background: 'var(--ok-bg)', color: 'var(--ok)' }}
           >
             {copied
               ? <><Check size={14} /> Copied!</>
@@ -253,21 +270,21 @@ function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat
         )}
       </div>
 
-      <div className="card p-4">
-        <h4 className="font-medium text-sm mb-3 flex items-center gap-1.5">
-          <TrendingDown size={14} className="text-slate-400" /> Payment history
+      <div className="surface !p-4">
+        <h4 className="font-semibold text-[13px] mb-3 flex items-center gap-1.5" style={{ color: 'var(--ink-700)' }}>
+          <TrendingDown size={14} style={{ color: 'var(--ink-400)' }} /> Payment history
         </h4>
         {!payments?.length ? (
-          <p className="text-sm text-slate-400">No payments yet</p>
+          <p className="text-[13px]" style={{ color: 'var(--ink-400)' }}>No payments yet</p>
         ) : (
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             {payments.map(p => (
-              <div key={p.id} className="flex justify-between text-sm">
+              <div key={p.id} className="flex justify-between text-[13px]">
                 <div>
                   <p className="font-medium">{p.fiscal_label}</p>
-                  <p className="text-xs text-slate-400">{p.value_date}</p>
+                  <p className="text-[11.5px] mono" style={{ color: 'var(--ink-400)' }}>{p.value_date}</p>
                 </div>
-                <p className="font-semibold text-green-700">{formatINR(p.amount)}</p>
+                <p className="font-bold" style={{ color: 'var(--ok)' }}>{formatINR(p.amount)}</p>
               </div>
             ))}
           </div>

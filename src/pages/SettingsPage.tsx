@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
-import { Save, RefreshCw, Plus, Pencil, Zap, Eye, EyeOff } from 'lucide-react'
+import { Save, RefreshCw, Plus, Pencil, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -17,43 +17,47 @@ import { useRoleCtx } from '@/contexts/RoleContext'
 const FY_OPTIONS = ['2022','2023','2024','2025','2026','2027','2028']
 function fyLabel(y: string) { return `FY ${y}-${String(parseInt(y) + 1).slice(-2)}` }
 
-type SettingsTab = 'general' | 'rates' | 'categories' | 'imports' | 'audit' | 'users'
+type SettingsTab = 'general' | 'rates' | 'categories' | 'imports'
 
 export default function SettingsPage() {
   const [tab, setTab] = useState<SettingsTab>('general')
-  const { isAdmin, canWrite } = useRoleCtx()
+  const { canWrite } = useRoleCtx()
 
-  const allTabs: { key: SettingsTab; label: string; adminOnly?: boolean }[] = [
+  const TABS: { key: SettingsTab; label: string }[] = [
     { key: 'general',    label: 'General' },
     { key: 'rates',      label: 'Maintenance Rates' },
     { key: 'categories', label: 'Expense Categories' },
     { key: 'imports',    label: 'Import History' },
-    { key: 'audit',      label: 'Audit Log' },
-    { key: 'users',      label: 'Users', adminOnly: true },
   ]
 
-  const visibleTabs = allTabs.filter(t => !t.adminOnly || isAdmin)
-
   return (
-    <div className="space-y-4 max-w-3xl">
+    <div className="flex flex-col gap-5 fade-in max-w-3xl">
       <div>
-        <h2 className="text-xl font-semibold">Settings</h2>
-        <p className="text-sm text-slate-500 mt-0.5">App configuration</p>
+        <h1 className="text-[24px] font-extrabold">Settings</h1>
+        <p className="text-[13.5px] mt-1" style={{ color: 'var(--ink-500)' }}>App configuration</p>
       </div>
 
       {!canWrite && (
-        <div className="flex items-center gap-2 px-3 py-2 mb-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
-          <span>Read-only access — contact the administrator to make changes.</span>
+        <div
+          className="px-4 py-3 rounded-[10px] border text-[13px]"
+          style={{ background: 'var(--warn-bg)', borderColor: 'var(--warn-bd)', color: 'var(--warn)' }}
+        >
+          Read-only access — contact the administrator to make changes.
         </div>
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 flex-wrap">
-        {visibleTabs.map(({ key, label }) => (
-          <button key={key} onClick={() => setTab(key)}
-            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-              tab === key ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'
-            }`}>
+      <div className="flex gap-1 p-1 rounded-[12px] flex-wrap" style={{ background: 'var(--ink-100)' }}>
+        {TABS.map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            className="px-4 py-1.5 rounded-[9px] text-[13.5px] font-medium transition-colors"
+            style={tab === key
+              ? { background: '#fff', color: 'var(--ink-900)', boxShadow: '0 1px 4px rgba(26,24,32,.10)' }
+              : { color: 'var(--ink-500)' }
+            }
+          >
             {label}
           </button>
         ))}
@@ -63,8 +67,6 @@ export default function SettingsPage() {
       {tab === 'rates'      && <RateHistorySettings />}
       {tab === 'categories' && <CategoriesSettings />}
       {tab === 'imports'    && <UploadHistorySection />}
-      {tab === 'audit'      && <AuditLogTab />}
-      {tab === 'users'      && isAdmin && <UsersTab />}
     </div>
   )
 }
@@ -107,63 +109,59 @@ function GeneralSettings() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="card p-5 space-y-4">
-        <h3 className="font-semibold">Dues configuration</h3>
+    <div className="flex flex-col gap-4">
+      <div className="surface !p-5 flex flex-col gap-4">
+        <p className="font-semibold text-[14px]">Dues configuration</p>
         <div className="max-w-xs">
-          <label className="text-sm text-slate-600 block mb-1">Carry-forward from</label>
-          <p className="text-xs text-slate-400 mb-2">Unpaid dues before this FY are ignored</p>
+          <label className="ds-lbl mb-1 block">Carry-forward from</label>
+          <p className="text-[11.5px] mb-2" style={{ color: 'var(--ink-400)' }}>Unpaid dues before this FY are ignored</p>
           <select
             value={workingStartFY}
             onChange={e => setDuesStartFY(e.target.value)}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white"
+            className="ds-field"
           >
             {FY_OPTIONS.map(y => <option key={y} value={y}>{fyLabel(y)}</option>)}
           </select>
         </div>
       </div>
 
-      <div className="card p-5 space-y-4">
-        <h3 className="font-semibold">Collection payment details</h3>
-        <p className="text-xs text-slate-400 -mt-2">Used in WhatsApp reminder messages sent to residents</p>
-        <div className="space-y-3 max-w-md">
+      <div className="surface !p-5 flex flex-col gap-4">
+        <div>
+          <p className="font-semibold text-[14px]">Collection payment details</p>
+          <p className="text-[12px] mt-0.5" style={{ color: 'var(--ink-400)' }}>Used in WhatsApp reminder messages sent to residents</p>
+        </div>
+        <div className="flex flex-col gap-3 max-w-md">
           <div>
-            <label className="text-sm text-slate-600 block mb-1">UPI ID</label>
-            <Input
-              value={workingUpi}
-              onChange={e => setCollectionUpi(e.target.value)}
-              placeholder="e.g. lilacapts@upi"
-              className="text-sm"
-            />
+            <label className="ds-lbl mb-1 block">UPI ID</label>
+            <Input value={workingUpi} onChange={e => setCollectionUpi(e.target.value)} placeholder="e.g. lilacapts@upi" className="text-sm" />
           </div>
           <div>
-            <label className="text-sm text-slate-600 block mb-1">Bank transfer details</label>
-            <Input
-              value={workingBank}
-              onChange={e => setCollectionBank(e.target.value)}
-              placeholder="e.g. A/c: 1234567890, IFSC: HDFC0001234, Name: Lilac Apt Association"
-              className="text-sm"
-            />
+            <label className="ds-lbl mb-1 block">Bank transfer details</label>
+            <Input value={workingBank} onChange={e => setCollectionBank(e.target.value)} placeholder="e.g. A/c: 1234567890, IFSC: HDFC0001234" className="text-sm" />
           </div>
         </div>
       </div>
 
       {isAdmin && (
         <div className="flex">
-          <button onClick={handleSave} disabled={saving || isLoading}
-            className="btn-primary flex items-center gap-2">
+          <button
+            onClick={handleSave}
+            disabled={saving || isLoading}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-[10px] text-white font-semibold text-[14px] disabled:opacity-50"
+            style={{ background: 'var(--brand-600)' }}
+          >
             {saving ? <RefreshCw size={15} className="animate-spin" /> : <Save size={15} />}
             {saved ? 'Saved!' : 'Save settings'}
           </button>
         </div>
       )}
 
-      <div className="card p-5 space-y-2">
-        <h3 className="font-semibold">About</h3>
-        <div className="space-y-1 text-sm text-slate-500">
+      <div className="surface !p-5 flex flex-col gap-2">
+        <p className="font-semibold text-[14px]">About</p>
+        <div className="flex flex-col gap-1 text-[13px]" style={{ color: 'var(--ink-500)' }}>
           <p>Lilac Apartment Association · Rajakil Pakkam, Chennai</p>
           <p>44 flats · A–E blocks</p>
-          <p className="text-xs mt-2 text-slate-400">React 18 + Supabase · Built for association committee use</p>
+          <p className="text-[11.5px] mt-1" style={{ color: 'var(--ink-400)' }}>React 18 + Supabase · Built for association committee use</p>
         </div>
       </div>
     </div>
@@ -216,11 +214,11 @@ function RateHistorySettings() {
     : currentRates.filter(r => r.flat?.block === filterBlock)
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <p className="text-sm text-slate-600">Current maintenance rates per flat. Changes apply forward-only from the effective date.</p>
-        </div>
+        <p className="text-[13px]" style={{ color: 'var(--ink-500)' }}>
+          Current maintenance rates per flat. Changes apply forward-only from the effective date.
+        </p>
         {isAdmin && (
           <Button onClick={() => setAddOpen(true)} className="flex items-center gap-2">
             <Plus size={15} /> Add Rate Change
@@ -231,10 +229,15 @@ function RateHistorySettings() {
       {/* Block filter */}
       <div className="flex gap-1 flex-wrap">
         {['all', ...blocks].map(b => (
-          <button key={b} onClick={() => setFilterBlock(b)}
-            className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
-              filterBlock === b ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}>
+          <button
+            key={b}
+            onClick={() => setFilterBlock(b)}
+            className="px-3 py-1 rounded-lg text-[12px] font-medium transition-colors"
+            style={filterBlock === b
+              ? { background: 'var(--brand-600)', color: '#fff' }
+              : { background: 'var(--ink-100)', color: 'var(--ink-600)' }
+            }
+          >
             {b === 'all' ? 'All blocks' : `Block ${b}`}
           </button>
         ))}
@@ -242,43 +245,48 @@ function RateHistorySettings() {
 
       {/* Current rates table */}
       {isLoading ? (
-        <div className="card h-32 animate-pulse bg-slate-100" />
+        <div className="surface h-32 animate-pulse" style={{ background: 'var(--ink-100)' }} />
       ) : (
-        <div className="card divide-y divide-slate-100">
-          <div className="grid grid-cols-4 px-4 py-2 bg-slate-50 rounded-t-xl text-xs font-semibold text-slate-500 uppercase tracking-wide">
-            <span>Flat</span>
-            <span>Block</span>
-            <span className="text-right">Current rate</span>
-            <span className="text-right">Effective from</span>
+        <div className="surface !p-0 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="ds-tbl">
+              <thead>
+                <tr>
+                  {['Flat', 'Block', 'Current rate', 'Effective from'].map(c => <th key={c}>{c}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {filteredCurrent.length === 0 ? (
+                  <tr><td colSpan={4} className="text-center py-8" style={{ color: 'var(--ink-400)' }}>No rates found</td></tr>
+                ) : (
+                  filteredCurrent.map(r => (
+                    <tr key={r.id}>
+                      <td className="font-semibold">{r.flat?.code}</td>
+                      <td style={{ color: 'var(--ink-500)' }}>{r.flat?.block}</td>
+                      <td className="font-semibold tnum">{formatINR(r.monthly_rate)}/mo</td>
+                      <td className="mono text-[12px]" style={{ color: 'var(--ink-400)' }}>{r.effective_from}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
-          {filteredCurrent.length === 0 ? (
-            <p className="px-4 py-6 text-sm text-slate-400 text-center">No rates found</p>
-          ) : (
-            filteredCurrent.map(r => (
-              <div key={r.id} className="grid grid-cols-4 px-4 py-3 text-sm items-center">
-                <span className="font-medium text-slate-800">{r.flat?.code}</span>
-                <span className="text-slate-500">{r.flat?.block}</span>
-                <span className="text-right font-semibold text-slate-800">{formatINR(r.monthly_rate)}/mo</span>
-                <span className="text-right text-slate-500">{r.effective_from}</span>
-              </div>
-            ))
-          )}
         </div>
       )}
 
-      {/* Rate change history (last 10 closed periods) */}
+      {/* Rate change history */}
       {rates.filter(r => r.effective_to).length > 0 && (
-        <div className="card">
-          <div className="px-4 py-3 border-b border-slate-100">
-            <p className="text-sm font-semibold text-slate-700">Rate change history</p>
+        <div className="surface !p-0 overflow-hidden">
+          <div className="px-5 py-3 border-b hairline">
+            <p className="text-[13px] font-semibold" style={{ color: 'var(--ink-700)' }}>Rate change history</p>
           </div>
-          <div className="divide-y divide-slate-100">
+          <div className="divide-rows">
             {rates.filter(r => r.effective_to).slice(0, 20).map(r => (
-              <div key={r.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
-                <span className="font-medium w-12 shrink-0">{r.flat?.code}</span>
-                <span className="text-slate-500 flex-1">{formatINR(r.monthly_rate)}/mo</span>
-                <span className="text-slate-400 text-xs">{r.effective_from} → {r.effective_to}</span>
-                {r.notes && <span className="text-xs text-slate-400 truncate max-w-32">{r.notes}</span>}
+              <div key={r.id} className="flex items-center gap-3 px-5 py-3 text-[13px]">
+                <span className="font-semibold w-12 shrink-0">{r.flat?.code}</span>
+                <span className="flex-1" style={{ color: 'var(--ink-500)' }}>{formatINR(r.monthly_rate)}/mo</span>
+                <span className="mono text-[11.5px]" style={{ color: 'var(--ink-400)' }}>{r.effective_from} → {r.effective_to}</span>
+                {r.notes && <span className="text-[11.5px] truncate max-w-32" style={{ color: 'var(--ink-400)' }}>{r.notes}</span>}
               </div>
             ))}
           </div>
@@ -506,12 +514,12 @@ function CategoriesSettings() {
     qc.invalidateQueries({ queryKey: ['expense-categories'] })
   }
 
-  if (isLoading) return <div className="card h-40 animate-pulse bg-slate-100" />
+  if (isLoading) return <div className="surface h-40 animate-pulse" style={{ background: 'var(--ink-100)' }} />
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-500">
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[13px]" style={{ color: 'var(--ink-500)' }}>
           Categories marked as utility appear in the Utility report tab with per-block tracking.
         </p>
         {isAdmin && (
@@ -524,46 +532,44 @@ function CategoriesSettings() {
       {(['Maintenance', 'Corpus'] as const).map(budgetType => {
         const rows = budgetType === 'Maintenance' ? maintenance : corpus
         return (
-          <div key={budgetType} className="card overflow-hidden">
-            <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-100">
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{budgetType}</p>
+          <div key={budgetType} className="surface !p-0 overflow-hidden">
+            <div className="px-5 py-2.5 border-b hairline" style={{ background: 'var(--ink-50)' }}>
+              <p className="text-[11.5px] font-bold uppercase tracking-wide" style={{ color: 'var(--ink-400)' }}>{budgetType}</p>
             </div>
-            <div className="divide-y divide-slate-100">
+            <div className="divide-rows">
               {rows.map(cat => (
-                <div key={cat.id} className="flex items-center gap-3 px-4 py-3">
-                  <span className="text-xs text-slate-400 w-6 shrink-0 text-right">{cat.sort_order}</span>
-                  <span className="flex-1 text-sm font-medium text-slate-800">{cat.name}</span>
+                <div key={cat.id} className="flex items-center gap-3 px-5 py-3">
+                  <span className="text-[11.5px] w-5 shrink-0 text-right tnum" style={{ color: 'var(--ink-400)' }}>{cat.sort_order}</span>
+                  <span className="flex-1 text-[13.5px] font-medium">{cat.name}</span>
                   {cat.is_utility && cat.unit_label && (
-                    <span className="text-xs text-violet-600 bg-violet-50 px-2 py-0.5 rounded-full font-medium shrink-0">
-                      {cat.unit_label}
-                    </span>
+                    <span className="ds-badge ds-badge-warn shrink-0">{cat.unit_label}</span>
                   )}
                   {isAdmin ? (
                     <button
                       onClick={() => toggleUtility(cat)}
-                      title={cat.is_utility ? 'Shown in Utility report — click to remove' : 'Click to add to Utility report'}
-                      className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium transition-colors shrink-0 ${
-                        cat.is_utility
-                          ? 'bg-amber-100 text-amber-700 hover:bg-slate-100 hover:text-slate-500'
-                          : 'bg-slate-100 text-slate-400 hover:bg-amber-100 hover:text-amber-700'
-                      }`}
+                      className="flex items-center gap-1 text-[11.5px] px-2 py-0.5 rounded-full font-medium transition-colors shrink-0"
+                      style={cat.is_utility
+                        ? { background: 'var(--warn-bg)', color: 'var(--warn)' }
+                        : { background: 'var(--ink-100)', color: 'var(--ink-400)' }
+                      }
                     >
                       <Zap size={10} />
                       {cat.is_utility ? 'Utility' : 'Not utility'}
                     </button>
                   ) : (
-                    <span className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${
-                      cat.is_utility ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-400'
-                    }`}>
+                    <span
+                      className="flex items-center gap-1 text-[11.5px] px-2 py-0.5 rounded-full font-medium shrink-0"
+                      style={cat.is_utility
+                        ? { background: 'var(--warn-bg)', color: 'var(--warn)' }
+                        : { background: 'var(--ink-100)', color: 'var(--ink-400)' }
+                      }
+                    >
                       <Zap size={10} />
                       {cat.is_utility ? 'Utility' : 'Not utility'}
                     </span>
                   )}
                   {isAdmin && (
-                    <button
-                      onClick={() => setEditTarget(cat)}
-                      className="p-1 text-slate-400 hover:text-slate-700 transition-colors shrink-0"
-                    >
+                    <button onClick={() => setEditTarget(cat)} className="p-1 rounded-lg transition-colors hover:bg-[var(--ink-100)] shrink-0" style={{ color: 'var(--ink-400)' }}>
                       <Pencil size={13} />
                     </button>
                   )}
@@ -700,558 +706,6 @@ function AddEditCategoryDialog({ open, initial, onClose, onSuccess }: {
   )
 }
 
-// ── Audit log tab ─────────────────────────────────────────────
-
-const AUDITED_TABLES = [
-  'all',
-  'transactions',
-  'flats',
-  'maintenance_rate_history',
-  'expense_categories',
-  'app_settings',
-  'user_roles',
-  'corpus_plans',
-  'uploads',
-]
-
-function actionBadgeClass(action: string) {
-  if (action === 'INSERT') return 'bg-emerald-100 text-emerald-700'
-  if (action === 'UPDATE') return 'bg-amber-100 text-amber-700'
-  if (action === 'DELETE') return 'bg-rose-100 text-rose-700'
-  return 'bg-slate-100 text-slate-500'
-}
-
-function defaultFromDate() {
-  const d = new Date()
-  d.setDate(d.getDate() - 30)
-  return d.toISOString().slice(0, 10)
-}
-
-function AuditLogTab() {
-  const [tableFilter, setTableFilter] = useState<string>('all')
-  const [actionFilter, setActionFilter] = useState<'all' | 'INSERT' | 'UPDATE' | 'DELETE'>('all')
-  const [fromDate, setFromDate] = useState<string>(defaultFromDate())
-  const [toDate, setToDate]     = useState<string>(new Date().toISOString().slice(0, 10))
-  const [expandedId, setExpandedId] = useState<string | null>(null)
-
-  const { data: logs = [], isLoading, isError } = useQuery({
-    queryKey: ['audit_log', tableFilter, actionFilter, fromDate, toDate],
-    queryFn: async () => {
-      let q = supabase.from('audit_log').select('*').order('created_at', { ascending: false }).limit(100)
-      if (tableFilter !== 'all') q = q.eq('table_name', tableFilter)
-      if (actionFilter !== 'all') q = q.eq('action', actionFilter)
-      if (fromDate) q = q.gte('created_at', fromDate)
-      if (toDate)   q = q.lte('created_at', toDate + 'T23:59:59Z')
-      const { data, error } = await q
-      if (error) {
-        // Table may not exist yet — return empty gracefully
-        console.warn('audit_log query error:', error.message)
-        return []
-      }
-      return data ?? []
-    },
-  })
-
-  return (
-    <div className="space-y-4">
-      <p className="text-sm text-slate-500">Read-only log of data changes recorded by the database.</p>
-
-      {/* Filters */}
-      <div className="card p-4 flex flex-wrap gap-3 items-end">
-        <div className="flex-1 min-w-36 space-y-1">
-          <label className="text-xs font-medium text-slate-500 uppercase tracking-wide">Table</label>
-          <select
-            value={tableFilter}
-            onChange={e => setTableFilter(e.target.value)}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
-          >
-            {AUDITED_TABLES.map(t => (
-              <option key={t} value={t}>{t === 'all' ? 'All tables' : t}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="flex-1 min-w-32 space-y-1">
-          <label className="text-xs font-medium text-slate-500 uppercase tracking-wide">Action</label>
-          <select
-            value={actionFilter}
-            onChange={e => setActionFilter(e.target.value as typeof actionFilter)}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
-          >
-            <option value="all">All actions</option>
-            <option value="INSERT">INSERT</option>
-            <option value="UPDATE">UPDATE</option>
-            <option value="DELETE">DELETE</option>
-          </select>
-        </div>
-
-        <div className="flex-1 min-w-32 space-y-1">
-          <label className="text-xs font-medium text-slate-500 uppercase tracking-wide">From</label>
-          <input
-            type="date"
-            value={fromDate}
-            onChange={e => setFromDate(e.target.value)}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
-          />
-        </div>
-
-        <div className="flex-1 min-w-32 space-y-1">
-          <label className="text-xs font-medium text-slate-500 uppercase tracking-wide">To</label>
-          <input
-            type="date"
-            value={toDate}
-            onChange={e => setToDate(e.target.value)}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
-          />
-        </div>
-      </div>
-
-      {/* Table */}
-      {isLoading ? (
-        <div className="card h-40 animate-pulse bg-slate-100" />
-      ) : isError ? (
-        <div className="card p-6 text-center">
-          <p className="text-sm text-slate-400">Unable to load audit log. The table may not be available yet.</p>
-        </div>
-      ) : logs.length === 0 ? (
-        <div className="card p-6 text-center">
-          <p className="text-sm text-slate-400">No audit log entries found for the selected filters.</p>
-        </div>
-      ) : (
-        <div className="card overflow-hidden">
-          <div className="grid grid-cols-[1fr_1.2fr_1fr_auto_0.7fr] px-4 py-2 bg-slate-50 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wide gap-3">
-            <span>Timestamp</span>
-            <span>User</span>
-            <span>Table</span>
-            <span>Action</span>
-            <span className="text-right">Record</span>
-          </div>
-          <div className="divide-y divide-slate-100">
-            {(logs as any[]).map((row) => {
-              const isExpanded = expandedId === row.id
-              return (
-                <div key={row.id}>
-                  <button
-                    type="button"
-                    onClick={() => setExpandedId(isExpanded ? null : row.id)}
-                    className="grid grid-cols-[1fr_1.2fr_1fr_auto_0.7fr] w-full px-4 py-3 text-sm gap-3 text-left hover:bg-slate-50 transition-colors items-center"
-                  >
-                    <span className="text-slate-500 text-xs tabular-nums">
-                      {new Date(row.created_at).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
-                    </span>
-                    <span className="text-slate-700 truncate text-xs">{row.user_email ?? '—'}</span>
-                    <span className="text-slate-600 text-xs font-mono">{row.table_name}</span>
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${actionBadgeClass(row.action)}`}>
-                      {row.action}
-                    </span>
-                    <span className="text-right text-slate-400 text-xs font-mono">
-                      {row.record_id ? String(row.record_id).slice(0, 8) : '—'}
-                    </span>
-                  </button>
-
-                  {isExpanded && (
-                    <div className="px-4 pb-4 pt-1 bg-slate-50 border-t border-slate-100">
-                      <div className="flex gap-3 flex-wrap">
-                        <div className="flex-1 min-w-48">
-                          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Before</p>
-                          <pre className="text-xs bg-white border border-slate-200 rounded-lg p-3 overflow-x-auto text-slate-700 whitespace-pre-wrap break-all">
-                            {row.old_val ? JSON.stringify(row.old_val, null, 2) : 'null'}
-                          </pre>
-                        </div>
-                        <div className="flex-1 min-w-48">
-                          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">After</p>
-                          <pre className="text-xs bg-white border border-slate-200 rounded-lg p-3 overflow-x-auto text-slate-700 whitespace-pre-wrap break-all">
-                            {row.new_val ? JSON.stringify(row.new_val, null, 2) : 'null'}
-                          </pre>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── Users tab (admin only) ─────────────────────────────────────
-
-const ROLE_OPTIONS: { value: string; label: string }[] = [
-  { value: 'admin',     label: 'Admin' },
-  { value: 'committee', label: 'Committee' },
-  { value: 'auditor',   label: 'Auditor' },
-]
-
-function userRoleBadgeClass(role: string) {
-  if (role === 'admin')     return 'bg-violet-100 text-violet-700'
-  if (role === 'committee') return 'bg-blue-100 text-blue-700'
-  if (role === 'auditor')   return 'bg-amber-100 text-amber-700'
-  return 'bg-slate-100 text-slate-400'
-}
-
-function UsersTab() {
-  const { isAdmin } = useRoleCtx()
-  const qc = useQueryClient()
-  const [addOpen, setAddOpen]       = useState(false)
-  const [editTarget, setEditTarget] = useState<any | null>(null)
-
-  const { data: users = [], isLoading } = useQuery({
-    queryKey: ['v_users'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('v_users')
-        .select('*')
-        .order('created_at', { ascending: false })
-      if (error) {
-        console.warn('v_users query error:', error.message)
-        return []
-      }
-      return data ?? []
-    },
-  })
-
-  function invalidateUsers() {
-    qc.invalidateQueries({ queryKey: ['v_users'] })
-  }
-
-  if (!isAdmin) {
-    return (
-      <div className="card p-6 text-center">
-        <p className="text-sm text-slate-400">You do not have permission to manage users.</p>
-      </div>
-    )
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm text-slate-500">Manage users and roles. Changes take effect immediately.</p>
-        <Button
-          onClick={() => setAddOpen(true)}
-          className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white shrink-0"
-        >
-          <Plus size={15} /> Add User
-        </Button>
-      </div>
-
-      {isLoading ? (
-        <div className="card h-40 animate-pulse bg-slate-100" />
-      ) : users.length === 0 ? (
-        <div className="card p-6 text-center">
-          <p className="text-sm text-slate-400">No users found.</p>
-        </div>
-      ) : (
-        <div className="card overflow-hidden">
-          <div className="grid grid-cols-[2fr_1fr_0.8fr_0.8fr_auto] px-4 py-2 bg-slate-50 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wide gap-3">
-            <span>Name / Mobile</span>
-            <span>Email</span>
-            <span>Role</span>
-            <span>Last sign in</span>
-            <span></span>
-          </div>
-          <div className="divide-y divide-slate-100">
-            {(users as any[]).map(user => {
-              const loginId = (user.auth_email ?? user.email ?? '')
-              const isMobile = loginId.endsWith('@lilac.com')
-              const mobileNum = isMobile ? loginId.replace('@lilac.com', '') : null
-              return (
-                <div key={user.id} className="grid grid-cols-[2fr_1fr_0.8fr_0.8fr_auto] px-4 py-3 text-sm gap-3 items-center">
-                  <div>
-                    <p className="text-slate-800 text-xs font-medium">{user.display_name ?? '—'}</p>
-                    <p className="text-slate-400 text-xs">{mobileNum ?? loginId}</p>
-                  </div>
-                  <span className="text-slate-500 text-xs truncate">{user.contact_email ?? (isMobile ? '—' : loginId)}</span>
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold w-fit ${userRoleBadgeClass(user.role)}`}>
-                    {user.role ?? '—'}
-                  </span>
-                  <span className="text-slate-400 text-xs">
-                    {user.last_sign_in_at
-                      ? new Date(user.last_sign_in_at).toLocaleDateString('en-IN', { dateStyle: 'short' })
-                      : '—'}
-                  </span>
-                  <button
-                    onClick={() => setEditTarget(user)}
-                    className="p-1 text-slate-400 hover:text-slate-700 transition-colors"
-                    title="Edit user"
-                  >
-                    <Pencil size={13} />
-                  </button>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      <AddUserDialog
-        open={addOpen}
-        onClose={() => setAddOpen(false)}
-        onSuccess={invalidateUsers}
-      />
-
-      <EditUserDialog
-        key={editTarget?.id ?? 'none'}
-        user={editTarget}
-        onClose={() => setEditTarget(null)}
-        onSuccess={invalidateUsers}
-      />
-    </div>
-  )
-}
-
-// ── Add User dialog ────────────────────────────────────────────
-
-function AddUserDialog({ open, onClose, onSuccess }: {
-  open: boolean
-  onClose: () => void
-  onSuccess: () => void
-}) {
-  const [name,     setName]     = useState('')
-  const [mobile,   setMobile]   = useState('')
-  const [password, setPassword] = useState('')
-  const [showPw,   setShowPw]   = useState(false)
-  const [role,     setRole]     = useState('committee')
-  const [saving,   setSaving]   = useState(false)
-  const [success,  setSuccess]  = useState(false)
-  const [error,    setError]    = useState('')
-
-  function reset() {
-    setName(''); setMobile(''); setPassword(''); setShowPw(false)
-    setRole('committee'); setError(''); setSuccess(false)
-  }
-
-  function validate() {
-    if (!name.trim())                       { setError('Name is required'); return false }
-    if (!/^\d{10}$/.test(mobile.trim()))    { setError('Mobile must be exactly 10 digits'); return false }
-    if (password.length < 8)               { setError('Password must be at least 8 characters'); return false }
-    if (!role)                             { setError('Role is required'); return false }
-    return true
-  }
-
-  async function handleSubmit() {
-    setError('')
-    if (!validate()) return
-    setSaving(true)
-    try {
-      const { error: fnErr } = await supabase.functions.invoke('create-user', {
-        body: { name: name.trim(), mobile: mobile.trim(), password, role },
-      })
-      if (fnErr) throw fnErr
-      onSuccess()
-      setSuccess(true)
-      setTimeout(() => {
-        setSuccess(false)
-        reset()
-        onClose()
-      }, 1200)
-    } catch (e: any) {
-      setError(e.message ?? 'Failed to create user')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={v => { if (!v) { reset(); onClose() } }}>
-      <DialogContent className="max-w-sm p-0">
-        <div className="px-6 pt-6 pb-4 border-b border-slate-100 shrink-0">
-          <DialogTitle>Add User</DialogTitle>
-        </div>
-
-        <div className="px-6 py-4 space-y-4">
-          <div className="space-y-1">
-            <Label>Name *</Label>
-            <Input
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="e.g. Rajesh Kumar"
-              className="text-sm"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <Label>Mobile *</Label>
-            <Input
-              value={mobile}
-              onChange={e => setMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
-              placeholder="10-digit number"
-              inputMode="numeric"
-              className="text-sm"
-            />
-            {mobile.length > 0 && (
-              <p className="text-xs text-slate-400">Will log in as {mobile}@lilac.com</p>
-            )}
-          </div>
-
-          <div className="space-y-1">
-            <Label>Password *</Label>
-            <div className="relative">
-              <Input
-                type={showPw ? 'text' : 'password'}
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="Min 8 characters"
-                className="text-sm pr-9"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPw(p => !p)}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-              >
-                {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
-              </button>
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <Label>Role *</Label>
-            <Select value={role} onValueChange={setRole}>
-              <SelectTrigger className="text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {ROLE_OPTIONS.map(o => (
-                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {error   && <p className="text-sm text-red-500">{error}</p>}
-          {success && <p className="text-sm text-emerald-600">User created successfully!</p>}
-        </div>
-
-        <div className="px-6 py-4 border-t border-slate-100 shrink-0">
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { reset(); onClose() }}>Cancel</Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={saving || success}
-              className="bg-violet-600 hover:bg-violet-700 text-white"
-            >
-              {saving ? 'Creating…' : success ? 'Created!' : 'Create user'}
-            </Button>
-          </DialogFooter>
-        </div>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-// ── Edit User dialog ───────────────────────────────────────────
-
-function EditUserDialog({ user, onClose, onSuccess }: {
-  user: any | null
-  onClose: () => void
-  onSuccess: () => void
-}) {
-  const [name,         setName]         = useState(user?.display_name ?? '')
-  const [mobile,       setMobile]       = useState(user?.mobile ?? '')
-  const [contactEmail, setContactEmail] = useState(user?.contact_email ?? '')
-  const [role,         setRole]         = useState(user?.role ?? 'committee')
-  const [saving,       setSaving]       = useState(false)
-  const [error,        setError]        = useState('')
-
-  async function handleSave() {
-    if (!name.trim()) { setError('Name is required'); return }
-    setSaving(true); setError('')
-    try {
-      const { error: profileErr } = await supabase.from('profiles').upsert({
-        id: user.id,
-        display_name:  name.trim(),
-        mobile:        mobile.trim() || null,
-        contact_email: contactEmail.trim() || null,
-      })
-      if (profileErr) throw profileErr
-
-      const { error: roleErr } = await supabase.from('user_roles').upsert({
-        user_id: user.id,
-        role,
-      })
-      if (roleErr) throw roleErr
-
-      onSuccess()
-      onClose()
-    } catch (e: any) {
-      setError(e.message ?? 'Failed to save changes')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <Dialog open={!!user} onOpenChange={v => { if (!v) onClose() }}>
-      <DialogContent className="max-w-sm p-0">
-        <div className="px-6 pt-6 pb-4 border-b border-slate-100 shrink-0">
-          <DialogTitle>Edit User</DialogTitle>
-        </div>
-
-        <div className="px-6 py-4 space-y-4">
-          <div className="space-y-1">
-            <Label>Name *</Label>
-            <Input
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="Display name"
-              className="text-sm"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <Label>Mobile</Label>
-            <Input
-              value={mobile}
-              onChange={e => setMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
-              placeholder="10-digit number"
-              inputMode="numeric"
-              className="text-sm"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <Label>Contact email</Label>
-            <Input
-              value={contactEmail}
-              onChange={e => setContactEmail(e.target.value)}
-              placeholder="real email for communication"
-              type="email"
-              className="text-sm"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <Label>Role</Label>
-            <Select value={role} onValueChange={setRole}>
-              <SelectTrigger className="text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {ROLE_OPTIONS.map(o => (
-                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {error && <p className="text-sm text-red-500">{error}</p>}
-        </div>
-
-        <div className="px-6 py-4 border-t border-slate-100 shrink-0">
-          <DialogFooter>
-            <Button variant="outline" onClick={onClose}>Cancel</Button>
-            <Button onClick={handleSave} disabled={saving}>
-              {saving ? 'Saving…' : 'Save changes'}
-            </Button>
-          </DialogFooter>
-        </div>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
 // ── Upload / import history ────────────────────────────────────
 
 function UploadHistorySection() {
@@ -1264,23 +718,25 @@ function UploadHistorySection() {
   })
 
   return (
-    <div className="card p-5 space-y-3">
-      <h3 className="font-semibold">Import history</h3>
+    <div className="surface !p-0 overflow-hidden">
+      <div className="px-5 py-3 border-b hairline">
+        <p className="text-[13px] font-semibold" style={{ color: 'var(--ink-700)' }}>Import history</p>
+      </div>
       {!data?.length ? (
-        <p className="text-sm text-slate-400">No imports yet</p>
+        <p className="px-5 py-6 text-[13px]" style={{ color: 'var(--ink-400)' }}>No imports yet</p>
       ) : (
-        <div className="divide-y divide-slate-100 -mx-5">
+        <div className="divide-rows">
           {data.map((u: any) => (
-            <div key={u.id} className="flex justify-between items-start px-5 py-3 text-sm">
+            <div key={u.id} className="flex justify-between items-start px-5 py-3">
               <div>
-                <p className="font-medium text-slate-700">{u.month_label || '—'}</p>
-                <p className="text-xs text-slate-400 mt-0.5 truncate max-w-xs">{u.original_name}</p>
-                <p className="text-xs text-slate-300">{new Date(u.created_at).toLocaleString('en-IN')}</p>
+                <p className="text-[13.5px] font-medium">{u.month_label || '—'}</p>
+                <p className="text-[11.5px] mt-0.5 truncate max-w-xs" style={{ color: 'var(--ink-400)' }}>{u.original_name}</p>
+                <p className="text-[11px] mono mt-0.5" style={{ color: 'var(--ink-300)' }}>{new Date(u.created_at).toLocaleString('en-IN')}</p>
               </div>
-              <div className="text-right shrink-0">
-                <p className="text-slate-500">{u.new_txns} added</p>
-                {u.review_count > 0 && <span className="badge-review">{u.review_count} review</span>}
-                {u.duplicates > 0 && <p className="text-xs text-slate-300">{u.duplicates} dupes</p>}
+              <div className="text-right shrink-0 flex flex-col gap-1 items-end">
+                <p className="text-[13px]" style={{ color: 'var(--ink-600)' }}>{u.new_txns} added</p>
+                {u.review_count > 0 && <span className="ds-badge ds-badge-warn">{u.review_count} review</span>}
+                {u.duplicates > 0 && <p className="text-[11.5px]" style={{ color: 'var(--ink-300)' }}>{u.duplicates} dupes</p>}
               </div>
             </div>
           ))}
