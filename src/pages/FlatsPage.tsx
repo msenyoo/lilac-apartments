@@ -12,7 +12,6 @@ import { toast } from 'sonner'
 type Tab = 'flats' | 'residents'
 
 export default function FlatsPage() {
-  const { canWrite } = useRoleCtx()
   const [tab, setTab] = useState<Tab>('flats')
 
   return (
@@ -22,11 +21,6 @@ export default function FlatsPage() {
         <p className="text-[13.5px] mt-1" style={{ color: 'var(--ink-500)' }}>Manage flat details, maintenance rates, owners and tenants</p>
       </div>
 
-      {!canWrite && (
-        <div className="flex items-center gap-2 px-3 py-2 mb-4 rounded-xl text-[13px]" style={{ background: 'var(--warn-bg)', border: '1px solid var(--warn-bd)', color: 'var(--warn)' }}>
-          <span>Read-only access — contact the administrator to make changes.</span>
-        </div>
-      )}
 
       <div className="flex gap-1 rounded-xl p-1 w-fit" style={{ background: 'var(--ink-100)' }}>
         {([{ key: 'flats', label: 'Flats' }, { key: 'residents', label: 'Residents' }] as { key: Tab; label: string }[]).map(({ key, label }) => (
