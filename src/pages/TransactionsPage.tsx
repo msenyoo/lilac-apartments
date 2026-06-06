@@ -590,6 +590,7 @@ function EditModal({ txn, flats, onClose, onSaved, onSplit, onVoided }: {
   onSplit: () => void
   onVoided: () => void
 }) {
+  const { isAdmin } = useRoleCtx()
   const isFlat = (code: string) => FLAT_CODES.includes(code)
 
   const [flatCode,     setFlatCode]     = useState(txn.flat_code ?? '')
@@ -706,7 +707,7 @@ function EditModal({ txn, flats, onClose, onSaved, onSplit, onVoided }: {
                 <Scissors size={13} /> Split
               </button>
             )}
-            {!confirmVoid ? (
+            {isAdmin && (!confirmVoid ? (
               <button onClick={() => setConfirmVoid(true)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-300 text-red-600 text-sm hover:bg-red-50 flex-1 justify-center">
                 <Trash2 size={13} /> Void
@@ -723,7 +724,7 @@ function EditModal({ txn, flats, onClose, onSaved, onSplit, onVoided }: {
                   No
                 </button>
               </div>
-            )}
+            ))}
           </div>
         </div>
       </div>
