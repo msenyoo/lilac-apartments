@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Pin, Send, Megaphone, Sparkles, MessageCircle, User, X, Plus } from 'lucide-react'
 import { useRoleCtx } from '@/contexts/RoleContext'
 import { supabase } from '@/lib/supabase'
+import { toast } from 'sonner'
 
 type Announcement = {
   id: string
@@ -115,11 +116,14 @@ export default function AnnouncementsPage() {
     },
   })
 
-  async function mutate(updated: Announcement[]) {
+  async function mutate(updated: Announcement[], successMsg: string) {
     setSaving(true)
     try {
       await saveAnnouncements(updated)
       qc.setQueryData(['announcements'], updated)
+      toast.success(successMsg)
+    } catch (e: any) {
+      toast.error(e.message ?? 'Failed to save')
     } finally {
       setSaving(false)
     }
@@ -135,17 +139,21 @@ export default function AnnouncementsPage() {
       pinned: pin,
       createdAt: new Date().toISOString(),
     }
-    await mutate([a, ...announcements])
+    await mutate([a, ...announcements], 'Announcement published')
     setTitle(''); setBody(''); setTag('Governance'); setPin(false)
     setComposing(false)
   }
 
   async function handleDelete(id: string) {
-    await mutate(announcements.filter(a => a.id !== id))
+    await mutate(announcements.filter(a => a.id !== id), 'Announcement deleted')
   }
 
   async function handleTogglePin(id: string) {
-    await mutate(announcements.map(a => a.id === id ? { ...a, pinned: !a.pinned } : a))
+    const target = announcements.find(a => a.id === id)
+    await mutate(
+      announcements.map(a => a.id === id ? { ...a, pinned: !a.pinned } : a),
+      target?.pinned ? 'Unpinned' : 'Pinned to top',
+    )
   }
 
   const pinned = announcements.filter(a => a.pinned)

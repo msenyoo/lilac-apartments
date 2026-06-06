@@ -17,6 +17,7 @@ import ActivityPage       from '@/pages/ActivityPage'
 import UsersPage          from '@/pages/UsersPage'
 import HelpPage           from '@/pages/HelpPage'
 import { RoleProvider } from '@/contexts/RoleContext'
+import { Toaster } from '@/components/ui/sonner'
 
 export default function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined)
@@ -42,6 +43,7 @@ export default function App() {
 
   return (
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <Toaster richColors position="top-right" />
       <Routes>
         <Route path="/" element={<RoleProvider><Layout /></RoleProvider>}>
           <Route index element={<Navigate to="/dashboard" replace />} />
