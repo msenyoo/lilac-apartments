@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import { Plus, Pencil, Shield, Eye, EyeOff, Users, UserCircle } from 'lucide-react'
+import { Plus, Pencil, Shield, Eye, EyeOff, Users, UserCircle, Lock, RefreshCw } from 'lucide-react'
 import {
   Dialog, DialogContent, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
@@ -12,6 +12,10 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { useRoleCtx } from '@/contexts/RoleContext'
+import {
+  fetchPermissions, savePermissions, DEFAULT_PERMISSIONS,
+  type PermissionsMap, type Resource,
+} from '@/hooks/usePermissions'
 
 const ROLE_OPTIONS = [
   { value: 'admin',     label: 'Admin (Treasurer)' },
@@ -41,9 +45,12 @@ function Avatar({ name, size = 36 }: { name: string; size?: number }) {
   )
 }
 
+type UsersTab = 'users' | 'permissions'
+
 export default function UsersPage() {
   const { isAdmin } = useRoleCtx()
   const qc = useQueryClient()
+  const [tab, setTab]               = useState<UsersTab>('users')
   const [addOpen, setAddOpen]       = useState(false)
   const [editTarget, setEditTarget] = useState<any | null>(null)
 
@@ -87,18 +94,40 @@ export default function UsersPage() {
         <div>
           <h1 className="text-[24px] font-extrabold">Users & access</h1>
           <p className="text-[13.5px] mt-1" style={{ color: 'var(--ink-500)' }}>
-            Create logins, assign roles, map residents to flats · admin only
+            Create logins, assign roles, control permissions · admin only
           </p>
         </div>
-        <button
-          className="flex items-center gap-2 px-4 py-2.5 rounded-[10px] text-white font-semibold text-[14px]"
-          style={{ background: 'var(--brand-600)' }}
-          onClick={() => setAddOpen(true)}
-        >
-          <Plus size={15} /> Add user
-        </button>
+        {tab === 'users' && (
+          <button
+            className="flex items-center gap-2 px-4 py-2.5 rounded-[10px] text-white font-semibold text-[14px]"
+            style={{ background: 'var(--brand-600)' }}
+            onClick={() => setAddOpen(true)}
+          >
+            <Plus size={15} /> Add user
+          </button>
+        )}
       </div>
 
+      {/* Tabs */}
+      <div className="flex gap-1 p-1 rounded-[12px] self-start" style={{ background: 'var(--ink-100)' }}>
+        {(['users', 'permissions'] as UsersTab[]).map(t => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className="px-4 py-1.5 rounded-[9px] text-[13.5px] font-medium transition-colors capitalize"
+            style={tab === t
+              ? { background: '#fff', color: 'var(--ink-900)', boxShadow: '0 1px 4px rgba(26,24,32,.10)' }
+              : { color: 'var(--ink-500)' }
+            }
+          >
+            {t === 'permissions' ? 'Permissions' : 'Users'}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'permissions' && <PermissionsTab />}
+
+      {tab === 'users' && <>
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
         {[
@@ -186,6 +215,7 @@ export default function UsersPage() {
 
       <AddUserDialog open={addOpen} onClose={() => setAddOpen(false)} onSuccess={invalidate} />
       <EditUserDialog key={editTarget?.id ?? 'none'} user={editTarget} onClose={() => setEditTarget(null)} onSuccess={invalidate} />
+      </>}
     </div>
   )
 }
@@ -341,5 +371,185 @@ function EditUserDialog({ user, onClose, onSuccess }: { user: any | null; onClos
         </div>
       </DialogContent>
     </Dialog>
+  )
+}
+
+// ── Permissions tab ────────────────────────────────────────────
+
+type PermRow = { label: string; resource: Resource; lockedOff?: boolean }
+
+const PERM_GROUPS: { section: string; rows: PermRow[] }[] = [
+  { section: 'Transactions', rows: [
+    { label: 'View transactions',       resource: 'transactions.view' },
+    { label: 'Upload bank statement',   resource: 'transactions.upload' },
+    { label: 'Tag / edit transactions', resource: 'transactions.tag' },
+    { label: 'Void a transaction',      resource: 'transactions.void' },
+  ]},
+  { section: 'Dues', rows: [
+    { label: 'View dues tracker', resource: 'dues.view' },
+    { label: 'Export dues Excel', resource: 'dues.export' },
+  ]},
+  { section: 'Corpus', rows: [
+    { label: 'View corpus fund',     resource: 'corpus.view' },
+    { label: 'Create / close plans', resource: 'corpus.manage' },
+  ]},
+  { section: 'Expenses', rows: [
+    { label: 'View expenses',       resource: 'expenses.view' },
+    { label: 'Add / edit expenses', resource: 'expenses.add' },
+    { label: 'Approve expenses',    resource: 'expenses.approve' },
+  ]},
+  { section: 'Reports', rows: [
+    { label: 'View reports',         resource: 'reports.view' },
+    { label: 'Download PDF / Excel', resource: 'reports.download' },
+  ]},
+  { section: 'Flats & Residents', rows: [
+    { label: 'View flat list',    resource: 'flats.view' },
+    { label: 'Edit flat details', resource: 'flats.edit' },
+  ]},
+  { section: 'Settings', rows: [
+    { label: 'View settings',   resource: 'settings.view' },
+    { label: 'Change settings', resource: 'settings.edit' },
+  ]},
+  { section: 'Announcements', rows: [
+    { label: 'View announcements',    resource: 'announcements.view' },
+    { label: 'Publish announcements', resource: 'announcements.publish' },
+  ]},
+  { section: 'Activity Log', rows: [
+    { label: 'View activity log', resource: 'activity.view' },
+    { label: 'Export log',        resource: 'activity.export' },
+  ]},
+  { section: 'User Management', rows: [
+    { label: 'View users',       resource: 'users.view',   lockedOff: true },
+    { label: 'Add / edit users', resource: 'users.manage', lockedOff: true },
+  ]},
+]
+
+function Toggle({ checked, onChange, disabled }: {
+  checked: boolean; onChange: (v: boolean) => void; disabled?: boolean
+}) {
+  return (
+    <button
+      type="button" role="switch" aria-checked={checked} disabled={disabled}
+      onClick={() => !disabled && onChange(!checked)}
+      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors
+        ${checked ? 'bg-violet-600' : 'bg-slate-200'}
+        ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:opacity-90'}`}
+    >
+      <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform
+        ${checked ? 'translate-x-4' : 'translate-x-0.5'}`}
+      />
+    </button>
+  )
+}
+
+function PermissionsTab() {
+  const { isAdmin } = useRoleCtx()
+
+  const { data: savedPerms } = useQuery({
+    queryKey: ['role-permissions'],
+    queryFn: fetchPermissions,
+  })
+
+  const [draft, setDraft] = useState<PermissionsMap | null>(null)
+  const [saved, setSaved] = useState(false)
+  const perms = draft ?? savedPerms ?? DEFAULT_PERMISSIONS
+
+  const mutation = useMutation({
+    mutationFn: savePermissions,
+    onSuccess: () => { setSaved(true); setTimeout(() => setSaved(false), 2500) },
+  })
+
+  function toggle(roleKey: 'committee' | 'auditor', resource: Resource, value: boolean) {
+    const base = draft ?? savedPerms ?? DEFAULT_PERMISSIONS
+    setDraft({ ...base, [roleKey]: { ...base[roleKey], [resource]: value } })
+  }
+
+  return (
+    <div className="surface !p-0 overflow-hidden">
+      <div className="px-5 py-3 border-b hairline flex items-center gap-3" style={{ background: 'var(--ink-50)' }}>
+        <p className="text-[13px] font-semibold flex-1" style={{ color: 'var(--ink-700)' }}>Role access control</p>
+        {isAdmin && (
+          <button
+            onClick={() => setDraft({ ...DEFAULT_PERMISSIONS })}
+            className="flex items-center gap-1.5 text-[12px] px-3 py-1.5 rounded-lg border hairline hover:bg-white transition-colors"
+            style={{ color: 'var(--ink-500)' }}
+          >
+            <RefreshCw size={12} /> Reset defaults
+          </button>
+        )}
+        {isAdmin && (
+          <Button size="sm" onClick={() => mutation.mutate(perms)} disabled={mutation.isPending || !draft}>
+            {saved ? '✓ Saved' : mutation.isPending ? 'Saving…' : 'Save changes'}
+          </Button>
+        )}
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-[13px]">
+          <thead>
+            <tr className="border-b hairline" style={{ background: 'var(--ink-50)' }}>
+              <th className="text-left px-5 py-2.5 font-semibold w-[45%]" style={{ color: 'var(--ink-600)' }}>Feature / Action</th>
+              <th className="px-4 py-2.5 font-semibold text-center w-[18%]" style={{ color: 'var(--ink-600)' }}>Admin</th>
+              <th className="px-4 py-2.5 font-semibold text-center w-[18%]" style={{ color: 'var(--ink-600)' }}>Committee</th>
+              <th className="px-4 py-2.5 font-semibold text-center w-[18%]" style={{ color: 'var(--ink-600)' }}>Auditor</th>
+            </tr>
+          </thead>
+          <tbody>
+            {PERM_GROUPS.map(group => (
+              <>
+                <tr key={group.section} style={{ background: 'var(--ink-50)' }}>
+                  <td colSpan={4} className="px-5 py-1.5">
+                    <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--ink-400)' }}>
+                      {group.section}
+                    </span>
+                  </td>
+                </tr>
+                {group.rows.map(row => {
+                  const cv = row.lockedOff ? false : (perms.committee[row.resource] ?? false)
+                  const av = row.lockedOff ? false : (perms.auditor[row.resource]   ?? false)
+                  return (
+                    <tr key={row.resource} className="border-b hairline last:border-0 hover:bg-[var(--ink-50)] transition-colors">
+                      <td className="px-5 py-2.5" style={{ color: 'var(--ink-700)' }}>{row.label}</td>
+                      <td className="px-4 py-2.5 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <span className="text-green-600 font-bold">✓</span>
+                          <Lock size={10} className="text-slate-300" />
+                        </div>
+                      </td>
+                      <td className="px-4 py-2.5 text-center">
+                        {row.lockedOff
+                          ? <div className="flex items-center justify-center gap-1">
+                              <span className="text-slate-300 font-bold">✗</span>
+                              <Lock size={10} className="text-slate-300" />
+                            </div>
+                          : <div className="flex justify-center">
+                              <Toggle checked={cv} onChange={v => toggle('committee', row.resource, v)} disabled={!isAdmin} />
+                            </div>}
+                      </td>
+                      <td className="px-4 py-2.5 text-center">
+                        {row.lockedOff
+                          ? <div className="flex items-center justify-center gap-1">
+                              <span className="text-slate-300 font-bold">✗</span>
+                              <Lock size={10} className="text-slate-300" />
+                            </div>
+                          : <div className="flex justify-center">
+                              <Toggle checked={av} onChange={v => toggle('auditor', row.resource, v)} disabled={!isAdmin} />
+                            </div>}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {!isAdmin && (
+        <div className="px-5 py-3 border-t hairline text-[12px]" style={{ color: 'var(--ink-400)' }}>
+          Only Admins can change role permissions.
+        </div>
+      )}
+    </div>
   )
 }

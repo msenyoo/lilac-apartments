@@ -17,18 +17,17 @@ import { useRoleCtx } from '@/contexts/RoleContext'
 const FY_OPTIONS = ['2022','2023','2024','2025','2026','2027','2028']
 function fyLabel(y: string) { return `FY ${y}-${String(parseInt(y) + 1).slice(-2)}` }
 
-type SettingsTab = 'general' | 'rates' | 'categories' | 'imports' | 'permissions'
+type SettingsTab = 'general' | 'rates' | 'categories' | 'imports'
 
 export default function SettingsPage() {
   const [tab, setTab] = useState<SettingsTab>('general')
   const { canWrite } = useRoleCtx()
 
   const TABS: { key: SettingsTab; label: string }[] = [
-    { key: 'general',     label: 'General' },
-    { key: 'rates',       label: 'Maintenance Rates' },
-    { key: 'categories',  label: 'Expense Categories' },
-    { key: 'imports',     label: 'Import History' },
-    { key: 'permissions', label: 'Permissions' },
+    { key: 'general',    label: 'General' },
+    { key: 'rates',      label: 'Maintenance Rates' },
+    { key: 'categories', label: 'Expense Categories' },
+    { key: 'imports',    label: 'Import History' },
   ]
 
   return (
@@ -67,8 +66,7 @@ export default function SettingsPage() {
       {tab === 'general'     && <GeneralSettings />}
       {tab === 'rates'       && <RateHistorySettings />}
       {tab === 'categories'  && <CategoriesSettings />}
-      {tab === 'imports'     && <UploadHistorySection />}
-      {tab === 'permissions' && <PermissionsTab />}
+      {tab === 'imports'    && <UploadHistorySection />}
     </div>
   )
 }
@@ -708,119 +706,7 @@ function AddEditCategoryDialog({ open, initial, onClose, onSuccess }: {
   )
 }
 
-// ── Permissions tab ───────────────────────────────────────────
-
-const PERMISSION_ROWS: { feature: string; admin: boolean; committee: boolean; auditor: boolean }[] = [
-  { feature: 'View all data',            admin: true,  committee: true,  auditor: true  },
-  { feature: 'Upload bank statement',    admin: true,  committee: false, auditor: false },
-  { feature: 'Tag / edit transactions',  admin: true,  committee: false, auditor: false },
-  { feature: 'Void a transaction',       admin: true,  committee: false, auditor: false },
-  { feature: 'Add / edit expenses',      admin: true,  committee: false, auditor: false },
-  { feature: 'Approve expenses',         admin: true,  committee: true,  auditor: false },
-  { feature: 'Change maintenance rate',  admin: true,  committee: false, auditor: false },
-  { feature: 'Add expense category',     admin: true,  committee: false, auditor: false },
-  { feature: 'Download reports',         admin: true,  committee: true,  auditor: true  },
-  { feature: 'Manage users',             admin: true,  committee: false, auditor: false },
-  { feature: 'View activity log',        admin: true,  committee: true,  auditor: true  },
-  { feature: 'Change settings',          admin: true,  committee: false, auditor: false },
-]
-
-function PermissionsTab() {
-  const { role } = useRoleCtx()
-
-  const { data: profile } = useQuery({
-    queryKey: ['my-profile'],
-    queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return null
-      const { data } = await supabase.from('profiles').select('display_name').eq('id', user.id).maybeSingle()
-      return { name: data?.display_name ?? user.email ?? 'Unknown', email: user.email ?? '' }
-    },
-  })
-
-  const roleBadgeStyle =
-    role === 'admin'     ? 'bg-violet-100 text-violet-700' :
-    role === 'committee' ? 'bg-amber-100 text-amber-700'   :
-    role === 'auditor'   ? 'bg-slate-100 text-slate-600'   : 'bg-slate-100 text-slate-400'
-
-  const roleLabel =
-    role === 'admin'     ? 'Admin (Treasurer)' :
-    role === 'committee' ? 'Committee member'  :
-    role === 'auditor'   ? 'Auditor'           : 'Unknown'
-
-  const capabilityLines = (() => {
-    if (role === 'admin')     return ['Full read and write access', 'Can upload statements and void transactions', 'Can manage users and settings']
-    if (role === 'committee') return ['Read access to all data', 'Can approve expenses', 'Cannot upload, edit, or delete']
-    if (role === 'auditor')   return ['Read-only access to all data', 'Can download reports', 'Cannot make any changes']
-    return []
-  })()
-
-  const Check = () => <span className="text-green-600 font-bold text-[15px]">✓</span>
-  const Cross = () => <span className="text-slate-300 font-bold text-[15px]">✗</span>
-
-  return (
-    <div className="flex flex-col gap-5">
-      {/* Current session card */}
-      <div className="surface !p-5 flex flex-col gap-3">
-        <p className="text-[13px] font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-500)' }}>Current session</p>
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-[15px]"
-            style={{ background: 'var(--brand-50)', color: 'var(--brand-700)' }}>
-            {(profile?.name ?? '?').slice(0, 1).toUpperCase()}
-          </div>
-          <div>
-            <p className="font-semibold text-[14px]" style={{ color: 'var(--ink-900)' }}>{profile?.name ?? '—'}</p>
-            {profile?.email && <p className="text-[12px]" style={{ color: 'var(--ink-400)' }}>{profile.email}</p>}
-          </div>
-          <span className={`ml-auto text-[12px] px-2.5 py-1 rounded-full font-semibold ${roleBadgeStyle}`}>
-            {roleLabel}
-          </span>
-        </div>
-        <div className="flex flex-col gap-1 mt-1">
-          {capabilityLines.map(line => (
-            <div key={line} className="flex items-center gap-2 text-[13px]" style={{ color: 'var(--ink-600)' }}>
-              <span className="text-green-500 shrink-0">•</span>
-              {line}
-            </div>
-          ))}
-        </div>
-        <p className="text-[11.5px] mt-1" style={{ color: 'var(--ink-400)' }}>
-          Role changes take effect on next login.
-        </p>
-      </div>
-
-      {/* Permission table */}
-      <div className="surface !p-0 overflow-hidden">
-        <div className="px-5 py-3 border-b hairline" style={{ background: 'var(--ink-50)' }}>
-          <p className="text-[13px] font-semibold" style={{ color: 'var(--ink-700)' }}>Role permissions</p>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-[13px]">
-            <thead>
-              <tr className="border-b hairline">
-                <th className="text-left px-5 py-2.5 font-semibold" style={{ color: 'var(--ink-600)' }}>Feature</th>
-                <th className="px-4 py-2.5 font-semibold text-center w-20" style={{ color: 'var(--ink-600)' }}>Admin</th>
-                <th className="px-4 py-2.5 font-semibold text-center w-24" style={{ color: 'var(--ink-600)' }}>Committee</th>
-                <th className="px-4 py-2.5 font-semibold text-center w-20" style={{ color: 'var(--ink-600)' }}>Auditor</th>
-              </tr>
-            </thead>
-            <tbody>
-              {PERMISSION_ROWS.map((row, i) => (
-                <tr key={row.feature} className="border-b hairline last:border-0"
-                  style={i % 2 === 0 ? undefined : { background: 'var(--ink-50)' }}>
-                  <td className="px-5 py-2.5" style={{ color: 'var(--ink-700)' }}>{row.feature}</td>
-                  <td className="px-4 py-2.5 text-center">{row.admin     ? <Check /> : <Cross />}</td>
-                  <td className="px-4 py-2.5 text-center">{row.committee ? <Check /> : <Cross />}</td>
-                  <td className="px-4 py-2.5 text-center">{row.auditor   ? <Check /> : <Cross />}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  )
-}
+// ── (Permissions tab lives in UsersPage) ──────────────────────
 
 // ── Upload / import history ────────────────────────────────────
 
