@@ -2,28 +2,26 @@ import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Building2, Eye, EyeOff } from 'lucide-react'
 
-function toAuthEmail(input: string): string {
-  const digits = input.replace(/\D/g, '')
-  if (/^\d{10}$/.test(digits)) return `${digits}@lilac.com`
-  if (/^91\d{10}$/.test(digits)) return `${digits.slice(2)}@lilac.com`
-  return input
-}
-
 export default function LoginPage() {
-  const [login, setLogin]       = useState('')
+  const [mobile, setMobile]     = useState('')
   const [password, setPassword] = useState('')
   const [showPass, setShowPass] = useState(false)
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState('')
 
-  const isPhone = /^\+?[\d\s-]{7,}$/.test(login) && !login.includes('@')
-
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
+    const digits = mobile.replace(/\D/g, '')
+    if (!/^\d{10}$/.test(digits)) {
+      setError('Enter a valid 10-digit mobile number')
+      return
+    }
     setLoading(true)
     setError('')
-    const email = toAuthEmail(login.trim())
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    const { error } = await supabase.auth.signInWithPassword({
+      email: `${digits}@lilac.com`,
+      password,
+    })
     setLoading(false)
     if (error) setError(error.message)
   }
@@ -78,24 +76,17 @@ export default function LoginPage() {
 
           <form onSubmit={handleLogin} className="flex flex-col gap-4">
             <div className="space-y-1.5">
-              <label className="ds-lbl">
-                Mobile number <span style={{ color: 'var(--ink-400)', fontWeight: 400 }}>or email</span>
-              </label>
+              <label className="ds-lbl">Mobile number</label>
               <input
                 type="text"
-                inputMode="tel"
+                inputMode="numeric"
                 required
                 autoComplete="username"
-                value={login}
-                onChange={e => setLogin(e.target.value)}
-                placeholder="9876543210"
+                value={mobile}
+                onChange={e => setMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                placeholder="10-digit mobile number"
                 className="ds-field"
               />
-              {isPhone && (
-                <p className="text-[11.5px]" style={{ color: 'var(--ink-400)' }}>
-                  Signing in as <span className="font-medium" style={{ color: 'var(--ink-600)' }}>{toAuthEmail(login.trim())}</span>
-                </p>
-              )}
             </div>
 
             <div className="space-y-1.5">
