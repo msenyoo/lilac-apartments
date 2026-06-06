@@ -7,9 +7,21 @@ import * as XLSX from 'xlsx'
 import { supabase, DuesEntry, Transaction } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
 
+type AgingTab = 'All' | 'Due' | '30d+' | '60d+' | '90d+'
+
+const AGING_TABS: AgingTab[] = ['All', 'Due', '30d+', '60d+', '90d+']
+
+function applyAgingFilter(rows: DuesEntry[], tab: AgingTab): DuesEntry[] {
+  if (tab === 'All') return rows
+  if (tab === 'Due') return rows.filter(r => r.pending > 0)
+  const monthMultiplier = tab === '30d+' ? 1 : tab === '60d+' ? 2 : 3
+  return rows.filter(r => r.pending > r.maintenance_amt * monthMultiplier)
+}
+
 
 export default function DuesPage() {
   const [selectedFlat, setSelectedFlat] = useState<DuesEntry | null>(null)
+  const [agingTab, setAgingTab] = useState<AgingTab>('All')
   const gridRef = useRef<AgGridReact>(null)
 
   const { data: settings } = useQuery({
@@ -42,6 +54,8 @@ export default function DuesPage() {
     Partial: (data ?? []).filter(d => d.status === 'Partial').length,
     Clear:   (data ?? []).filter(d => d.status === 'Clear').length,
   }
+
+  const filteredData = useMemo(() => applyAgingFilter(data ?? [], agingTab), [data, agingTab])
 
   const colDefs = useMemo((): ColDef<any>[] => [
     { field: 'flat_code',       headerName: 'Flat',     width: 90 },
@@ -131,6 +145,23 @@ export default function DuesPage() {
         ))}
       </div>
 
+      {/* Aging filter tabs */}
+      <div className="flex gap-1 p-1 rounded-[12px] flex-wrap" style={{ background: 'var(--ink-100)' }}>
+        {AGING_TABS.map(t => (
+          <button
+            key={t}
+            onClick={() => setAgingTab(t)}
+            className="px-4 py-1.5 rounded-[9px] text-[13.5px] font-medium transition-colors"
+            style={agingTab === t
+              ? { background: '#fff', color: 'var(--ink-900)', boxShadow: '0 1px 4px rgba(26,24,32,.10)' }
+              : { color: 'var(--ink-500)' }
+            }
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
       {/* Grid + detail panel */}
       <div className="flex flex-col lg:flex-row gap-4">
         <div className="flex-1 min-w-0">
@@ -140,7 +171,7 @@ export default function DuesPage() {
             <div className="overflow-hidden border hairline" style={{ borderRadius: 'var(--ds-radius)', height: 480 }}>
               <AgGridReact
                 ref={gridRef}
-                rowData={data ?? []}
+                rowData={filteredData}
                 columnDefs={colDefs}
                 defaultColDef={{ sortable: true, resizable: true, filter: true, floatingFilter: true }}
                 rowSelection={{ mode: 'singleRow' }}
