@@ -1,12 +1,17 @@
 import { useState, useMemo, useRef } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AgGridReact } from 'ag-grid-react'
 import type { ColDef } from 'ag-grid-community'
-import { Download, X, TrendingDown, ChevronDown, Layers } from 'lucide-react'
+import { Download, X, TrendingDown, ChevronDown, Layers, Plus, Trash2 } from 'lucide-react'
 import * as XLSX from 'xlsx'
-import { supabase, CorpusEntry, CorpusPlan } from '@/lib/supabase'
+import { supabase, CorpusEntry, CorpusPlan, Flat } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { useRoleCtx } from '@/contexts/RoleContext'
 
 const STATUS_BADGE: Record<string, string> = {
@@ -17,9 +22,18 @@ const STATUS_BADGE: Record<string, string> = {
 }
 
 export default function CorpusPage() {
-  const { canWrite } = useRoleCtx()
+  const { canWrite, isAdmin } = useRoleCtx()
+  const qc = useQueryClient()
   const [selectedPlanId, setSelectedPlanId] = useState<string>('__all__')
   const [tab, setTab] = useState<'collection' | 'plan' | 'expenditure'>('collection')
+  const [showCreateWizard, setShowCreateWizard] = useState(false)
+  const [showActivate, setShowActivate] = useState(false)
+  const [showClose, setShowClose] = useState(false)
+
+  function invalidatePlans() {
+    qc.invalidateQueries({ queryKey: ['corpus-plans'] })
+    qc.invalidateQueries({ queryKey: ['corpus'] })
+  }
 
   const { data: plans = [] } = useQuery({
     queryKey: ['corpus-plans'],
@@ -123,11 +137,28 @@ export default function CorpusPage() {
           <h1 className="text-[24px] font-extrabold">Corpus fund</h1>
           <p className="text-[13.5px] mt-1" style={{ color: 'var(--ink-500)' }}>{planLabel}</p>
         </div>
-        <PlanSelector
-          plans={activePlans}
-          selectedId={selectedPlanId}
-          onChange={id => { setSelectedPlanId(id); setTab('collection') }}
-        />
+        <div className="flex items-center gap-2 flex-wrap">
+          {isAdmin && selectedPlanId !== '__all__' && selectedPlan?.status === 'draft' && (
+            <Button size="sm" onClick={() => setShowActivate(true)} style={{ background: 'var(--brand-600)', color: '#fff' }}>
+              Activate plan
+            </Button>
+          )}
+          {isAdmin && selectedPlanId !== '__all__' && selectedPlan?.status === 'active' && (
+            <Button size="sm" variant="outline" onClick={() => setShowClose(true)} className="border-red-300 text-red-600 hover:bg-red-50">
+              Close plan
+            </Button>
+          )}
+          {isAdmin && (
+            <Button size="sm" onClick={() => setShowCreateWizard(true)} className="flex items-center gap-1.5" style={{ background: 'var(--brand-600)', color: '#fff' }}>
+              <Plus size={14} /> New plan
+            </Button>
+          )}
+          <PlanSelector
+            plans={activePlans}
+            selectedId={selectedPlanId}
+            onChange={id => { setSelectedPlanId(id); setTab('collection') }}
+          />
+        </div>
       </div>
 
       {!canWrite && (
@@ -198,6 +229,46 @@ export default function CorpusPage() {
       {/* History section */}
       {historyPlans.length > 0 && (
         <PlanHistory plans={historyPlans} />
+      )}
+
+      {/* Empty state */}
+      {plans.length === 0 && (
+        <div className="surface !p-12 flex flex-col items-center gap-4 text-center">
+          <Layers size={40} style={{ color: 'var(--ink-300)' }} />
+          <div>
+            <p className="font-semibold text-lg" style={{ color: 'var(--ink-700)' }}>No corpus plans yet</p>
+            <p className="text-sm mt-1" style={{ color: 'var(--ink-500)' }}>Create your first plan to start tracking corpus fund collection.</p>
+          </div>
+          {isAdmin && (
+            <Button onClick={() => setShowCreateWizard(true)} className="flex items-center gap-1.5 mt-2" style={{ background: 'var(--brand-600)', color: '#fff' }}>
+              <Plus size={14} /> New plan
+            </Button>
+          )}
+        </div>
+      )}
+
+      {showCreateWizard && (
+        <CreatePlanWizard
+          open={showCreateWizard}
+          onClose={() => setShowCreateWizard(false)}
+          onSuccess={invalidatePlans}
+        />
+      )}
+      {showActivate && selectedPlanId !== '__all__' && (
+        <ActivatePlanDialog
+          open={showActivate}
+          planId={selectedPlanId}
+          onClose={() => setShowActivate(false)}
+          onSuccess={invalidatePlans}
+        />
+      )}
+      {showClose && selectedPlanId !== '__all__' && (
+        <ClosePlanDialog
+          open={showClose}
+          planId={selectedPlanId}
+          onClose={() => setShowClose(false)}
+          onSuccess={invalidatePlans}
+        />
       )}
     </div>
   )
@@ -634,5 +705,508 @@ function PlanHistory({ plans }: { plans: CorpusPlan[] }) {
         </div>
       )}
     </div>
+  )
+}
+
+// ── Create Plan Wizard ────────────────────────────────────────
+
+interface InstallmentRow {
+  id: string
+  label: string
+  dueDate: string
+  amount: number
+}
+
+interface FlatAmountRow {
+  flatId: string
+  code: string
+  bhkType: string
+  targetAmount: number
+  prePayment: number
+}
+
+const FY_RANGE = [2024, 2025, 2026, 2027, 2028, 2029, 2030]
+
+function fyLabel(y: number) { return `FY ${y}-${String(y + 1).slice(-2)}` }
+
+function CreatePlanWizard({ open, onClose, onSuccess }: {
+  open: boolean
+  onClose: () => void
+  onSuccess: () => void
+}) {
+  const [step, setStep] = useState(1)
+  const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
+  const [startFY, setStartFY] = useState<number>(2025)
+  const [endFY, setEndFY] = useState<number>(2026)
+  const [installments, setInstallments] = useState<InstallmentRow[]>([
+    { id: crypto.randomUUID(), label: '', dueDate: '', amount: 0 },
+  ])
+  const [flatAmounts, setFlatAmounts] = useState<FlatAmountRow[]>([])
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const { data: flats = [] } = useQuery({
+    queryKey: ['flats-for-corpus-wizard'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('flats')
+        .select('id, code, block, bhk_type, maintenance_amt')
+        .order('code')
+      return (data ?? []) as Pick<Flat, 'id' | 'code' | 'block' | 'bhk_type' | 'maintenance_amt'>[]
+    },
+  })
+
+  const instTotal = installments.reduce((s, i) => s + (i.amount || 0), 0)
+
+  function goToStep3() {
+    const defaultRows: FlatAmountRow[] = flats.map(f => ({
+      flatId: f.id,
+      code: f.code,
+      bhkType: f.bhk_type ?? '',
+      targetAmount: instTotal,
+      prePayment: 0,
+    }))
+    setFlatAmounts(defaultRows)
+    setStep(3)
+  }
+
+  function addInstallment() {
+    setInstallments(prev => [...prev, { id: crypto.randomUUID(), label: '', dueDate: '', amount: 0 }])
+  }
+
+  function removeInstallment(id: string) {
+    setInstallments(prev => prev.filter(i => i.id !== id))
+  }
+
+  function updateInstallment(id: string, field: keyof InstallmentRow, value: string | number) {
+    setInstallments(prev => prev.map(i => i.id === id ? { ...i, [field]: value } : i))
+  }
+
+  function updateFlatAmount(flatId: string, field: 'targetAmount' | 'prePayment', value: number) {
+    setFlatAmounts(prev => prev.map(f => f.flatId === flatId ? { ...f, [field]: value } : f))
+  }
+
+  async function submit(status: 'draft' | 'active') {
+    setSaving(true)
+    setError(null)
+    try {
+      const totalTarget = flatAmounts.reduce((s, f) => s + (f.targetAmount || 0), 0)
+      const totalPrePayments = flatAmounts.reduce((s, f) => s + (f.prePayment || 0), 0)
+
+      const { data: plan, error: planErr } = await supabase
+        .from('corpus_plans')
+        .insert({
+          name,
+          description: description || null,
+          start_fiscal_year: startFY,
+          end_fiscal_year: endFY,
+          total_target: totalTarget,
+          pre_payments: totalPrePayments,
+          planned_budget: [],
+          status,
+        })
+        .select()
+        .single()
+
+      if (planErr || !plan) throw new Error(planErr?.message ?? 'Failed to create plan')
+
+      const { error: instErr } = await supabase
+        .from('corpus_plan_installments')
+        .insert(
+          installments.map((inst, i) => ({
+            plan_id: plan.id,
+            installment_no: i + 1,
+            label: inst.label,
+            due_date: inst.dueDate || null,
+            default_amount: inst.amount,
+          }))
+        )
+      if (instErr) throw new Error(instErr.message)
+
+      const { error: flatsErr } = await supabase
+        .from('corpus_plan_flats')
+        .insert(
+          flatAmounts.map(fa => ({
+            plan_id: plan.id,
+            flat_id: fa.flatId,
+            target_amount: fa.targetAmount,
+            pre_payment: fa.prePayment,
+            carry_forward_amount: 0,
+          }))
+        )
+      if (flatsErr) throw new Error(flatsErr.message)
+
+      onSuccess()
+      onClose()
+    } catch (e: any) {
+      setError(e.message ?? 'Unexpected error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const step1Valid = name.trim().length > 0 && endFY >= startFY
+  const step2Valid = installments.length > 0 && installments.every(i => i.label.trim().length > 0)
+
+  const totalFlatTarget    = flatAmounts.reduce((s, f) => s + (f.targetAmount || 0), 0)
+  const totalFlatPrePayment = flatAmounts.reduce((s, f) => s + (f.prePayment || 0), 0)
+
+  const STEPS = ['Plan details', 'Installments', 'Per-flat amounts', 'Review']
+
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>New corpus plan</DialogTitle>
+        </DialogHeader>
+
+        {/* Stepper */}
+        <div className="flex items-center gap-0 mb-2">
+          {STEPS.map((label, idx) => {
+            const n = idx + 1
+            const active = n === step
+            const done   = n < step
+            return (
+              <div key={n} className="flex items-center flex-1 min-w-0">
+                <div className="flex flex-col items-center gap-1 shrink-0">
+                  <div
+                    className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
+                    style={{
+                      background: active ? 'var(--brand-600)' : done ? 'var(--brand-200)' : 'var(--ink-100)',
+                      color: active ? '#fff' : done ? 'var(--brand-700)' : 'var(--ink-400)',
+                    }}
+                  >{done ? '✓' : n}</div>
+                  <span className="text-[10px] whitespace-nowrap" style={{ color: active ? 'var(--brand-600)' : 'var(--ink-400)' }}>{label}</span>
+                </div>
+                {idx < STEPS.length - 1 && (
+                  <div className="flex-1 h-px mx-1 mt-[-12px]" style={{ background: done ? 'var(--brand-300)' : 'var(--ink-200)' }} />
+                )}
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Step 1 */}
+        {step === 1 && (
+          <div className="space-y-4 mt-2">
+            <div className="space-y-1.5">
+              <Label>Name *</Label>
+              <Input placeholder="e.g. Corpus 2025: Painting & Civil" value={name} onChange={e => setName(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Description <span className="text-[11px]" style={{ color: 'var(--ink-400)' }}>(optional)</span></Label>
+              <textarea
+                rows={3}
+                className="w-full rounded-lg border px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[var(--brand-400)]"
+                style={{ borderColor: 'var(--ink-200)' }}
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Start FY *</Label>
+                <Select value={String(startFY)} onValueChange={v => setStartFY(Number(v))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {FY_RANGE.map(y => <SelectItem key={y} value={String(y)}>{fyLabel(y)}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>End FY *</Label>
+                <Select value={String(endFY)} onValueChange={v => setEndFY(Number(v))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {FY_RANGE.filter(y => y >= startFY).map(y => <SelectItem key={y} value={String(y)}>{fyLabel(y)}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Step 2 */}
+        {step === 2 && (
+          <div className="space-y-3 mt-2">
+            <div className="overflow-auto max-h-72">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b hairline text-left">
+                    <th className="pb-2 pr-2 font-medium" style={{ color: 'var(--ink-500)' }}>Label *</th>
+                    <th className="pb-2 pr-2 font-medium" style={{ color: 'var(--ink-500)' }}>Due date</th>
+                    <th className="pb-2 pr-2 font-medium" style={{ color: 'var(--ink-500)' }}>Amount (₹) *</th>
+                    <th className="pb-2 w-8" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {installments.map(inst => (
+                    <tr key={inst.id} className="border-b hairline">
+                      <td className="py-2 pr-2">
+                        <Input
+                          placeholder="e.g. Phase 1"
+                          value={inst.label}
+                          onChange={e => updateInstallment(inst.id, 'label', e.target.value)}
+                        />
+                      </td>
+                      <td className="py-2 pr-2">
+                        <Input
+                          type="date"
+                          value={inst.dueDate}
+                          onChange={e => updateInstallment(inst.id, 'dueDate', e.target.value)}
+                        />
+                      </td>
+                      <td className="py-2 pr-2">
+                        <Input
+                          type="number"
+                          min={0}
+                          value={inst.amount || ''}
+                          onChange={e => updateInstallment(inst.id, 'amount', Number(e.target.value))}
+                        />
+                      </td>
+                      <td className="py-2">
+                        <button
+                          onClick={() => removeInstallment(inst.id)}
+                          disabled={installments.length === 1}
+                          className="p-1 rounded hover:bg-red-50 disabled:opacity-30"
+                        >
+                          <Trash2 size={13} className="text-red-500" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <button onClick={addInstallment} className="flex items-center gap-1 text-sm font-medium" style={{ color: 'var(--brand-600)' }}>
+              <Plus size={14} /> Add installment
+            </button>
+            <div className="flex justify-between text-sm pt-1 border-t hairline">
+              <span style={{ color: 'var(--ink-500)' }}>Running total</span>
+              <span className="font-semibold">{formatINR(instTotal)}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Step 3 */}
+        {step === 3 && (
+          <div className="space-y-3 mt-2">
+            <div className="overflow-auto max-h-80">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b hairline text-left sticky top-0 bg-white">
+                    <th className="pb-2 pr-3 font-medium" style={{ color: 'var(--ink-500)' }}>Flat</th>
+                    <th className="pb-2 pr-3 font-medium" style={{ color: 'var(--ink-500)' }}>BHK</th>
+                    <th className="pb-2 pr-3 font-medium" style={{ color: 'var(--ink-500)' }}>Target (₹)</th>
+                    <th className="pb-2 font-medium" style={{ color: 'var(--ink-500)' }}>Pre-payment (₹)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {flatAmounts.map(fa => (
+                    <tr key={fa.flatId} className="border-b hairline">
+                      <td className="py-1.5 pr-3 font-medium">{fa.code}</td>
+                      <td className="py-1.5 pr-3" style={{ color: 'var(--ink-500)' }}>{fa.bhkType || '—'}</td>
+                      <td className="py-1.5 pr-3">
+                        <Input
+                          type="number"
+                          min={0}
+                          value={fa.targetAmount || ''}
+                          onChange={e => updateFlatAmount(fa.flatId, 'targetAmount', Number(e.target.value))}
+                          className="h-8 text-sm"
+                        />
+                      </td>
+                      <td className="py-1.5">
+                        <Input
+                          type="number"
+                          min={0}
+                          value={fa.prePayment || ''}
+                          onChange={e => updateFlatAmount(fa.flatId, 'prePayment', Number(e.target.value))}
+                          className="h-8 text-sm"
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex justify-between text-sm border-t hairline pt-2">
+              <span style={{ color: 'var(--ink-500)' }}>Total target</span>
+              <span className="font-semibold">{formatINR(totalFlatTarget)}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span style={{ color: 'var(--ink-500)' }}>Total pre-payments</span>
+              <span className="font-semibold text-green-700">{formatINR(totalFlatPrePayment)}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Step 4 */}
+        {step === 4 && (
+          <div className="space-y-4 mt-2">
+            <div className="surface !p-4 space-y-3 text-sm">
+              <div className="flex justify-between">
+                <span style={{ color: 'var(--ink-500)' }}>Plan name</span>
+                <span className="font-semibold">{name}</span>
+              </div>
+              <div className="flex justify-between">
+                <span style={{ color: 'var(--ink-500)' }}>Fiscal years</span>
+                <span className="font-medium">{fyLabel(startFY)} – {fyLabel(endFY)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span style={{ color: 'var(--ink-500)' }}>Installments</span>
+                <span className="font-medium">{installments.length} × {formatINR(instTotal)} default</span>
+              </div>
+              <div className="flex justify-between border-t hairline pt-3">
+                <span style={{ color: 'var(--ink-500)' }}>Total target (all flats)</span>
+                <span className="font-bold">{formatINR(totalFlatTarget)}</span>
+              </div>
+              {totalFlatPrePayment > 0 && (
+                <div className="flex justify-between">
+                  <span style={{ color: 'var(--ink-500)' }}>Total pre-payments</span>
+                  <span className="font-semibold text-green-700">{formatINR(totalFlatPrePayment)}</span>
+                </div>
+              )}
+            </div>
+            {error && (
+              <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>
+            )}
+          </div>
+        )}
+
+        <DialogFooter className="mt-4 gap-2 sm:gap-2">
+          {step > 1 && (
+            <Button variant="outline" onClick={() => setStep(s => s - 1)} disabled={saving}>Back</Button>
+          )}
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+          {step < 3 && (
+            <Button
+              disabled={(step === 1 && !step1Valid) || (step === 2 && !step2Valid)}
+              onClick={() => {
+                if (step === 2) goToStep3()
+                else setStep(s => s + 1)
+              }}
+              style={{ background: 'var(--brand-600)', color: '#fff' }}
+            >
+              Next
+            </Button>
+          )}
+          {step === 3 && (
+            <Button onClick={() => setStep(4)} style={{ background: 'var(--brand-600)', color: '#fff' }}>
+              Next
+            </Button>
+          )}
+          {step === 4 && (
+            <>
+              <Button variant="outline" onClick={() => submit('draft')} disabled={saving}>
+                Save as Draft
+              </Button>
+              <Button onClick={() => submit('active')} disabled={saving} style={{ background: 'var(--brand-600)', color: '#fff' }}>
+                {saving ? 'Creating…' : 'Create & Activate'}
+              </Button>
+            </>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ── Activate Plan Dialog ──────────────────────────────────────
+
+function ActivatePlanDialog({ open, planId, onClose, onSuccess }: {
+  open: boolean
+  planId: string
+  onClose: () => void
+  onSuccess: () => void
+}) {
+  const [loading, setLoading] = useState(false)
+
+  async function confirm() {
+    setLoading(true)
+    await supabase.from('corpus_plans').update({ status: 'active' }).eq('id', planId)
+    setLoading(false)
+    onSuccess()
+    onClose()
+  }
+
+  return (
+    <AlertDialog open={open} onOpenChange={v => !v && onClose()}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Activate Corpus Plan?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This will make the plan live and allow collection tracking.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={onClose}>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={confirm} disabled={loading}>
+            {loading ? 'Activating…' : 'Activate'}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
+
+// ── Close Plan Dialog ─────────────────────────────────────────
+
+function ClosePlanDialog({ open, planId, onClose, onSuccess }: {
+  open: boolean
+  planId: string
+  onClose: () => void
+  onSuccess: () => void
+}) {
+  const [notes, setNotes] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  async function confirm() {
+    setLoading(true)
+    await supabase.from('corpus_plans').update({
+      status: 'completed',
+      closed_at: new Date().toISOString(),
+      close_notes: notes || null,
+    }).eq('id', planId)
+    setLoading(false)
+    onSuccess()
+    onClose()
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Close corpus plan</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 mt-2">
+          <div className="rounded-lg px-3 py-2.5 text-sm" style={{ background: 'var(--warn-bg)', border: '1px solid var(--warn-bd)', color: 'var(--warn)' }}>
+            This marks the plan as completed. Existing data is preserved.
+          </div>
+          <div className="space-y-1.5">
+            <Label>Close notes <span className="text-[11px]" style={{ color: 'var(--ink-400)' }}>(optional)</span></Label>
+            <textarea
+              rows={4}
+              className="w-full rounded-lg border px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[var(--brand-400)]"
+              style={{ borderColor: 'var(--ink-200)' }}
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              placeholder="Add any closing notes…"
+            />
+          </div>
+        </div>
+        <DialogFooter className="mt-4 gap-2 sm:gap-2">
+          <Button variant="outline" onClick={onClose} disabled={loading}>Cancel</Button>
+          <Button
+            onClick={confirm}
+            disabled={loading}
+            className="border-red-400 text-red-600 hover:bg-red-50 bg-white"
+            variant="outline"
+          >
+            {loading ? 'Closing…' : 'Mark as Completed'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
