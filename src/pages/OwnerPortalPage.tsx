@@ -173,9 +173,28 @@ export default function OwnerPortalPage() {
               </div>
             )}
           </div>
-          <p className="text-[11.5px]" style={{ color: 'var(--ink-400)' }}>
-            Include your flat number in the payment description/remarks.
-          </p>
+
+          {/* Remark format */}
+          <div className="rounded-xl p-3.5 flex flex-col gap-2" style={{ background: 'var(--ink-50)', border: '1px solid var(--ink-100)' }}>
+            <p className="text-[12px] font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-400)' }}>Payment remark format</p>
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-medium w-20 shrink-0" style={{ color: 'var(--ink-400)' }}>Maintenance</span>
+                <code className="text-[12.5px] font-mono px-2 py-0.5 rounded-md" style={{ background: 'var(--brand-50)', color: 'var(--brand-700)' }}>
+                  {myFlat?.code ?? 'FlatNo'} Aug maintenance
+                </code>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-medium w-20 shrink-0" style={{ color: 'var(--ink-400)' }}>Corpus</span>
+                <code className="text-[12.5px] font-mono px-2 py-0.5 rounded-md" style={{ background: 'var(--brand-50)', color: 'var(--brand-700)' }}>
+                  {myFlat?.code ?? 'FlatNo'} corpus
+                </code>
+              </div>
+            </div>
+            <p className="text-[11px]" style={{ color: 'var(--ink-400)' }}>
+              Replace the month with the month you are paying for.
+            </p>
+          </div>
         </div>
       )}
 
