@@ -155,20 +155,25 @@ export default function Layout() {
 
       {/* Footer: user + role + logout */}
       <div className="p-3 border-t hairline shrink-0">
-        <div className="flex items-center gap-2.5 px-2 py-2 rounded-xl">
-          <Avatar name={userName} size={34} />
-          <div className="flex-1 min-w-0">
-            <p className="text-[12.5px] font-semibold truncate capitalize">
-              {userName || 'User'}
-            </p>
-            <p className="text-[11px]" style={{ color: 'var(--ink-400)' }}>
-              {role ? ROLE_LABEL[role] ?? role : '—'}
-            </p>
-          </div>
+        <div className="flex items-center gap-1">
+          <NavLink
+            to="/profile"
+            className="flex items-center gap-2.5 flex-1 px-2 py-2 rounded-xl hover:bg-[var(--ink-100)] transition-colors min-w-0"
+          >
+            <Avatar name={userName} size={34} />
+            <div className="flex-1 min-w-0">
+              <p className="text-[12.5px] font-semibold truncate capitalize" style={{ color: 'var(--ink-900)' }}>
+                {userName || 'User'}
+              </p>
+              <p className="text-[11px]" style={{ color: 'var(--ink-400)' }}>
+                {role ? ROLE_LABEL[role] ?? role : '—'}
+              </p>
+            </div>
+          </NavLink>
           <button
             onClick={handleLogout}
             title="Sign out"
-            className="p-1.5 rounded-lg transition-colors hover:bg-[var(--ink-100)]"
+            className="p-1.5 rounded-lg transition-colors hover:bg-[var(--ink-100)] shrink-0"
             style={{ color: 'var(--ink-500)' }}
           >
             <LogOut size={16} />
