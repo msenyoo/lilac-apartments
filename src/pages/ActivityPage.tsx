@@ -167,7 +167,7 @@ export default function ActivityPage() {
                         <span className="font-bold">{row.user_email ?? 'System'}</span>
                         {' '}
                         <span style={{ color: 'var(--ink-500)' }}>
-                          {row.action.toLowerCase()}d a record in
+                          {({ INSERT: 'inserted', UPDATE: 'updated', DELETE: 'deleted' } as Record<string, string>)[row.action] ?? row.action.toLowerCase()} a record in
                         </span>
                         {' '}
                         <span className="font-medium mono text-[12.5px]">{row.table_name}</span>
