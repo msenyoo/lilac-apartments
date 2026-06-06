@@ -4,7 +4,7 @@ import {
   LayoutDashboard, IndianRupee, Banknote, Building2, Receipt,
   FileText, Users, Settings, LogOut, Menu,
   Megaphone, History, Shield, Search, Bell,
-  MoreHorizontal,
+  MoreHorizontal, HelpCircle,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useQuery } from '@tanstack/react-query'
@@ -29,6 +29,7 @@ const NAV = [
   { to: '/activity',      icon: History,         label: 'Activity log' },
   { to: '/users',         icon: Shield,          label: 'Users',             adminOnly: true },
   { to: '/settings',      icon: Settings,        label: 'Settings' },
+  { to: '/help',          icon: HelpCircle,      label: 'Help Center' },
 ]
 
 const BOTTOM_NAV = [

@@ -15,6 +15,7 @@ import ExpensesPage       from '@/pages/ExpensesPage'
 import AnnouncementsPage  from '@/pages/AnnouncementsPage'
 import ActivityPage       from '@/pages/ActivityPage'
 import UsersPage          from '@/pages/UsersPage'
+import HelpPage           from '@/pages/HelpPage'
 import { RoleProvider } from '@/contexts/RoleContext'
 
 export default function App() {
@@ -55,6 +56,7 @@ export default function App() {
           <Route path="announcements" element={<AnnouncementsPage />} />
           <Route path="activity"      element={<ActivityPage />} />
           <Route path="users"         element={<UsersPage />} />
+          <Route path="help"          element={<HelpPage />} />
           {/* Legacy redirects */}
           <Route path="upload"  element={<Navigate to="/transactions" replace />} />
           <Route path="review"  element={<Navigate to="/transactions?tab=review" replace />} />
