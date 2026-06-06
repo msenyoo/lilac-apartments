@@ -131,11 +131,6 @@ export default function ExpensesPage() {
         )}
       </div>
 
-      {!canWrite && (
-        <div className="flex items-center gap-2 px-3 py-2 mb-4 rounded-xl text-[13px]" style={{ background: 'var(--warn-bg)', border: '1px solid var(--warn-bd)', color: 'var(--warn)' }}>
-          <span>Read-only access — contact the administrator to make changes.</span>
-        </div>
-      )}
 
       {/* Tabs */}
       <div className="flex gap-1 rounded-xl p-1 overflow-x-auto" style={{ background: 'var(--ink-100)' }}>
