@@ -296,9 +296,10 @@ export default function HelpCenter({ open, onOpenChange, initialRoute }: Props) 
       <DialogContent
         className={cn(
           'fixed left-[50%] top-[50%] translate-x-[-50%] translate-y-[-50%]',
-          'w-[95vw] max-w-5xl h-[90vh] max-h-[860px]',
+          'w-[95vw] max-w-5xl h-[90dvh] max-h-[860px]',
           'p-0 border border-slate-200 shadow-2xl rounded-2xl overflow-hidden',
-          'flex flex-col bg-white'
+          'flex flex-col bg-white',
+          '[&>button.absolute]:hidden' // hide base DialogContent's built-in X button
         )}
         onOpenAutoFocus={e => e.preventDefault()}
       >
@@ -351,20 +352,21 @@ export default function HelpCenter({ open, onOpenChange, initialRoute }: Props) 
                   <button
                     key={section.id}
                     onClick={() => selectSection(section.id)}
+                    title={section.title}
                     className={cn(
                       'flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] font-medium',
-                      'transition-colors whitespace-nowrap lg:whitespace-normal w-full text-left',
+                      'transition-colors whitespace-nowrap lg:whitespace-normal text-left',
+                      'lg:w-full',
                       isActive
                         ? 'bg-violet-600 text-white'
                         : 'text-slate-600 hover:bg-white hover:text-slate-900'
                     )}
                   >
                     <Icon
-                      size={15}
+                      size={16}
                       className={cn('shrink-0', isActive ? 'text-white' : 'text-slate-400')}
                     />
                     <span className="hidden lg:block truncate">{section.title}</span>
-                    <span className="lg:hidden">{section.title}</span>
                   </button>
                 )
               })}
