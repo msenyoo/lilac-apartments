@@ -23,7 +23,7 @@ const STATUS_BADGE: Record<string, string> = {
 }
 
 export default function CorpusPage() {
-  const { canWrite, isAdmin } = useRoleCtx()
+  const { isAdmin } = useRoleCtx()
   const qc = useQueryClient()
   const [selectedPlanId, setSelectedPlanId] = useState<string>('__all__')
   const [tab, setTab] = useState<'collection' | 'plan' | 'expenditure'>('collection')
@@ -162,11 +162,6 @@ export default function CorpusPage() {
         </div>
       </div>
 
-      {!canWrite && (
-        <div className="flex items-center gap-2 px-3 py-2 mb-4 rounded-xl text-[13px]" style={{ background: 'var(--warn-bg)', border: '1px solid var(--warn-bd)', color: 'var(--warn)' }}>
-          <span>Read-only access — contact the administrator to make changes.</span>
-        </div>
-      )}
 
       {/* Consolidated view banner when showing all */}
       {selectedPlanId === '__all__' && activePlans.length > 1 && (

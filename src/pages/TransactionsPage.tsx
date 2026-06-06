@@ -49,11 +49,6 @@ export default function TransactionsPage() {
         <p className="text-[13.5px] mt-1" style={{ color: 'var(--ink-500)' }}>Upload statements, review unknowns, browse all data</p>
       </div>
 
-      {!canWrite && (
-        <div className="flex items-center gap-2 px-3 py-2 mb-4 rounded-xl text-[13px]" style={{ background: 'var(--warn-bg)', border: '1px solid var(--warn-bd)', color: 'var(--warn)' }}>
-          <span>Read-only access — contact the administrator to make changes.</span>
-        </div>
-      )}
 
       {/* Tab bar */}
       <div className="flex gap-1 rounded-xl p-1 flex-wrap" style={{ background: 'var(--ink-100)' }}>
