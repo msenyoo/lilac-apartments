@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import { Plus, Pencil, Trash2, Shield, Eye, Users, UserCircle, Lock, RefreshCw, Copy, MessageCircle, KeyRound } from 'lucide-react'
+import { Plus, Pencil, Trash2, Shield, Eye, Users, UserCircle, Lock, RefreshCw, Copy, MessageCircle, KeyRound, Home } from 'lucide-react'
 import {
   Dialog, DialogContent, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
@@ -27,11 +27,13 @@ const ROLE_OPTIONS = [
   { value: 'admin',     label: 'Admin (Treasurer)' },
   { value: 'committee', label: 'Committee' },
   { value: 'auditor',   label: 'Auditor' },
+  { value: 'owner',     label: 'Owner (resident self-service)' },
 ]
 
 function roleTone(role: string) {
   if (role === 'admin')     return 'ds-badge-brand'
   if (role === 'committee') return 'ds-badge-info'
+  if (role === 'owner')     return 'ds-badge-ok'
   return 'ds-badge-neutral'
 }
 
@@ -83,6 +85,7 @@ export default function UsersPage() {
     admin:     (users as any[]).filter(u => u.role === 'admin').length,
     committee: (users as any[]).filter(u => u.role === 'committee').length,
     auditor:   (users as any[]).filter(u => u.role === 'auditor').length,
+    owner:     (users as any[]).filter(u => u.role === 'owner').length,
   }
 
   if (!isAdmin) {
@@ -143,19 +146,20 @@ export default function UsersPage() {
 
       {tab === 'users' && <>
       {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
         {[
           { icon: <Users size={18} />, label: 'Total users', value: users.length, tone: 'brand' },
           { icon: <Shield size={18} />, label: 'Admins', value: totals.admin, tone: 'brand' },
           { icon: <UserCircle size={18} />, label: 'Committee', value: totals.committee, tone: 'info' },
           { icon: <Eye size={18} />, label: 'Auditors', value: totals.auditor, tone: 'neutral' },
+          { icon: <Home size={18} />, label: 'Owners', value: totals.owner, tone: 'ok' },
         ].map(({ icon, label, value, tone }) => (
           <div key={label} className="surface !p-4 sm:!p-5 flex flex-col gap-3">
             <div
               className="w-9 h-9 rounded-[10px] flex items-center justify-center"
               style={{
-                background: tone === 'brand' ? 'var(--brand-50)' : tone === 'info' ? 'var(--info-bg)' : 'var(--ink-100)',
-                color: tone === 'brand' ? 'var(--brand-600)' : tone === 'info' ? 'var(--info)' : 'var(--ink-600)',
+                background: tone === 'brand' ? 'var(--brand-50)' : tone === 'info' ? 'var(--info-bg)' : tone === 'ok' ? 'var(--ok-bg)' : 'var(--ink-100)',
+                color: tone === 'brand' ? 'var(--brand-600)' : tone === 'info' ? 'var(--info)' : tone === 'ok' ? 'var(--ok)' : 'var(--ink-600)',
               }}
             >
               {icon}
