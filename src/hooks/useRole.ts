@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
-export type AppRole = 'admin' | 'committee' | 'auditor'
+export type AppRole = 'admin' | 'committee' | 'auditor' | 'owner'
 
 export function useRole() {
   const [role, setRole]       = useState<AppRole | null>(null)
@@ -26,6 +26,7 @@ export function useRole() {
     isAdmin:     role === 'admin',
     isCommittee: role === 'committee',
     isAuditor:   role === 'auditor',
+    isOwner:     role === 'owner',
     canWrite:    role === 'admin',
     canApprove:  role === 'admin' || role === 'committee',
   }

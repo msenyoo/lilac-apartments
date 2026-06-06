@@ -10,8 +10,12 @@ import {
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
+import { useRoleCtx } from '@/contexts/RoleContext'
+import OwnerPortalPage from '@/pages/OwnerPortalPage'
 
 export default function DashboardPage() {
+  const { isOwner } = useRoleCtx()
+  if (isOwner) return <OwnerPortalPage />
   const { data: settings } = useQuery({
     queryKey: ['app-settings'],
     queryFn: async () => {

@@ -4,7 +4,7 @@ import {
   LayoutDashboard, IndianRupee, Banknote, Building2, Receipt,
   FileText, Users, Settings, LogOut, Menu,
   Megaphone, History, Shield, Search, Bell,
-  MoreHorizontal, HelpCircle,
+  MoreHorizontal, HelpCircle, Home, User,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useQuery } from '@tanstack/react-query'
@@ -12,9 +12,10 @@ import HelpButton from '@/components/HelpButton'
 import { useRoleCtx } from '@/contexts/RoleContext'
 
 const ROLE_LABEL: Record<string, string> = {
-  admin: 'Treasurer',
+  admin:     'Treasurer',
   committee: 'Committee',
-  auditor: 'Auditor',
+  auditor:   'Auditor',
+  owner:     'Owner',
 }
 
 const NAV = [
@@ -31,6 +32,18 @@ const NAV = [
   { to: '/settings',      icon: Settings,        label: 'Settings',          adminOnly: true },
   { to: '/help',          icon: HelpCircle,      label: 'Help Center' },
 ]
+
+// Restricted nav for flat owners — self-service portal only
+const OWNER_NAV = [
+  { to: '/dashboard',     icon: Home,      label: 'My Flat' },
+  { to: '/announcements', icon: Megaphone, label: 'Notices' },
+  { to: '/settings',      icon: IndianRupee, label: 'Payment Info' },
+  { to: '/profile',       icon: User,      label: 'My Profile' },
+  { to: '/help',          icon: HelpCircle,label: 'Help' },
+]
+
+// Pages owners are not allowed to visit
+const OWNER_BLOCKED = ['/transactions', '/dues', '/corpus', '/expenses', '/flats', '/reports', '/activity', '/users']
 
 const BOTTOM_NAV = [
   { to: '/dashboard',     icon: LayoutDashboard, label: 'Home' },
@@ -62,10 +75,17 @@ export default function Layout() {
   const location  = useLocation()
   const [open, setOpen]   = useState(false)
   const [notif, setNotif] = useState(false)
-  const { role } = useRoleCtx()
+  const { role, isOwner } = useRoleCtx()
   const [userName, setUserName] = useState('')
 
   useEffect(() => { setOpen(false) }, [location.pathname])
+
+  // Redirect owners away from management pages
+  useEffect(() => {
+    if (isOwner && OWNER_BLOCKED.some(p => location.pathname.startsWith(p))) {
+      navigate('/dashboard', { replace: true })
+    }
+  }, [isOwner, location.pathname, navigate])
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -92,8 +112,10 @@ export default function Layout() {
     navigate('/')
   }
 
-  const visibleNav = NAV.filter(n => !n.adminOnly || role === 'admin')
-  const currentPage = NAV.find(n => location.pathname.startsWith(n.to))
+  const visibleNav = isOwner
+    ? OWNER_NAV
+    : NAV.filter(n => !n.adminOnly || role === 'admin')
+  const currentPage = (isOwner ? OWNER_NAV : NAV).find(n => location.pathname.startsWith(n.to))
 
   const sidebar = (
     <aside
@@ -116,7 +138,8 @@ export default function Layout() {
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-3 py-3 flex flex-col gap-0.5">
-        {visibleNav.map(({ to, icon: Icon, label, badge }) => {
+        {visibleNav.map(({ to, icon: Icon, label, ...rest }) => {
+          const badge = (rest as any).badge as string | undefined
           const badgeCount = badge === 'review' ? reviewCount : 0
           return (
             <NavLink

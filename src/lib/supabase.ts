@@ -143,6 +143,10 @@ export interface SplitRef {
 export interface Profile {
   id: string
   full_name: string | null
+  display_name: string | null
+  mobile: string | null
+  contact_email: string | null
+  flat_id: string | null
   role: string
   created_at: string
 }
@@ -155,7 +159,7 @@ export interface AppSetting {
 
 export interface UserRole {
   user_id: string
-  role: 'admin' | 'committee' | 'auditor'
+  role: 'admin' | 'committee' | 'auditor' | 'owner'
   assigned_by: string | null
   assigned_at: string
 }

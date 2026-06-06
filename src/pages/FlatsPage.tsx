@@ -225,7 +225,7 @@ function RateChangeModal({ flat, onClose, onSaved }: { flat: Flat; onClose: () =
 
 // ── RESIDENTS TAB ─────────────────────────────────────────────
 function ResidentsTab() {
-  const { isAdmin } = useRoleCtx()
+  const { isAdmin, role } = useRoleCtx()
   const qc = useQueryClient()
   const [showAdd, setShowAdd] = useState(false)
 
@@ -261,10 +261,12 @@ function ResidentsTab() {
         </span>
       ),
     },
-    { field: 'phone',       headerName: 'Phone',    width: 130 },
-    { field: 'upi_ids',     headerName: 'UPI IDs',  flex: 1, minWidth: 180,
+    // Phone: admin + committee only (needed for dues communication)
+    ...(isAdmin || role === 'committee' ? [{ field: 'phone', headerName: 'Phone', width: 130 } as ColDef<any>] : []),
+    // UPI IDs: admin only — payment method is sensitive financial data
+    ...(isAdmin ? [{ field: 'upi_ids', headerName: 'UPI IDs', flex: 1, minWidth: 180,
       valueFormatter: (p: any) => (p.value ?? []).join(', '),
-    },
+    } as ColDef<any>] : []),
     { field: 'moved_in',    headerName: 'Moved In', width: 110 },
     { field: 'moved_out',   headerName: 'Moved Out', width: 110 },
     { field: 'is_active',   headerName: 'Active',   width: 90, filter: true,
