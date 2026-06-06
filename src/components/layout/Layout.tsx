@@ -75,7 +75,7 @@ export default function Layout() {
   const location  = useLocation()
   const [open, setOpen]   = useState(false)
   const [notif, setNotif] = useState(false)
-  const { role, isOwner } = useRoleCtx()
+  const { role, isOwner, loading: roleLoading } = useRoleCtx()
   const [userName, setUserName] = useState('')
 
   useEffect(() => { setOpen(false) }, [location.pathname])
@@ -112,9 +112,11 @@ export default function Layout() {
     navigate('/')
   }
 
-  const visibleNav = isOwner
-    ? OWNER_NAV
-    : NAV.filter(n => !n.adminOnly || role === 'admin')
+  const visibleNav = roleLoading
+    ? []
+    : isOwner
+      ? OWNER_NAV
+      : NAV.filter(n => !n.adminOnly || role === 'admin')
   const currentPage = (isOwner ? OWNER_NAV : NAV).find(n => location.pathname.startsWith(n.to))
 
   const sidebar = (
