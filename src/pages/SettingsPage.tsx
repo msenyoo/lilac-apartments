@@ -21,15 +21,17 @@ function fyLabel(y: string) { return `FY ${y}-${String(parseInt(y) + 1).slice(-2
 type SettingsTab = 'general' | 'rates' | 'categories' | 'imports'
 
 export default function SettingsPage() {
+  const { isAdmin } = useRoleCtx()
   const [tab, setTab] = useState<SettingsTab>('general')
-  const { canWrite } = useRoleCtx()
 
-  const TABS: { key: SettingsTab; label: string }[] = [
+  const TABS: { key: SettingsTab; label: string; adminOnly?: boolean }[] = [
     { key: 'general',    label: 'General' },
     { key: 'rates',      label: 'Maintenance Rates' },
-    { key: 'categories', label: 'Expense Categories' },
-    { key: 'imports',    label: 'Import History' },
+    { key: 'categories', label: 'Expense Categories', adminOnly: true },
+    { key: 'imports',    label: 'Import History',     adminOnly: true },
   ]
+
+  const visibleTabs = TABS.filter(t => !t.adminOnly || isAdmin)
 
   return (
     <div className="flex flex-col gap-5 fade-in max-w-3xl">
@@ -38,18 +40,9 @@ export default function SettingsPage() {
         <p className="text-[13.5px] mt-1" style={{ color: 'var(--ink-500)' }}>App configuration</p>
       </div>
 
-      {!canWrite && (
-        <div
-          className="px-4 py-3 rounded-[10px] border text-[13px]"
-          style={{ background: 'var(--warn-bg)', borderColor: 'var(--warn-bd)', color: 'var(--warn)' }}
-        >
-          Read-only access — contact the administrator to make changes.
-        </div>
-      )}
-
       {/* Tabs */}
       <div className="flex gap-1 p-1 rounded-[12px] flex-wrap" style={{ background: 'var(--ink-100)' }}>
-        {TABS.map(({ key, label }) => (
+        {visibleTabs.map(({ key, label }) => (
           <button
             key={key}
             onClick={() => setTab(key)}
@@ -66,8 +59,8 @@ export default function SettingsPage() {
 
       {tab === 'general'     && <GeneralSettings />}
       {tab === 'rates'       && <RateHistorySettings />}
-      {tab === 'categories'  && <CategoriesSettings />}
-      {tab === 'imports'    && <UploadHistorySection />}
+      {tab === 'categories'  && isAdmin && <CategoriesSettings />}
+      {tab === 'imports'     && isAdmin && <UploadHistorySection />}
     </div>
   )
 }
@@ -110,36 +103,45 @@ function GeneralSettings() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="surface !p-5 flex flex-col gap-4">
-        <p className="font-semibold text-[14px]">Dues configuration</p>
-        <div className="max-w-xs">
-          <label className="ds-lbl mb-1 block">Carry-forward from</label>
-          <p className="text-[11.5px] mb-2" style={{ color: 'var(--ink-400)' }}>Unpaid dues before this FY are ignored</p>
-          <select
-            value={workingStartFY}
-            onChange={e => setDuesStartFY(e.target.value)}
-            className="ds-field"
-          >
-            {FY_OPTIONS.map(y => <option key={y} value={y}>{fyLabel(y)}</option>)}
-          </select>
+      {isAdmin && (
+        <div className="surface !p-5 flex flex-col gap-4">
+          <p className="font-semibold text-[14px]">Dues configuration</p>
+          <div className="max-w-xs">
+            <label className="ds-lbl mb-1 block">Carry-forward from</label>
+            <p className="text-[11.5px] mb-2" style={{ color: 'var(--ink-400)' }}>Unpaid dues before this FY are ignored</p>
+            <select
+              value={workingStartFY}
+              onChange={e => setDuesStartFY(e.target.value)}
+              className="ds-field"
+            >
+              {FY_OPTIONS.map(y => <option key={y} value={y}>{fyLabel(y)}</option>)}
+            </select>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="surface !p-5 flex flex-col gap-4">
         <div>
           <p className="font-semibold text-[14px]">Collection payment details</p>
           <p className="text-[12px] mt-0.5" style={{ color: 'var(--ink-400)' }}>Used in WhatsApp reminder messages sent to residents</p>
         </div>
-        <div className="flex flex-col gap-3 max-w-md">
-          <div>
-            <label className="ds-lbl mb-1 block">UPI ID</label>
-            <Input value={workingUpi} onChange={e => setCollectionUpi(e.target.value)} placeholder="e.g. lilacapts@upi" className="text-sm" />
+        {isAdmin ? (
+          <div className="flex flex-col gap-3 max-w-md">
+            <div>
+              <label className="ds-lbl mb-1 block">UPI ID</label>
+              <Input value={workingUpi} onChange={e => setCollectionUpi(e.target.value)} placeholder="e.g. lilacapts@upi" className="text-sm" />
+            </div>
+            <div>
+              <label className="ds-lbl mb-1 block">Bank transfer details</label>
+              <Input value={workingBank} onChange={e => setCollectionBank(e.target.value)} placeholder="e.g. A/c: 1234567890, IFSC: HDFC0001234" className="text-sm" />
+            </div>
           </div>
-          <div>
-            <label className="ds-lbl mb-1 block">Bank transfer details</label>
-            <Input value={workingBank} onChange={e => setCollectionBank(e.target.value)} placeholder="e.g. A/c: 1234567890, IFSC: HDFC0001234" className="text-sm" />
+        ) : (
+          <div className="flex flex-col gap-2 text-[13.5px]">
+            <p><span className="font-medium" style={{ color: 'var(--ink-500)' }}>UPI: </span>{workingUpi || '—'}</p>
+            <p><span className="font-medium" style={{ color: 'var(--ink-500)' }}>Bank: </span>{workingBank || '—'}</p>
           </div>
-        </div>
+        )}
       </div>
 
       {isAdmin && (
