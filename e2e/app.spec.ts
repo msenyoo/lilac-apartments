@@ -359,3 +359,311 @@ test.describe('Mobile: key pages render without horizontal overflow', () => {
     })
   }
 })
+
+// ─── Phase 10: Expenses, Settings, Flats mutations ───────────────────────────
+
+// ─────────────────────────────────────────────
+// Expenses — Add Expense (Phase 10)
+// ─────────────────────────────────────────────
+
+test.describe('Phase 10 — Expenses: Add Expense', () => {
+  test.beforeEach(async ({ page }) => { await page.goto('/expenses') })
+
+  test('Add Expense dialog has required header fields and line item section', async ({ page }) => {
+    await page.getByRole('button', { name: /add expense/i }).click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible({ timeout: 5_000 })
+
+    // Header fields
+    await expect(dialog.locator('input[type="date"]').first()).toBeVisible()
+    await expect(dialog.locator('input[type="number"]').first()).toBeVisible()
+    await expect(dialog.getByPlaceholder(/security salary june/i)).toBeVisible()
+
+    // Payee type and payment mode selects (SelectTriggers rendered as buttons with role combobox)
+    await expect(dialog.getByText(/payee type/i)).toBeVisible()
+    await expect(dialog.getByText(/payment mode/i)).toBeVisible()
+
+    // Line items section heading
+    await expect(dialog.getByText(/split.*line items|line items/i)).toBeVisible()
+
+    await page.keyboard.press('Escape')
+    await expect(dialog).not.toBeVisible()
+  })
+
+  test('Add Expense — fill header + line item + save creates voucher', async ({ page }) => {
+    await page.getByRole('button', { name: /add expense/i }).click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible({ timeout: 5_000 })
+
+    // Fill header amount
+    const amountInput = dialog.locator('input[type="number"]').first()
+    await amountInput.fill('5000')
+
+    // Fill description
+    await dialog.getByPlaceholder(/security salary june/i).fill('E2E Test Expense')
+
+    // Change payee type to "Other" so we get a free-text payee name field
+    // (avoids needing a vendor to be pre-selected)
+    await dialog.getByRole('combobox').first().click()
+    // Select "Other" from the payee type dropdown
+    const payeeOption = page.getByRole('option', { name: /^other$/i })
+    if (await payeeOption.isVisible({ timeout: 2_000 }).catch(() => false)) {
+      await payeeOption.click()
+    } else {
+      await page.keyboard.press('Escape')
+    }
+
+    // Fill line item description (first text input in the line item card)
+    await dialog.getByPlaceholder(/what is this for/i).fill('Test line item')
+
+    // Fill line item amount — second number input in the dialog
+    const lineAmountInput = dialog.locator('input[type="number"]').nth(1)
+    await lineAmountInput.fill('5000')
+
+    // Select a category for the line item — open the Category combobox inside the line item
+    // The SelectTrigger for category is labeled "Category" and has placeholder text
+    const categoryTrigger = dialog.getByRole('combobox').filter({ hasText: /category/i }).first()
+    if (await categoryTrigger.isVisible({ timeout: 2_000 }).catch(() => false)) {
+      await categoryTrigger.click()
+      // Pick the first available option in the dropdown
+      const firstOption = page.getByRole('option').first()
+      await firstOption.waitFor({ timeout: 3_000 })
+      await firstOption.click()
+    }
+
+    // Save — button is enabled only when line total === header amount
+    const saveBtn = dialog.getByRole('button', { name: /save expense/i })
+    await expect(saveBtn).toBeEnabled({ timeout: 3_000 })
+    await saveBtn.click()
+
+    // Dialog should close after successful save
+    await expect(dialog).not.toBeVisible({ timeout: 10_000 })
+
+    // New entry should appear in Day Book list (look for the description or voucher pattern)
+    await expect(page.getByText(/E2E Test Expense/)).toBeVisible({ timeout: 10_000 })
+    // Voucher pattern: EXP-YYYY-NNNN
+    await expect(page.getByText(/EXP-\d{4}-\d{4}/)).toBeVisible({ timeout: 5_000 })
+  })
+
+  test('Add Expense — line item balance indicator shows mismatch then match', async ({ page }) => {
+    await page.getByRole('button', { name: /add expense/i }).click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible({ timeout: 5_000 })
+
+    // Set header amount = 5000
+    const amountInput = dialog.locator('input[type="number"]').first()
+    await amountInput.fill('5000')
+
+    // Set line item amount = 3000 (mismatch)
+    const lineAmountInput = dialog.locator('input[type="number"]').nth(1)
+    await lineAmountInput.fill('3000')
+
+    // Trigger re-render by tabbing out
+    await lineAmountInput.press('Tab')
+
+    // The running total indicator should show mismatch — text like "3,000 / 5,000"
+    // and should be in red (not green). The Save button should be disabled.
+    const saveBtn = dialog.getByRole('button', { name: /save expense/i })
+    await expect(saveBtn).toBeDisabled({ timeout: 3_000 })
+
+    // Balance text shows both numbers
+    await expect(dialog.getByText(/3,000/)).toBeVisible()
+
+    // Now set line item amount = 5000 (match)
+    await lineAmountInput.fill('5000')
+    await lineAmountInput.press('Tab')
+
+    // Save button should now be enabled (balance matches)
+    await expect(saveBtn).toBeEnabled({ timeout: 3_000 })
+
+    // Balance indicator shows matching total (green — text-green-600 class applied)
+    // Just verify the amount text is present; colour testing via CSS class is fragile in e2e
+    await expect(dialog.getByText(/5,000.*5,000|5,000 \/ 5,000/)).toBeVisible()
+
+    await page.keyboard.press('Escape')
+  })
+})
+
+// ─────────────────────────────────────────────
+// Transactions — Void (Phase 10)
+// ─────────────────────────────────────────────
+
+test.describe('Phase 10 — Transactions: Void', () => {
+  test('select a non-voided transaction, open Edit, void it', async ({ page }) => {
+    await page.goto('/transactions')
+
+    // Switch to All Transactions tab
+    await page.getByRole('button', { name: /all transactions/i }).click()
+    await expect(page.locator('.ag-root-wrapper')).toBeVisible({ timeout: 15_000 })
+
+    // Switch to "All time" filter so sparse dev DB shows rows
+    await page.getByRole('button', { name: /all time/i }).click()
+
+    // Wait for grid to reload
+    await page.waitForTimeout(1_000)
+
+    // Click the first non-voided row
+    // AG Grid rows: pick first .ag-row that does NOT contain "VOIDED" text
+    const rows = page.locator('.ag-row')
+    await rows.first().waitFor({ timeout: 10_000 })
+
+    let targetRow = rows.first()
+    const rowCount = await rows.count()
+    for (let i = 0; i < rowCount; i++) {
+      const rowText = await rows.nth(i).innerText()
+      if (!rowText.includes('VOIDED')) {
+        targetRow = rows.nth(i)
+        break
+      }
+    }
+    await targetRow.click()
+
+    // Action strip / Edit button should appear
+    const editBtn = page.getByRole('button', { name: /^edit$/i })
+    await expect(editBtn).toBeVisible({ timeout: 5_000 })
+    await editBtn.click()
+
+    // Edit modal opens — Void button should be visible
+    const voidBtn = page.getByRole('button', { name: /^void$/i })
+    await expect(voidBtn).toBeVisible({ timeout: 5_000 })
+    await voidBtn.click()
+
+    // Confirmation appears: "Yes, void" button
+    const confirmBtn = page.getByRole('button', { name: /yes.*void|yes, void/i })
+    await expect(confirmBtn).toBeVisible({ timeout: 3_000 })
+    await confirmBtn.click()
+
+    // Modal closes; grid refreshes — the row should now show strikethrough / VOIDED style
+    // The voided row is still in the grid but with opacity and line-through (CSS, not text).
+    // We can confirm the modal is gone and no error is thrown.
+    await expect(page.getByRole('button', { name: /yes.*void|yes, void/i })).not.toBeVisible({ timeout: 10_000 })
+  })
+})
+
+// ─────────────────────────────────────────────
+// Settings — Add expense category (Phase 10)
+// ─────────────────────────────────────────────
+
+test.describe('Phase 10 — Settings: Add expense category', () => {
+  test.beforeEach(async ({ page }) => { await page.goto('/settings') })
+
+  test('Add Category dialog opens and new category appears in list', async ({ page }) => {
+    // Navigate to Expense Categories tab
+    await page.getByRole('button', { name: /expense categories/i }).click()
+
+    // Click "+ Add Category"
+    await page.getByRole('button', { name: /add category/i }).click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible({ timeout: 5_000 })
+    await expect(dialog.getByText(/add category/i)).toBeVisible()
+
+    // Fill name
+    const nameInput = dialog.locator('input').first()
+    await nameInput.fill('E2E Test Category')
+
+    // Submit — button text is "Add Category"
+    await dialog.getByRole('button', { name: /^add category$/i }).click()
+
+    // Dialog closes
+    await expect(dialog).not.toBeVisible({ timeout: 10_000 })
+
+    // New category should appear in the categories list
+    await expect(page.getByText('E2E Test Category')).toBeVisible({ timeout: 5_000 })
+  })
+})
+
+// ─────────────────────────────────────────────
+// Settings — Save general settings (Phase 10)
+// ─────────────────────────────────────────────
+
+test.describe('Phase 10 — Settings: Save general settings', () => {
+  test('UPI ID persists after navigating away and back', async ({ page }) => {
+    await page.goto('/settings')
+
+    // General is the default tab
+    await page.getByRole('button', { name: /^general$/i }).click()
+
+    // Find the UPI ID input — labeled "UPI ID"
+    // The label uses <label className="ds-lbl"> (not a <Label> component), so use getByText + sibling
+    const upiLabel = page.getByText(/^UPI ID$/i)
+    await expect(upiLabel).toBeVisible({ timeout: 5_000 })
+
+    // The input is the one immediately after the UPI ID label — use a more stable locator
+    // The Input component renders as <input> with placeholder "e.g. lilacapts@upi"
+    const upiInput = page.getByPlaceholder(/lilacapts@upi/i)
+    await upiInput.fill('test@upi')
+
+    // Click Save settings
+    await page.getByRole('button', { name: /save settings/i }).click()
+
+    // Wait for save confirmation (button briefly shows "Saved!")
+    await expect(page.getByRole('button', { name: /saved!/i })).toBeVisible({ timeout: 5_000 })
+
+    // Navigate away
+    await page.goto('/dashboard')
+    await expect(page).toHaveURL(/\/dashboard/)
+
+    // Navigate back to settings
+    await page.goto('/settings')
+    await page.getByRole('button', { name: /^general$/i }).click()
+
+    // UPI ID should still show the saved value
+    const upiInputAfter = page.getByPlaceholder(/lilacapts@upi/i)
+    await expect(upiInputAfter).toHaveValue('test@upi', { timeout: 5_000 })
+  })
+})
+
+// ─────────────────────────────────────────────
+// Flats — Change maintenance rate (Phase 10)
+// ─────────────────────────────────────────────
+
+test.describe('Phase 10 — Flats: Change maintenance rate', () => {
+  test('change rate for first flat and verify rate history entry', async ({ page }) => {
+    await page.goto('/flats')
+
+    // Wait for grid to load and click the first flat row
+    await page.locator('.ag-row').first().waitFor({ timeout: 10_000 })
+    await page.locator('.ag-row').first().click()
+
+    // Detail panel should open showing the flat code
+    const detailPanel = page.locator('.w-full.lg\\:w-72, .w-72').first()
+    await expect(detailPanel).toBeVisible({ timeout: 5_000 })
+
+    // "Change maintenance rate" button is visible for admin
+    const changeRateBtn = page.getByRole('button', { name: /change maintenance rate/i })
+    await expect(changeRateBtn).toBeVisible({ timeout: 5_000 })
+    await changeRateBtn.click()
+
+    // Rate change modal opens — it is a custom modal (not Shadcn Dialog), look for the heading
+    await expect(page.getByText(/change rate/i)).toBeVisible({ timeout: 5_000 })
+
+    // "New monthly rate" input — pre-filled with current rate
+    const rateInput = page.locator('input[type="number"]').first()
+    await expect(rateInput).toBeVisible({ timeout: 3_000 })
+
+    // Fill new rate = 1950
+    await rateInput.fill('1950')
+
+    // Compute next month's first day dynamically
+    const nextMonthDate = await page.evaluate(() => {
+      const d = new Date()
+      d.setMonth(d.getMonth() + 1)
+      d.setDate(1)
+      return d.toISOString().slice(0, 10)
+    })
+
+    // Effective from date input
+    const dateInput = page.locator('input[type="date"]').first()
+    await dateInput.fill(nextMonthDate)
+
+    // Click Save
+    await page.getByRole('button', { name: /^save$/i }).click()
+
+    // Modal should close
+    await expect(page.getByText(/change rate/i)).not.toBeVisible({ timeout: 10_000 })
+
+    // Rate history section should now show an entry with ₹1,950
+    // The panel re-renders after save with the new rate history entry
+    await expect(detailPanel.getByText(/1,950|₹1,950/)).toBeVisible({ timeout: 5_000 })
+  })
+})

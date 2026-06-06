@@ -25,5 +25,7 @@ test-results/
 .claude/settings.local.json
 .claude/worktrees/
 
-# Scripts
-scripts/
+# Scripts — ignore one-off migration/data scripts
+scripts/apply_views.py
+scripts/migrate-history.js
+scripts/verify-migration.js
