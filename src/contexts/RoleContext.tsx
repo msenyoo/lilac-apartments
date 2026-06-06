@@ -5,12 +5,13 @@ interface RoleContextValue {
   role: AppRole | null
   loading: boolean
   isAdmin: boolean
+  isOwner: boolean
   canWrite: boolean
   canApprove: boolean
 }
 
 const RoleContext = createContext<RoleContextValue>({
-  role: null, loading: true, isAdmin: false, canWrite: false, canApprove: false,
+  role: null, loading: true, isAdmin: false, isOwner: false, canWrite: false, canApprove: false,
 })
 
 export function RoleProvider({ children }: { children: ReactNode }) {
