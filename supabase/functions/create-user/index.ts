@@ -26,7 +26,7 @@ Deno.serve(async (req) => {
 
     const authEmail = email ?? (mobile ? `${mobile.replace(/\D/g, '')}@lilac.com` : null)
     if (!authEmail || !password || !role) return new Response(JSON.stringify({ error: 'Missing fields' }), { status: 400, headers: corsHeaders })
-    if (!['admin', 'committee', 'auditor'].includes(role)) return new Response(JSON.stringify({ error: 'Invalid role' }), { status: 400, headers: corsHeaders })
+    if (!['admin', 'committee', 'auditor', 'owner'].includes(role)) return new Response(JSON.stringify({ error: 'Invalid role' }), { status: 400, headers: corsHeaders })
 
     // Admin client (service role) to create user
     const adminClient = createClient(
