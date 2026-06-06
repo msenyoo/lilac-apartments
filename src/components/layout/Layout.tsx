@@ -28,7 +28,7 @@ const NAV = [
   { to: '/reports',       icon: FileText,        label: 'Reports' },
   { to: '/activity',      icon: History,         label: 'Activity log' },
   { to: '/users',         icon: Shield,          label: 'Users',             adminOnly: true },
-  { to: '/settings',      icon: Settings,        label: 'Settings' },
+  { to: '/settings',      icon: Settings,        label: 'Settings',          adminOnly: true },
   { to: '/help',          icon: HelpCircle,      label: 'Help Center' },
 ]
 
