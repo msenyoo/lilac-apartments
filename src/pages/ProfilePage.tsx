@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
-import { User, KeyRound, Save, Eye, EyeOff } from 'lucide-react'
+import { KeyRound, Save, Eye, EyeOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -10,12 +10,13 @@ import { Label } from '@/components/ui/label'
 export default function ProfilePage() {
   const qc = useQueryClient()
   const [userId, setUserId] = useState<string | null>(null)
-  const [authEmail, setAuthEmail] = useState('')
+  const [mobileLogin, setMobileLogin] = useState('')
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       setUserId(data.user?.id ?? null)
-      setAuthEmail(data.user?.email ?? '')
+      const email = data.user?.email ?? ''
+      setMobileLogin(email.endsWith('@lilac.com') ? email.replace('@lilac.com', '') : email)
     })
   }, [])
 
@@ -25,20 +26,16 @@ export default function ProfilePage() {
     queryFn: async () => {
       const { data } = await supabase
         .from('profiles')
-        .select('*, flat:flat_id(code)')
+        .select('display_name, contact_email')
         .eq('id', userId!)
         .maybeSingle()
-      return data as { display_name: string | null; mobile: string | null; contact_email: string | null; flat: { code: string } | null } | null
+      return data as { display_name: string | null; contact_email: string | null } | null
     },
   })
 
   if (isLoading || !userId) {
     return <div className="surface h-48 animate-pulse" style={{ background: 'var(--ink-100)' }} />
   }
-
-  const loginDisplay = authEmail.endsWith('@lilac.com')
-    ? authEmail.replace('@lilac.com', '') + ' (mobile)'
-    : authEmail
 
   return (
     <div className="flex flex-col gap-6 fade-in max-w-xl">
@@ -49,44 +46,29 @@ export default function ProfilePage() {
         </p>
       </div>
 
-      {/* Login info (read-only) */}
-      <div className="surface !p-5 flex items-center gap-4">
-        <div
-          className="w-12 h-12 rounded-full flex items-center justify-center shrink-0"
-          style={{ background: 'var(--brand-50)', color: 'var(--brand-600)' }}
-        >
-          <User size={22} />
-        </div>
-        <div>
-          <p className="text-[15px] font-semibold" style={{ color: 'var(--ink-900)' }}>
-            {profile?.display_name ?? '—'}
-          </p>
-          <p className="text-[12.5px] mt-0.5" style={{ color: 'var(--ink-400)' }}>
-            Login: {loginDisplay}
-            {profile?.flat ? ` · ${profile.flat.code}` : ''}
-          </p>
-        </div>
-      </div>
-
-      <ProfileForm userId={userId} profile={profile ?? null} onSaved={() => qc.invalidateQueries({ queryKey: ['my-profile', userId] })} />
+      <ProfileForm
+        userId={userId}
+        mobileLogin={mobileLogin}
+        profile={profile ?? null}
+        onSaved={() => qc.invalidateQueries({ queryKey: ['my-profile', userId] })}
+      />
       <ChangePasswordForm />
     </div>
   )
 }
 
-function ProfileForm({ userId, profile, onSaved }: {
+function ProfileForm({ userId, mobileLogin, profile, onSaved }: {
   userId: string
-  profile: { display_name: string | null; mobile: string | null; contact_email: string | null } | null
+  mobileLogin: string
+  profile: { display_name: string | null; contact_email: string | null } | null
   onSaved: () => void
 }) {
-  const [name, setName]     = useState(profile?.display_name ?? '')
-  const [mobile, setMobile] = useState(profile?.mobile ?? '')
-  const [email, setEmail]   = useState(profile?.contact_email ?? '')
+  const [name, setName]   = useState(profile?.display_name ?? '')
+  const [email, setEmail] = useState(profile?.contact_email ?? '')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     setName(profile?.display_name ?? '')
-    setMobile(profile?.mobile ?? '')
     setEmail(profile?.contact_email ?? '')
   }, [profile])
 
@@ -95,7 +77,6 @@ function ProfileForm({ userId, profile, onSaved }: {
     const { error } = await supabase.from('profiles').upsert({
       id: userId,
       display_name: name.trim() || null,
-      mobile: mobile.trim() || null,
       contact_email: email.trim() || null,
     })
     setSaving(false)
@@ -115,12 +96,11 @@ function ProfileForm({ userId, profile, onSaved }: {
 
       <div className="grid grid-cols-2 gap-4">
         <div className="flex flex-col gap-1">
-          <Label>Mobile</Label>
+          <Label>Mobile (login ID)</Label>
           <Input
-            value={mobile}
-            onChange={e => setMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
-            inputMode="numeric"
-            placeholder="10-digit number"
+            value={mobileLogin}
+            disabled
+            className="opacity-60 cursor-not-allowed"
           />
         </div>
         <div className="flex flex-col gap-1">
