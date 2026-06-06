@@ -235,9 +235,9 @@ function generatePassword(): string {
 }
 
 function AddUserDialog({ open, onClose, onSuccess }: { open: boolean; onClose: () => void; onSuccess: () => void }) {
-  const [email, setEmail]       = useState('')
-  const [name, setName]         = useState('')
   const [phone, setPhone]       = useState('')
+  const [name, setName]         = useState('')
+  const [email, setEmail]       = useState('')
   const [role, setRole]         = useState('committee')
   const [flatId, setFlatId]     = useState('')
   const [password, setPw]       = useState('')
@@ -255,20 +255,20 @@ function AddUserDialog({ open, onClose, onSuccess }: { open: boolean; onClose: (
   })
 
   function reset() {
-    setEmail(''); setName(''); setPhone(''); setRole('committee')
+    setPhone(''); setName(''); setEmail(''); setRole('committee')
     setFlatId(''); setPw(''); setError(''); setCreated(false); setCopied(false)
   }
 
   async function handleSubmit() {
     setError('')
-    if (!email.trim())   { setError('Email is required'); return }
-    if (!name.trim())    { setError('Full name is required'); return }
+    if (!/^\d{10}$/.test(phone.trim())) { setError('Mobile must be exactly 10 digits'); return }
+    if (!name.trim())                   { setError('Full name is required'); return }
     const pw = generatePassword()
     setPw(pw)
     setSaving(true)
     try {
       const { error: fnErr } = await supabase.functions.invoke('create-user', {
-        body: { email: email.trim(), name: name.trim(), phone: phone.trim() || null, password: pw, role, flatId: flatId || null },
+        body: { mobile: phone.trim(), name: name.trim(), contactEmail: email.trim() || null, password: pw, role, flatId: flatId || null },
       })
       if (fnErr) throw fnErr
       onSuccess()
@@ -277,14 +277,14 @@ function AddUserDialog({ open, onClose, onSuccess }: { open: boolean; onClose: (
     finally { setSaving(false) }
   }
 
-  const phoneDigits = phone.replace(/\D/g, '')
+  const loginId = `${phone}@lilac.com`
   const waMessage = encodeURIComponent(
-    `Welcome to Lilac Apartments! Your login credentials:\nLogin: ${email}\nPassword: ${password}\nApp: https://lilac-apartments.vercel.app\nPlease change your password after first login.`
+    `Welcome to Lilac Apartments! Your login credentials:\nMobile: ${phone}\nPassword: ${password}\nApp: https://lilac-apartments.vercel.app\nPlease change your password after first login.`
   )
-  const waUrl = phoneDigits.length >= 10 ? `https://wa.me/91${phoneDigits.slice(-10)}?text=${waMessage}` : ''
+  const waUrl = phone.length === 10 ? `https://wa.me/91${phone}?text=${waMessage}` : ''
 
   function handleCopy() {
-    navigator.clipboard.writeText(`Login: ${email}\nPassword: ${password}\nApp: https://lilac-apartments.vercel.app`)
+    navigator.clipboard.writeText(`Mobile: ${phone}\nPassword: ${password}\nApp: https://lilac-apartments.vercel.app`)
       .then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) })
   }
 
@@ -297,27 +297,30 @@ function AddUserDialog({ open, onClose, onSuccess }: { open: boolean; onClose: (
           <DialogTitle>Add user</DialogTitle>
         </div>
         <div className="px-6 py-5 space-y-4">
-          {/* Email — full width */}
+          {/* Phone — full width, primary */}
           <div className="space-y-1.5">
-            <Label>Email</Label>
-            <Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="name@example.com" disabled={created} />
+            <Label>Phone (WhatsApp) *</Label>
+            <Input
+              value={phone}
+              onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+              placeholder="10-digit mobile number"
+              inputMode="numeric"
+              disabled={created}
+            />
+            {phone.length > 0 && (
+              <p className="text-[11.5px]" style={{ color: 'var(--ink-400)' }}>Login ID: {loginId}</p>
+            )}
           </div>
 
-          {/* Name + Phone — 2 columns */}
+          {/* Name + Email — 2 columns */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>Full name</Label>
-              <Input value={name} onChange={e => setName(e.target.value)} placeholder="" disabled={created} />
+              <Label>Full name *</Label>
+              <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Rajesh Kumar" disabled={created} />
             </div>
             <div className="space-y-1.5">
-              <Label>Phone (WhatsApp)</Label>
-              <Input
-                value={phone}
-                onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                placeholder="+9198…"
-                inputMode="numeric"
-                disabled={created}
-              />
+              <Label>Email (optional)</Label>
+              <Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="for notifications" disabled={created} />
             </div>
           </div>
 
@@ -357,7 +360,7 @@ function AddUserDialog({ open, onClose, onSuccess }: { open: boolean; onClose: (
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 space-y-3">
               <p className="text-[13px] font-semibold text-emerald-800">User created — share credentials</p>
               <div className="rounded-lg bg-white border border-emerald-100 px-3 py-2.5 space-y-1 font-mono text-[12.5px] text-slate-700">
-                <p><span className="text-slate-400">Login: </span>{email}</p>
+                <p><span className="text-slate-400">Mobile: </span>{phone}</p>
                 <p><span className="text-slate-400">Password: </span>{password}</p>
               </div>
               <div className="flex gap-2">
