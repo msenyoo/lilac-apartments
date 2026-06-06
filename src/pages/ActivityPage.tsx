@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import { Download, GitMerge, Receipt, Upload, Megaphone, DownloadCloud, History } from 'lucide-react'
 
@@ -68,8 +69,23 @@ export default function ActivityPage() {
           </p>
         </div>
         <button
-          className="flex items-center gap-2 px-3.5 py-2 rounded-[10px] border hairline font-semibold text-[13.5px]"
+          className="flex items-center gap-2 px-3.5 py-2 rounded-[10px] border hairline font-semibold text-[13.5px] disabled:opacity-40"
           style={{ color: 'var(--ink-700)' }}
+          disabled={logs.length === 0}
+          onClick={() => {
+            const exportRows = (logs as any[]).map(row => ({
+              Timestamp: new Date(row.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
+              Actor: row.user_email ?? 'System',
+              Table: row.table_name,
+              Action: row.action,
+              'Record ID': row.record_id ?? '',
+            }))
+            const ws = XLSX.utils.json_to_sheet(exportRows)
+            ws['!cols'] = [22, 28, 22, 10, 36].map(w => ({ wch: w }))
+            const wb = XLSX.utils.book_new()
+            XLSX.utils.book_append_sheet(wb, ws, 'Activity Log')
+            XLSX.writeFile(wb, `ActivityLog_${new Date().toISOString().slice(0, 10)}.xlsx`)
+          }}
         >
           <DownloadCloud size={15} /> Export log
         </button>
