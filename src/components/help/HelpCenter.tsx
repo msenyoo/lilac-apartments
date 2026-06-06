@@ -332,7 +332,7 @@ export default function HelpCenter({ open, onOpenChange, initialRoute }: Props) 
         </div>
 
         {/* Body: TOC + content */}
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
           {/* TOC — desktop: fixed left panel; mobile: horizontal scroll row */}
           <nav
             className={cn(
