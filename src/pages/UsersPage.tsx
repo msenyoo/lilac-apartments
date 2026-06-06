@@ -17,6 +17,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { useRoleCtx } from '@/contexts/RoleContext'
+import { toast } from 'sonner'
 import {
   fetchPermissions, savePermissions, DEFAULT_PERMISSIONS,
   type PermissionsMap, type Resource,
@@ -254,6 +255,7 @@ export default function UsersPage() {
                     body: { userId: deleteTarget.id },
                   })
                   if (fnErr) throw fnErr
+                  toast.success(`${deleteTarget.display_name ?? deleteTarget.auth_email} deleted`)
                   setDeleteTarget(null)
                   invalidate()
                 } catch (e: any) {
@@ -471,8 +473,9 @@ function EditUserDialog({ user, onClose, onSuccess }: { user: any | null; onClos
       if (pe) throw pe
       const { error: re } = await supabase.from('user_roles').upsert({ user_id: user.id, role })
       if (re) throw re
+      toast.success('User updated')
       onSuccess(); onClose()
-    } catch (e: any) { setError(e.message ?? 'Failed to save') }
+    } catch (e: any) { setError(e.message ?? 'Failed to save'); toast.error(e.message ?? 'Failed to save') }
     finally { setSaving(false) }
   }
 
@@ -596,7 +599,7 @@ function PermissionsTab() {
 
   const mutation = useMutation({
     mutationFn: savePermissions,
-    onSuccess: () => { setSaved(true); setTimeout(() => setSaved(false), 2500) },
+    onSuccess: () => { toast.success('Permissions saved'); setSaved(true); setTimeout(() => setSaved(false), 2500) },
   })
 
   function toggle(roleKey: 'committee' | 'auditor', resource: Resource, value: boolean) {

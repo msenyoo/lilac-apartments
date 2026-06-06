@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useRoleCtx } from '@/contexts/RoleContext'
+import { toast } from 'sonner'
 
 const STATUS_BADGE: Record<string, string> = {
   active:    'bg-green-100 text-green-700',
@@ -837,10 +838,12 @@ function CreatePlanWizard({ open, onClose, onSuccess }: {
         )
       if (flatsErr) throw new Error(flatsErr.message)
 
+      toast.success(`Plan "${name}" ${status === 'active' ? 'created and activated' : 'saved as draft'}`)
       onSuccess()
       onClose()
     } catch (e: any) {
       setError(e.message ?? 'Unexpected error')
+      toast.error(e.message ?? 'Failed to create plan')
     } finally {
       setSaving(false)
     }
@@ -1124,8 +1127,10 @@ function ActivatePlanDialog({ open, planId, onClose, onSuccess }: {
 
   async function confirm() {
     setLoading(true)
-    await supabase.from('corpus_plans').update({ status: 'active' }).eq('id', planId)
+    const { error } = await supabase.from('corpus_plans').update({ status: 'active' }).eq('id', planId)
     setLoading(false)
+    if (error) { toast.error(error.message); return }
+    toast.success('Plan activated')
     onSuccess()
     onClose()
   }
@@ -1163,12 +1168,14 @@ function ClosePlanDialog({ open, planId, onClose, onSuccess }: {
 
   async function confirm() {
     setLoading(true)
-    await supabase.from('corpus_plans').update({
+    const { error } = await supabase.from('corpus_plans').update({
       status: 'completed',
       closed_at: new Date().toISOString(),
       close_notes: notes || null,
     }).eq('id', planId)
     setLoading(false)
+    if (error) { toast.error(error.message); return }
+    toast.success('Plan closed')
     onSuccess()
     onClose()
   }

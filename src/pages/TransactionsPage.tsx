@@ -14,6 +14,7 @@ import {
   getFiscalYear, getFiscalMonth, bankDateToISO, formatINR, FLAT_CODES,
 } from '@/lib/tagger'
 import { useRoleCtx } from '@/contexts/RoleContext'
+import { toast } from 'sonner'
 
 
 type Tab = 'upload' | 'review' | 'all'
@@ -626,13 +627,17 @@ function EditModal({ txn, flats, onClose, onSaved, onSplit, onVoided }: {
       flat_code: flatCode, flat_id: flatId, category: resolvedCategory, corpus,
     }).eq('id', txn.id)
     setSaving(false)
-    if (!error) onSaved({ ...txn, flat_code: flatCode, flat_id: flatId, category: resolvedCategory, corpus })
+    if (error) { toast.error(error.message); return }
+    toast.success('Transaction updated')
+    onSaved({ ...txn, flat_code: flatCode, flat_id: flatId, category: resolvedCategory, corpus })
   }
 
   async function handleVoid() {
     setVoiding(true)
-    await supabase.from('transactions').update({ row_type: 'VOIDED' }).eq('id', txn.id)
+    const { error } = await supabase.from('transactions').update({ row_type: 'VOIDED' }).eq('id', txn.id)
     setVoiding(false)
+    if (error) { toast.error(error.message); return }
+    toast.success('Transaction voided')
     onVoided()
   }
 
@@ -779,6 +784,7 @@ function SplitModal({ txn, onClose, onSaved, flats }: {
       split_ref_id: splitRef?.id ?? null, split_ref_code: refCode, row_type: 'SPLIT' as const,
     }))
     await supabase.from('transactions').insert(splitRows)
+    toast.success('Transaction split into ' + rows.length + ' rows')
     setSaving(false); onSaved()
   }
 
