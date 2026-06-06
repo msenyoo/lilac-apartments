@@ -334,10 +334,10 @@ function AddUserDialog({ open, onClose, onSuccess }: { open: boolean; onClose: (
             </div>
             <div className="space-y-1.5">
               <Label>Flat (optional)</Label>
-              <Select value={flatId} onValueChange={setFlatId} disabled={created}>
+              <Select value={flatId || 'none'} onValueChange={v => setFlatId(v === 'none' ? '' : v)} disabled={created}>
                 <SelectTrigger><SelectValue placeholder="— none —" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">— none —</SelectItem>
+                  <SelectItem value="none">— none —</SelectItem>
                   {(flats as any[]).map((f: any) => (
                     <SelectItem key={f.id} value={f.id}>{f.code}</SelectItem>
                   ))}
