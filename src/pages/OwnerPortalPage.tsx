@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
-import { IndianRupee, Building2, CheckCircle2, AlertCircle, Clock } from 'lucide-react'
+import { IndianRupee, Building2, CheckCircle2, AlertCircle, Clock, Receipt } from 'lucide-react'
 
 interface FlatRow { id: string; code: string; block: string; flat_type: string; bhk_type: string | null; maintenance_amt: number; corpus_target: number }
 interface DuesRow { flat_code: string; maintenance_amt: number; annual_due: number; collected_fy: number; pending: number; status: string }
 interface CorpusRow { flat_code: string; corpus_target: number; collected: number; balance: number; pct_paid: number; status: string }
+interface TxnRow { id: string; value_date: string; description: string; amount: number; category: string | null; fiscal_label: string | null; corpus: string }
 
 function StatusPill({ status }: { status: string }) {
   const cfg: Record<string, { bg: string; color: string; icon: React.ReactNode }> = {
@@ -51,6 +52,20 @@ export default function OwnerPortalPage() {
     queryFn: async () => {
       const { data } = await supabase.from('app_settings').select('*')
       return Object.fromEntries((data ?? []).map((s: any) => [s.key, s.value]))
+    },
+  })
+
+  const { data: payments = [] } = useQuery<TxnRow[]>({
+    queryKey: ['owner-payments'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('transactions')
+        .select('id,value_date,description,amount,category,fiscal_label,corpus')
+        .eq('cr_dr', 'CR')
+        .neq('row_type', 'VOIDED')
+        .order('value_date', { ascending: false })
+        .limit(50)
+      return (data ?? []) as TxnRow[]
     },
   })
 
@@ -163,6 +178,50 @@ export default function OwnerPortalPage() {
           </p>
         </div>
       )}
+
+      {/* Payment history */}
+      <div className="surface !p-0 overflow-hidden">
+        <div className="flex items-center gap-2 px-5 py-4 border-b" style={{ borderColor: 'var(--ink-100)' }}>
+          <Receipt size={16} style={{ color: 'var(--brand-600)' }} />
+          <p className="font-semibold text-[14px]">Payment history</p>
+        </div>
+        {payments.length === 0 ? (
+          <p className="px-5 py-6 text-[13px]" style={{ color: 'var(--ink-400)' }}>No payments recorded yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="ds-tbl">
+              <thead>
+                <tr>
+                  {['Date', 'Description', 'Type', 'Amount'].map(h => <th key={h}>{h}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {payments.map(p => (
+                  <tr key={p.id}>
+                    <td className="mono text-[12px] whitespace-nowrap" style={{ color: 'var(--ink-500)' }}>
+                      {new Date(p.value_date).toLocaleDateString('en-IN', { dateStyle: 'short' })}
+                    </td>
+                    <td className="text-[12.5px]" style={{ color: 'var(--ink-700)' }}>
+                      <p className="truncate max-w-[220px]">{p.description}</p>
+                      {p.fiscal_label && (
+                        <p className="text-[11px]" style={{ color: 'var(--ink-400)' }}>{p.fiscal_label}</p>
+                      )}
+                    </td>
+                    <td>
+                      <span className={`ds-badge ${p.corpus === 'YES' ? 'ds-badge-info' : 'ds-badge-ok'}`}>
+                        {p.corpus === 'YES' ? 'Corpus' : (p.category ?? 'Maintenance')}
+                      </span>
+                    </td>
+                    <td className="font-semibold mono text-right" style={{ color: 'var(--ok)' }}>
+                      {formatINR(p.amount)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
