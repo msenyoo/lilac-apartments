@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import { Plus, Pencil, Shield, Eye, EyeOff, Users, UserCircle, Lock, RefreshCw, Copy, MessageCircle, Wand2 } from 'lucide-react'
+import { Plus, Pencil, Shield, Eye, Users, UserCircle, Lock, RefreshCw, Copy, MessageCircle } from 'lucide-react'
 import {
   Dialog, DialogContent, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
@@ -235,35 +235,40 @@ function generatePassword(): string {
 }
 
 function AddUserDialog({ open, onClose, onSuccess }: { open: boolean; onClose: () => void; onSuccess: () => void }) {
+  const [email, setEmail]       = useState('')
   const [name, setName]         = useState('')
-  const [mobile, setMobile]     = useState('')
-  const [password, setPw]       = useState('')
-  const [showPw, setShowPw]     = useState(false)
+  const [phone, setPhone]       = useState('')
   const [role, setRole]         = useState('committee')
+  const [flatId, setFlatId]     = useState('')
+  const [password, setPw]       = useState('')
   const [saving, setSaving]     = useState(false)
   const [created, setCreated]   = useState(false)
   const [copied, setCopied]     = useState(false)
   const [error, setError]       = useState('')
 
-  function reset() {
-    setName(''); setMobile(''); setPw(''); setShowPw(false)
-    setRole('committee'); setError(''); setCreated(false); setCopied(false)
-  }
+  const { data: flats = [] } = useQuery({
+    queryKey: ['flats-list'],
+    queryFn: async () => {
+      const { data } = await supabase.from('flats').select('id, code').order('code')
+      return data ?? []
+    },
+  })
 
-  function handleGenerate() {
-    setPw(generatePassword())
-    setShowPw(true)
+  function reset() {
+    setEmail(''); setName(''); setPhone(''); setRole('committee')
+    setFlatId(''); setPw(''); setError(''); setCreated(false); setCopied(false)
   }
 
   async function handleSubmit() {
     setError('')
-    if (!name.trim())                    { setError('Name is required'); return }
-    if (!/^\d{10}$/.test(mobile.trim())) { setError('Mobile must be exactly 10 digits'); return }
-    if (password.length < 8)             { setError('Password must be at least 8 characters'); return }
+    if (!email.trim())   { setError('Email is required'); return }
+    if (!name.trim())    { setError('Full name is required'); return }
+    const pw = generatePassword()
+    setPw(pw)
     setSaving(true)
     try {
       const { error: fnErr } = await supabase.functions.invoke('create-user', {
-        body: { name: name.trim(), mobile: mobile.trim(), password, role },
+        body: { email: email.trim(), name: name.trim(), phone: phone.trim() || null, password: pw, role, flatId: flatId || null },
       })
       if (fnErr) throw fnErr
       onSuccess()
@@ -272,108 +277,102 @@ function AddUserDialog({ open, onClose, onSuccess }: { open: boolean; onClose: (
     finally { setSaving(false) }
   }
 
+  const phoneDigits = phone.replace(/\D/g, '')
   const waMessage = encodeURIComponent(
-    `Welcome to Lilac Apartments! Your login credentials:\nLogin ID: ${mobile}\nPassword: ${password}\nApp: https://lilac-apartments.vercel.app\nPlease change your password after first login.`
+    `Welcome to Lilac Apartments! Your login credentials:\nLogin: ${email}\nPassword: ${password}\nApp: https://lilac-apartments.vercel.app\nPlease change your password after first login.`
   )
-  const waUrl = `https://wa.me/91${mobile}?text=${waMessage}`
+  const waUrl = phoneDigits.length >= 10 ? `https://wa.me/91${phoneDigits.slice(-10)}?text=${waMessage}` : ''
 
   function handleCopy() {
-    const text = `Login ID: ${mobile}\nPassword: ${password}\nApp: https://lilac-apartments.vercel.app`
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    })
+    navigator.clipboard.writeText(`Login: ${email}\nPassword: ${password}\nApp: https://lilac-apartments.vercel.app`)
+      .then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) })
   }
 
   function handleDone() { reset(); onClose() }
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) { reset(); onClose() } }}>
-      <DialogContent className="max-w-sm p-0">
+      <DialogContent className="max-w-md p-0">
         <div className="px-6 pt-6 pb-4 border-b border-slate-100 shrink-0">
-          <DialogTitle>Add User</DialogTitle>
+          <DialogTitle>Add user</DialogTitle>
         </div>
-        <div className="px-6 py-4 space-y-4">
-          <div className="space-y-1">
-            <Label>Name *</Label>
-            <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Rajesh Kumar" disabled={created} />
+        <div className="px-6 py-5 space-y-4">
+          {/* Email — full width */}
+          <div className="space-y-1.5">
+            <Label>Email</Label>
+            <Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="name@example.com" disabled={created} />
           </div>
-          <div className="space-y-1">
-            <Label>Mobile (10 digits) *</Label>
-            <Input
-              value={mobile}
-              onChange={e => setMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
-              placeholder="10-digit number"
-              inputMode="numeric"
-              disabled={created}
-            />
-            {mobile.length > 0 && (
-              <p className="text-xs text-slate-400">Login: {mobile}@lilac.com</p>
-            )}
-          </div>
-          <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <Label>Password *</Label>
-              <button
-                type="button"
-                onClick={handleGenerate}
-                disabled={created}
-                className="flex items-center gap-1 text-[12px] px-2 py-1 rounded-md border border-slate-200 hover:bg-slate-50 transition-colors disabled:opacity-40"
-                style={{ color: 'var(--brand-600)' }}
-              >
-                <Wand2 size={11} /> Generate
-              </button>
+
+          {/* Name + Phone — 2 columns */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Full name</Label>
+              <Input value={name} onChange={e => setName(e.target.value)} placeholder="" disabled={created} />
             </div>
-            <div className="relative">
+            <div className="space-y-1.5">
+              <Label>Phone (WhatsApp)</Label>
               <Input
-                type={showPw ? 'text' : 'password'}
-                value={password}
-                onChange={e => setPw(e.target.value)}
-                placeholder="Min 8 characters"
-                className="pr-9"
+                value={phone}
+                onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                placeholder="+9198…"
+                inputMode="numeric"
                 disabled={created}
               />
-              <button type="button" onClick={() => setShowPw(p => !p)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400">
-                {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
-              </button>
             </div>
           </div>
-          <div className="space-y-1">
-            <Label>Role *</Label>
-            <Select value={role} onValueChange={setRole} disabled={created}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {ROLE_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
+
+          {/* Role + Flat — 2 columns */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Role</Label>
+              <Select value={role} onValueChange={setRole} disabled={created}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {ROLE_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Flat (optional)</Label>
+              <Select value={flatId} onValueChange={setFlatId} disabled={created}>
+                <SelectTrigger><SelectValue placeholder="— none —" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">— none —</SelectItem>
+                  {(flats as any[]).map((f: any) => (
+                    <SelectItem key={f.id} value={f.id}>{f.code}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
+
+          <p className="text-[12.5px]" style={{ color: 'var(--ink-400)' }}>
+            A random temporary password is generated and shown once — share it via WhatsApp.
+          </p>
+
           {error && <p className="text-sm text-red-500">{error}</p>}
 
+          {/* Credentials card after creation */}
           {created && (
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 space-y-3">
               <p className="text-[13px] font-semibold text-emerald-800">User created — share credentials</p>
               <div className="rounded-lg bg-white border border-emerald-100 px-3 py-2.5 space-y-1 font-mono text-[12.5px] text-slate-700">
-                <p><span className="text-slate-400">Login ID: </span>{mobile}</p>
+                <p><span className="text-slate-400">Login: </span>{email}</p>
                 <p><span className="text-slate-400">Password: </span>{password}</p>
               </div>
               <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="flex-1 gap-1.5 text-[12.5px]"
-                  onClick={handleCopy}
-                >
-                  <Copy size={13} />
-                  {copied ? 'Copied!' : 'Copy to clipboard'}
+                <Button size="sm" variant="outline" className="flex-1 gap-1.5 text-[12.5px]" onClick={handleCopy}>
+                  <Copy size={13} /> {copied ? 'Copied!' : 'Copy'}
                 </Button>
-                <Button
-                  size="sm"
-                  className="flex-1 gap-1.5 text-[12.5px] bg-green-600 hover:bg-green-700 text-white"
-                  onClick={() => window.open(waUrl, '_blank')}
-                >
-                  <MessageCircle size={13} />
-                  Send via WhatsApp
-                </Button>
+                {waUrl && (
+                  <Button
+                    size="sm"
+                    className="flex-1 gap-1.5 text-[12.5px] bg-green-600 hover:bg-green-700 text-white"
+                    onClick={() => window.open(waUrl, '_blank')}
+                  >
+                    <MessageCircle size={13} /> Send via WhatsApp
+                  </Button>
+                )}
               </div>
             </div>
           )}
@@ -385,8 +384,9 @@ function AddUserDialog({ open, onClose, onSuccess }: { open: boolean; onClose: (
             ) : (
               <>
                 <Button variant="outline" onClick={() => { reset(); onClose() }}>Cancel</Button>
-                <Button onClick={handleSubmit} disabled={saving}>
-                  {saving ? 'Creating…' : 'Create user'}
+                <Button onClick={handleSubmit} disabled={saving} className="gap-1.5">
+                  <Shield size={14} />
+                  {saving ? 'Creating…' : 'Create & generate password'}
                 </Button>
               </>
             )}

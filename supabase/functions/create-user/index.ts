@@ -21,12 +21,12 @@ Deno.serve(async (req) => {
     const { data: roleRow } = await callerClient.from('user_roles').select('role').eq('user_id', (await callerClient.auth.getUser()).data.user?.id ?? '').maybeSingle()
     if (roleRow?.role !== 'admin') return new Response(JSON.stringify({ error: 'Forbidden: admin only' }), { status: 403, headers: corsHeaders })
 
-    // Parse body
-    const { name, mobile, password, role } = await req.json()
-    if (!mobile || !password || !role) return new Response(JSON.stringify({ error: 'Missing fields' }), { status: 400, headers: corsHeaders })
-    if (!['admin', 'committee', 'auditor'].includes(role)) return new Response(JSON.stringify({ error: 'Invalid role' }), { status: 400, headers: corsHeaders })
+    // Parse body — supports both new (email) and legacy (mobile) flows
+    const { email, name, phone, password, role, flatId, mobile } = await req.json()
 
-    const email = `${mobile.replace(/\D/g, '')}@lilac.com`
+    const authEmail = email ?? (mobile ? `${mobile.replace(/\D/g, '')}@lilac.com` : null)
+    if (!authEmail || !password || !role) return new Response(JSON.stringify({ error: 'Missing fields' }), { status: 400, headers: corsHeaders })
+    if (!['admin', 'committee', 'auditor'].includes(role)) return new Response(JSON.stringify({ error: 'Invalid role' }), { status: 400, headers: corsHeaders })
 
     // Admin client (service role) to create user
     const adminClient = createClient(
@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
     )
 
     const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
-      email,
+      email: authEmail,
       password,
       email_confirm: true,
       user_metadata: { full_name: name },
@@ -43,14 +43,23 @@ Deno.serve(async (req) => {
     if (createError) return new Response(JSON.stringify({ error: createError.message }), { status: 400, headers: corsHeaders })
 
     const userId = newUser.user!.id
+    const phoneDigits = (phone ?? mobile ?? '').replace(/\D/g, '') || null
 
-    // Create profile
-    await adminClient.from('profiles').upsert({ id: userId, mobile: mobile.replace(/\D/g, ''), display_name: name, full_name: name })
+    // Create / update profile
+    await adminClient.from('profiles').upsert({
+      id: userId,
+      display_name: name,
+      full_name: name,
+      mobile: phoneDigits,
+      ...(flatId ? { flat_id: flatId } : {}),
+    })
 
     // Assign role
     await adminClient.from('user_roles').upsert({ user_id: userId, role })
 
-    return new Response(JSON.stringify({ id: userId, email }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    return new Response(JSON.stringify({ id: userId, email: authEmail }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
   } catch (err) {
     return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: corsHeaders })
   }
