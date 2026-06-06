@@ -9,17 +9,25 @@ export default function LoginPage() {
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState('')
 
+  function toLocalNumber(input: string): string | null {
+    const digits = input.replace(/\D/g, '')
+    if (/^\d{10}$/.test(digits)) return digits
+    if (/^91\d{10}$/.test(digits)) return digits.slice(2)   // 91XXXXXXXXXX
+    if (/^0{1,2}91\d{10}$/.test(digits)) return digits.slice(-10) // 0091XXXXXXXXXX
+    return null
+  }
+
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
-    const digits = mobile.replace(/\D/g, '')
-    if (!/^\d{10}$/.test(digits)) {
-      setError('Enter a valid 10-digit mobile number')
+    const local = toLocalNumber(mobile)
+    if (!local) {
+      setError('Enter a valid mobile number (10 digits, or with country code e.g. 919876543210)')
       return
     }
     setLoading(true)
     setError('')
     const { error } = await supabase.auth.signInWithPassword({
-      email: `${digits}@lilac.com`,
+      email: `${local}@lilac.com`,
       password,
     })
     setLoading(false)
@@ -83,8 +91,8 @@ export default function LoginPage() {
                 required
                 autoComplete="username"
                 value={mobile}
-                onChange={e => setMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                placeholder="10-digit mobile number"
+                onChange={e => setMobile(e.target.value.replace(/\D/g, '').slice(0, 14))}
+                placeholder="9876543210 or 919876543210"
                 className="ds-field"
               />
             </div>
