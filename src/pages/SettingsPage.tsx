@@ -13,6 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { useRoleCtx } from '@/contexts/RoleContext'
+import { toast } from 'sonner'
 
 const FY_OPTIONS = ['2022','2023','2024','2025','2026','2027','2028']
 function fyLabel(y: string) { return `FY ${y}-${String(parseInt(y) + 1).slice(-2)}` }
@@ -89,7 +90,6 @@ function GeneralSettings() {
   const [collectionUpi,  setCollectionUpi]  = useState('')
   const [collectionBank, setCollectionBank] = useState('')
   const [saving, setSaving] = useState(false)
-  const [saved,  setSaved]  = useState(false)
 
   const currentStartFY    = settings?.dues_start_fiscal_year ?? '2025'
   const workingStartFY    = duesStartFY    || currentStartFY
@@ -104,8 +104,8 @@ function GeneralSettings() {
       { key: 'collection_bank',        value: workingBank,     updated_at: new Date().toISOString() },
     ])
     qc.invalidateQueries()
-    setSaving(false); setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+    setSaving(false)
+    toast.success('Settings saved')
   }
 
   return (
@@ -151,7 +151,7 @@ function GeneralSettings() {
             style={{ background: 'var(--brand-600)' }}
           >
             {saving ? <RefreshCw size={15} className="animate-spin" /> : <Save size={15} />}
-            {saved ? 'Saved!' : 'Save settings'}
+            Save settings
           </button>
         </div>
       )}
@@ -362,8 +362,10 @@ function AddRateChangeDialog({ open, onClose, flats, currentRates, onSuccess }: 
       onSuccess()
       reset()
       onClose()
+      toast.success(`Rate change applied to ${selectedFlatIds.length} flat${selectedFlatIds.length !== 1 ? 's' : ''}`)
     } catch (e: any) {
       setError(e.message ?? 'Failed to save')
+      toast.error(e.message ?? 'Failed to save')
     } finally {
       setSaving(false)
     }
@@ -505,13 +507,15 @@ function CategoriesSettings() {
   const corpus      = categories.filter(c => c.budget_type === 'Corpus')
 
   async function toggleUtility(cat: ExpenseCategory) {
-    await supabase
+    const { error } = await supabase
       .from('expense_categories')
       .update({ is_utility: !cat.is_utility })
       .eq('id', cat.id)
+    if (error) { toast.error(error.message); return }
     qc.invalidateQueries({ queryKey: ['expense-categories-all'] })
     qc.invalidateQueries({ queryKey: ['utility-categories'] })
     qc.invalidateQueries({ queryKey: ['expense-categories'] })
+    toast.success(cat.is_utility ? `${cat.name} unmarked as utility` : `${cat.name} marked as utility`)
   }
 
   if (isLoading) return <div className="surface h-40 animate-pulse" style={{ background: 'var(--ink-100)' }} />
@@ -630,8 +634,9 @@ function AddEditCategoryDialog({ open, initial, onClose, onSuccess }: {
         const { error } = await supabase.from('expense_categories').insert(payload)
         if (error) throw error
       }
+      toast.success(isEdit ? 'Category updated' : 'Category added')
       onSuccess(); onClose()
-    } catch (e: any) { setErr(e.message) }
+    } catch (e: any) { setErr(e.message); toast.error(e.message ?? 'Failed to save') }
     finally { setSaving(false) }
   }
 

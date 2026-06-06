@@ -6,6 +6,7 @@ import { X, Edit2, UserMinus, UserPlus } from 'lucide-react'
 import { supabase, Flat, Resident } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
 import { useRoleCtx } from '@/contexts/RoleContext'
+import { toast } from 'sonner'
 
 
 type Tab = 'flats' | 'residents'
@@ -174,18 +175,23 @@ function RateChangeModal({ flat, onClose, onSaved }: { flat: Flat; onClose: () =
   async function handleSave() {
     const r = parseInt(rate); if (!r || !from) { setError('Rate and effective date are required'); return }
     setSaving(true); setError('')
-    // Close previous open-ended record
-    await supabase.from('maintenance_rate_history')
-      .update({ effective_to: from })
-      .eq('flat_id', flat.id)
-      .is('effective_to', null)
-    // Insert new
-    await supabase.from('maintenance_rate_history').insert({
-      flat_id: flat.id, monthly_rate: r, effective_from: from, notes: notes || null,
-    })
-    // Update flats table
-    await supabase.from('flats').update({ maintenance_amt: r }).eq('id', flat.id)
-    setSaving(false); onSaved()
+    try {
+      await supabase.from('maintenance_rate_history')
+        .update({ effective_to: from })
+        .eq('flat_id', flat.id)
+        .is('effective_to', null)
+      await supabase.from('maintenance_rate_history').insert({
+        flat_id: flat.id, monthly_rate: r, effective_from: from, notes: notes || null,
+      })
+      await supabase.from('flats').update({ maintenance_amt: r }).eq('id', flat.id)
+      toast.success(`Rate updated for ${flat.code}`)
+      onSaved()
+    } catch (e: any) {
+      setError(e.message ?? 'Failed to save')
+      toast.error(e.message ?? 'Failed to save')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -287,11 +293,13 @@ function ResidentsTab() {
 
   async function handleDeactivate(resident: Resident) {
     const nowActive = resident.is_active
-    await supabase.from('residents').update({
+    const { error } = await supabase.from('residents').update({
       is_active: !nowActive,
       moved_out: nowActive ? new Date().toISOString().slice(0, 10) : null,
     }).eq('id', resident.id)
+    if (error) { toast.error(error.message); return }
     qc.invalidateQueries({ queryKey: ['residents'] })
+    toast.success(nowActive ? `${resident.name} moved out` : `${resident.name} reactivated`)
   }
 
   return (
@@ -355,7 +363,8 @@ function AddResidentModal({ flats, onClose, onSaved }: { flats: any[]; onClose: 
       upi_ids, moved_in: movedIn || null, notes: notes || null, is_active: true,
     })
     setSaving(false)
-    if (err) { setError(err.message); return }
+    if (err) { setError(err.message); toast.error(err.message); return }
+    toast.success(`${name} added as resident`)
     onSaved()
   }
 

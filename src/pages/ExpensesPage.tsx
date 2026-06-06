@@ -19,6 +19,7 @@ import { Textarea } from '@/components/ui/textarea'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import { toast } from 'sonner'
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -496,9 +497,13 @@ function AddExpenseDialog({ open, onClose }: { open: boolean; onClose: () => voi
       if (liErr) throw liErr
     },
     onSuccess: () => {
+      toast.success('Expense saved')
       qc.invalidateQueries({ queryKey: ['expenses'] })
       reset()
       onClose()
+    },
+    onError: (e: any) => {
+      toast.error(e.message ?? 'Failed to save expense')
     },
   })
 
@@ -869,11 +874,15 @@ function ReconcileTab() {
       if (e2) throw e2
     },
     onSuccess: () => {
+      toast.success('Reconciled successfully')
       qc.invalidateQueries({ queryKey: ['unreconciled-expenses'] })
       qc.invalidateQueries({ queryKey: ['unmatched-bank-drs'] })
       qc.invalidateQueries({ queryKey: ['expenses'] })
       setSelectedExpenseId(null)
       setSelectedTxnId(null)
+    },
+    onError: (e: any) => {
+      toast.error(e.message ?? 'Failed to reconcile')
     },
   })
 
@@ -1204,9 +1213,10 @@ function AddVendorDialog({ open, onClose }: { open: boolean; onClose: () => void
         pan_number: pan || null, notes: notes || null,
       })
       if (error) throw error
+      toast.success('Vendor added')
       qc.invalidateQueries({ queryKey: ['vendors'] })
       reset(); onClose()
-    } catch (e: any) { setErr(e.message) }
+    } catch (e: any) { setErr(e.message); toast.error(e.message ?? 'Failed to add vendor') }
     finally { setSaving(false) }
   }
 
@@ -1289,9 +1299,10 @@ function AddStaffDialog({ open, onClose }: { open: boolean; onClose: () => void 
         if (shErr) throw shErr
       }
 
+      toast.success(`${form.name.trim()} added to staff`)
       qc.invalidateQueries({ queryKey: ['staff'] })
       reset(); onClose()
-    } catch (e: any) { setErr(e.message) }
+    } catch (e: any) { setErr(e.message); toast.error(e.message ?? 'Failed to add staff') }
     finally { setSaving(false) }
   }
 
@@ -1366,8 +1377,10 @@ function RecurringTab() {
   })
 
   async function toggleActive(id: string, current: boolean) {
-    await supabase.from('recurring_expense_templates').update({ active: !current }).eq('id', id)
+    const { error } = await supabase.from('recurring_expense_templates').update({ active: !current }).eq('id', id)
+    if (error) { toast.error(error.message); return }
     qc.invalidateQueries({ queryKey: ['recurring-templates'] })
+    toast.success(current ? 'Template deactivated' : 'Template activated')
   }
 
   if (isLoading) return <div className="surface h-40 animate-pulse" style={{ background: 'var(--ink-100)' }} />
@@ -1475,9 +1488,10 @@ function AddRecurringDialog({ open, onClose }: { open: boolean; onClose: () => v
         amount: Number(form.amount), payment_mode: form.payment_mode, frequency: form.frequency,
       })
       if (error) throw error
+      toast.success('Recurring template added')
       qc.invalidateQueries({ queryKey: ['recurring-templates'] })
       reset(); onClose()
-    } catch (e: any) { setErr(e.message) }
+    } catch (e: any) { setErr(e.message); toast.error(e.message ?? 'Failed to add template') }
     finally { setSaving(false) }
   }
 
@@ -1587,6 +1601,7 @@ function PettyCashTab() {
       notes:    form.notes || null,
     })
     if (error) throw error
+    toast.success(`Petty cash ${form.txn_type.toLowerCase()} added`)
     qc.invalidateQueries({ queryKey: ['petty-cash'] })
   }
 
