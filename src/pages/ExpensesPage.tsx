@@ -445,9 +445,27 @@ function AddExpenseDialog({ open, onClose }: { open: boolean; onClose: () => voi
   const watchedAmount    = watch('amount') ?? 0
   const watchedPayeeType = watch('payee_type')
   const watchedMode      = watch('payment_mode')
+  const watchedVendorId  = watch('vendor_id')
   const lineItems        = watch('line_items') ?? []
   const lineTotal        = lineItems.reduce((s, li) => s + (Number(li.amount) || 0), 0)
   const lineBalanceDiff  = Number(watchedAmount) - lineTotal
+
+  const { data: vendorYtd = 0 } = useQuery({
+    queryKey: ['vendor-ytd', watchedVendorId],
+    enabled: !!watchedVendorId,
+    queryFn: async () => {
+      const now = new Date()
+      const fyYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
+      const { data } = await supabase
+        .from('expenses')
+        .select('amount')
+        .eq('vendor_id', watchedVendorId!)
+        .gte('expense_date', `${fyYear}-04-01`)
+        .lte('expense_date', `${fyYear + 1}-03-31`)
+      return (data ?? []).reduce((s: number, r: any) => s + r.amount, 0)
+    },
+  })
+  const tdsRequired = !!watchedVendorId && vendorYtd >= 30000
 
   const mutation = useMutation({
     mutationFn: async (data: ExpenseFormData) => {
@@ -568,6 +586,12 @@ function AddExpenseDialog({ open, onClose }: { open: boolean; onClose: () => voi
                         </SelectContent>
                       </Select>
                     )} />
+                    {tdsRequired && (
+                      <p className="text-[11.5px] font-semibold px-2 py-1 rounded-md flex items-center gap-1"
+                        style={{ background: 'var(--warn-bg)', color: 'var(--warn)' }}>
+                        ⚠ TDS required — {formatINR(vendorYtd)} paid this FY
+                      </p>
+                    )}
                   </>
                 ) : watchedPayeeType === 'Staff' ? (
                   <>
