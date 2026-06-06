@@ -10,14 +10,9 @@ import { Label } from '@/components/ui/label'
 export default function ProfilePage() {
   const qc = useQueryClient()
   const [userId, setUserId] = useState<string | null>(null)
-  const [mobileLogin, setMobileLogin] = useState('')
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setUserId(data.user?.id ?? null)
-      const email = data.user?.email ?? ''
-      setMobileLogin(email.endsWith('@lilac.com') ? email.replace('@lilac.com', '') : email)
-    })
+    supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null))
   }, [])
 
   const { data: profile, isLoading } = useQuery({
@@ -26,10 +21,10 @@ export default function ProfilePage() {
     queryFn: async () => {
       const { data } = await supabase
         .from('profiles')
-        .select('display_name, contact_email')
+        .select('display_name, mobile, contact_email')
         .eq('id', userId!)
         .maybeSingle()
-      return data as { display_name: string | null; contact_email: string | null } | null
+      return data as { display_name: string | null; mobile: string | null; contact_email: string | null } | null
     },
   })
 
@@ -48,7 +43,6 @@ export default function ProfilePage() {
 
       <ProfileForm
         userId={userId}
-        mobileLogin={mobileLogin}
         profile={profile ?? null}
         onSaved={() => qc.invalidateQueries({ queryKey: ['my-profile', userId] })}
       />
@@ -57,10 +51,9 @@ export default function ProfilePage() {
   )
 }
 
-function ProfileForm({ userId, mobileLogin, profile, onSaved }: {
+function ProfileForm({ userId, profile, onSaved }: {
   userId: string
-  mobileLogin: string
-  profile: { display_name: string | null; contact_email: string | null } | null
+  profile: { display_name: string | null; mobile: string | null; contact_email: string | null } | null
   onSaved: () => void
 }) {
   const [name, setName]   = useState(profile?.display_name ?? '')
@@ -98,7 +91,7 @@ function ProfileForm({ userId, mobileLogin, profile, onSaved }: {
         <div className="flex flex-col gap-1">
           <Label>Mobile (login ID)</Label>
           <Input
-            value={mobileLogin}
+            value={profile?.mobile ?? ''}
             disabled
             className="opacity-60 cursor-not-allowed"
           />
