@@ -69,10 +69,11 @@ export async function fetchPermissions(): Promise<PermissionsMap> {
 }
 
 export async function savePermissions(perms: PermissionsMap): Promise<void> {
-  await supabase.from('app_settings').upsert(
+  const { error } = await supabase.from('app_settings').upsert(
     { key: 'role_permissions', value: JSON.stringify(perms) },
     { onConflict: 'key' }
   )
+  if (error) throw error
 }
 
 // ── Hook ─────────────────────────────────────────────────────────────────────

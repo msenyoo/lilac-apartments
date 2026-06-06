@@ -693,6 +693,7 @@ function Toggle({ checked, onChange, disabled }: {
 
 function PermissionsTab() {
   const { isAdmin } = useRoleCtx()
+  const qc = useQueryClient()
 
   const { data: savedPerms } = useQuery({
     queryKey: ['role-permissions'],
@@ -705,7 +706,14 @@ function PermissionsTab() {
 
   const mutation = useMutation({
     mutationFn: savePermissions,
-    onSuccess: () => { toast.success('Permissions saved'); setSaved(true); setTimeout(() => setSaved(false), 2500) },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['role-permissions'] })
+      setDraft(null)
+      toast.success('Permissions saved')
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2500)
+    },
+    onError: (e: any) => toast.error(e.message ?? 'Failed to save permissions'),
   })
 
   function toggle(roleKey: 'committee' | 'auditor', resource: Resource, value: boolean) {
