@@ -137,9 +137,15 @@ function GeneralSettings() {
             </div>
           </div>
         ) : (
-          <div className="flex flex-col gap-2 text-[13.5px]">
-            <p><span className="font-medium" style={{ color: 'var(--ink-500)' }}>UPI: </span>{workingUpi || '—'}</p>
-            <p><span className="font-medium" style={{ color: 'var(--ink-500)' }}>Bank: </span>{workingBank || '—'}</p>
+          <div className="flex flex-col gap-3 max-w-md">
+            <div>
+              <label className="ds-lbl mb-1 block">UPI ID</label>
+              <input readOnly value={workingUpi || '—'} className="ds-field bg-[var(--ink-50)] cursor-default" />
+            </div>
+            <div>
+              <label className="ds-lbl mb-1 block">Bank transfer details</label>
+              <input readOnly value={workingBank || '—'} className="ds-field bg-[var(--ink-50)] cursor-default" />
+            </div>
           </div>
         )}
       </div>
