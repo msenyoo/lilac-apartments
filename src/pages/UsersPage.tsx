@@ -1,10 +1,15 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import { Plus, Pencil, Shield, Eye, Users, UserCircle, Lock, RefreshCw, Copy, MessageCircle } from 'lucide-react'
+import { Plus, Pencil, Trash2, Shield, Eye, Users, UserCircle, Lock, RefreshCw, Copy, MessageCircle } from 'lucide-react'
 import {
   Dialog, DialogContent, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -51,8 +56,11 @@ export default function UsersPage() {
   const { isAdmin } = useRoleCtx()
   const qc = useQueryClient()
   const [tab, setTab]               = useState<UsersTab>('users')
-  const [addOpen, setAddOpen]       = useState(false)
-  const [editTarget, setEditTarget] = useState<any | null>(null)
+  const [addOpen, setAddOpen]         = useState(false)
+  const [editTarget, setEditTarget]   = useState<any | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<any | null>(null)
+  const [deleting, setDeleting]       = useState(false)
+  const [deleteError, setDeleteError] = useState('')
 
   const { data: users = [], isLoading } = useQuery({
     queryKey: ['v_users'],
@@ -202,6 +210,14 @@ export default function UsersPage() {
                           >
                             <Pencil size={15} />
                           </button>
+                          <button
+                            onClick={() => { setDeleteError(''); setDeleteTarget(u) }}
+                            className="p-1.5 rounded-lg hover:bg-red-50 transition-colors"
+                            style={{ color: 'var(--bad)' }}
+                            title="Delete user"
+                          >
+                            <Trash2 size={15} />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -215,6 +231,43 @@ export default function UsersPage() {
 
       <AddUserDialog open={addOpen} onClose={() => setAddOpen(false)} onSuccess={invalidate} />
       <EditUserDialog key={editTarget?.id ?? 'none'} user={editTarget} onClose={() => setEditTarget(null)} onSuccess={invalidate} />
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={v => { if (!v) { setDeleteTarget(null); setDeleteError('') } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete user?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove <strong>{deleteTarget?.display_name ?? deleteTarget?.auth_email}</strong> and revoke their access. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {deleteError && <p className="text-sm text-red-500 px-1">{deleteError}</p>}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleting}
+              className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={async () => {
+                setDeleting(true)
+                setDeleteError('')
+                try {
+                  const { error: fnErr } = await supabase.functions.invoke('delete-user', {
+                    body: { userId: deleteTarget.id },
+                  })
+                  if (fnErr) throw fnErr
+                  setDeleteTarget(null)
+                  invalidate()
+                } catch (e: any) {
+                  setDeleteError(e.message ?? 'Failed to delete user')
+                } finally {
+                  setDeleting(false)
+                }
+              }}
+            >
+              {deleting ? 'Deleting…' : 'Delete user'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       </>}
     </div>
   )
