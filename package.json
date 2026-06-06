@@ -8,7 +8,9 @@
     "dev:prod": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "watchdog": "node scripts/claude-watchdog.js",
+    "watchdog:ps": "powershell -ExecutionPolicy Bypass -File scripts/claude-watchdog.ps1"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
