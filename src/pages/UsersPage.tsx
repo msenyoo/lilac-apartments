@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import { Plus, Pencil, Trash2, Shield, Eye, Users, UserCircle, Lock, RefreshCw, Copy, MessageCircle } from 'lucide-react'
+import { Plus, Pencil, Trash2, Shield, Eye, Users, UserCircle, Lock, RefreshCw, Copy, MessageCircle, KeyRound } from 'lucide-react'
 import {
   Dialog, DialogContent, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
@@ -62,6 +62,11 @@ export default function UsersPage() {
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null)
   const [deleting, setDeleting]       = useState(false)
   const [deleteError, setDeleteError] = useState('')
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id ?? null))
+  }, [])
 
   const { data: users = [], isLoading } = useQuery({
     queryKey: ['v_users'],
@@ -211,14 +216,16 @@ export default function UsersPage() {
                           >
                             <Pencil size={15} />
                           </button>
-                          <button
-                            onClick={() => { setDeleteError(''); setDeleteTarget(u) }}
-                            className="p-1.5 rounded-lg hover:bg-red-50 transition-colors"
-                            style={{ color: 'var(--bad)' }}
-                            title="Delete user"
-                          >
-                            <Trash2 size={15} />
-                          </button>
+                          {u.id !== currentUserId && (
+                            <button
+                              onClick={() => { setDeleteError(''); setDeleteTarget(u) }}
+                              className="p-1.5 rounded-lg hover:bg-red-50 transition-colors"
+                              style={{ color: 'var(--bad)' }}
+                              title="Delete user"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -456,19 +463,35 @@ function AddUserDialog({ open, onClose, onSuccess }: { open: boolean; onClose: (
 }
 
 function EditUserDialog({ user, onClose, onSuccess }: { user: any | null; onClose: () => void; onSuccess: () => void }) {
-  const [name, setName]               = useState(user?.display_name ?? '')
-  const [mobile, setMobile]           = useState(user?.mobile ?? '')
-  const [contactEmail, setEmail]      = useState(user?.contact_email ?? '')
-  const [role, setRole]               = useState(user?.role ?? 'committee')
-  const [saving, setSaving]           = useState(false)
-  const [error, setError]             = useState('')
+  const [name, setName]           = useState(user?.display_name ?? '')
+  const [mobile, setMobile]       = useState(user?.mobile ?? '')
+  const [contactEmail, setEmail]  = useState(user?.contact_email ?? '')
+  const [role, setRole]           = useState(user?.role ?? 'committee')
+  const [flatId, setFlatId]       = useState(user?.flat_id ?? '')
+  const [saving, setSaving]       = useState(false)
+  const [error, setError]         = useState('')
+
+  // Password reset state
+  const [genPw, setGenPw]           = useState('')
+  const [generatingPw, setGeneratingPw] = useState(false)
+  const [pwCopied, setPwCopied]     = useState(false)
+  const [pwError, setPwError]       = useState('')
+
+  const { data: flats = [] } = useQuery({
+    queryKey: ['flats-list'],
+    queryFn: async () => {
+      const { data } = await supabase.from('flats').select('id, code').order('code')
+      return (data ?? []) as { id: string; code: string }[]
+    },
+  })
 
   async function handleSave() {
     if (!name.trim()) { setError('Name is required'); return }
     setSaving(true); setError('')
     try {
       const { error: pe } = await supabase.from('profiles').upsert({
-        id: user.id, display_name: name.trim(), mobile: mobile.trim() || null, contact_email: contactEmail.trim() || null,
+        id: user.id, display_name: name.trim(), mobile: mobile.trim() || null,
+        contact_email: contactEmail.trim() || null, flat_id: flatId || null,
       })
       if (pe) throw pe
       const { error: re } = await supabase.from('user_roles').upsert({ user_id: user.id, role })
@@ -479,13 +502,36 @@ function EditUserDialog({ user, onClose, onSuccess }: { user: any | null; onClos
     finally { setSaving(false) }
   }
 
+  async function handleResetPassword() {
+    const pw = generatePassword()
+    setGeneratingPw(true); setPwError('')
+    try {
+      const { error: fnErr } = await supabase.functions.invoke('reset-user-password', {
+        body: { userId: user.id, password: pw },
+      })
+      if (fnErr) throw fnErr
+      setGenPw(pw)
+      toast.success('Password reset — share new credentials')
+    } catch (e: any) { setPwError(e.message ?? 'Failed to reset'); toast.error(e.message ?? 'Failed to reset password') }
+    finally { setGeneratingPw(false) }
+  }
+
+  const loginId   = user?.auth_email ?? ''
+  const isMobile  = loginId.endsWith('@lilac.com')
+  const phoneForWa = isMobile ? loginId.replace('@lilac.com', '') : (user?.mobile ?? '')
+  const waMessage = encodeURIComponent(
+    `Hi! Your Lilac Apartments login credentials have been updated:\nMobile/Login: ${isMobile ? loginId.replace('@lilac.com', '') : loginId}\nNew password: ${genPw}\nApp: https://lilac-apartments.vercel.app`
+  )
+  const waUrl = phoneForWa.length === 10 ? `https://wa.me/91${phoneForWa}?text=${waMessage}` : ''
+
   return (
     <Dialog open={!!user} onOpenChange={v => { if (!v) onClose() }}>
-      <DialogContent className="max-w-sm p-0">
+      <DialogContent className="max-w-md p-0">
         <div className="px-6 pt-6 pb-4 border-b border-slate-100 shrink-0">
           <DialogTitle>Edit User</DialogTitle>
         </div>
-        <div className="px-6 py-4 space-y-4">
+        <div className="px-6 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
+          {/* Profile fields */}
           <div className="space-y-1"><Label>Name *</Label><Input value={name} onChange={e => setName(e.target.value)} /></div>
           <div className="space-y-1">
             <Label>Mobile</Label>
@@ -495,16 +541,76 @@ function EditUserDialog({ user, onClose, onSuccess }: { user: any | null; onClos
             <Label>Contact email</Label>
             <Input type="email" value={contactEmail} onChange={e => setEmail(e.target.value)} placeholder="real email for communication" />
           </div>
-          <div className="space-y-1">
-            <Label>Role</Label>
-            <Select value={role} onValueChange={setRole}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {ROLE_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label>Role</Label>
+              <Select value={role} onValueChange={setRole}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {ROLE_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>Flat</Label>
+              <Select value={flatId || 'none'} onValueChange={v => setFlatId(v === 'none' ? '' : v)}>
+                <SelectTrigger><SelectValue placeholder="— none —" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— none —</SelectItem>
+                  {flats.map(f => <SelectItem key={f.id} value={f.id}>{f.code}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
+
           {error && <p className="text-sm text-red-500">{error}</p>}
+
+          {/* Password reset section */}
+          <div className="pt-2 border-t border-slate-100">
+            <p className="text-[12px] font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--ink-400)' }}>
+              Reset password
+            </p>
+            {!genPw ? (
+              <div className="space-y-2">
+                <Button
+                  type="button" variant="outline" size="sm"
+                  onClick={handleResetPassword} disabled={generatingPw}
+                  className="flex items-center gap-2"
+                >
+                  <KeyRound size={14} />
+                  {generatingPw ? 'Generating…' : 'Generate new password'}
+                </Button>
+                {pwError && <p className="text-xs text-red-500">{pwError}</p>}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 space-y-2.5">
+                <p className="text-[12.5px] font-semibold text-emerald-800">New password generated — share with user</p>
+                <div className="rounded-lg bg-white border border-emerald-100 px-3 py-2 font-mono text-[12.5px] text-slate-700 space-y-0.5">
+                  <p><span className="text-slate-400">Login: </span>{isMobile ? loginId.replace('@lilac.com', '') : loginId}</p>
+                  <p><span className="text-slate-400">Password: </span>{genPw}</p>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" className="flex-1 gap-1.5 text-[12px]"
+                    onClick={() => {
+                      navigator.clipboard.writeText(`Login: ${isMobile ? loginId.replace('@lilac.com', '') : loginId}\nPassword: ${genPw}\nApp: https://lilac-apartments.vercel.app`)
+                      setPwCopied(true); setTimeout(() => setPwCopied(false), 2000)
+                    }}>
+                    <Copy size={12} /> {pwCopied ? 'Copied!' : 'Copy'}
+                  </Button>
+                  {waUrl && (
+                    <Button size="sm" className="flex-1 gap-1.5 text-[12px] bg-green-600 hover:bg-green-700 text-white"
+                      onClick={() => window.open(waUrl, '_blank')}>
+                      <MessageCircle size={12} /> WhatsApp
+                    </Button>
+                  )}
+                  <Button size="sm" variant="ghost" className="text-[12px] text-slate-400"
+                    onClick={() => setGenPw('')}>
+                    Clear
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
         <div className="px-6 py-4 border-t border-slate-100 shrink-0">
           <DialogFooter>

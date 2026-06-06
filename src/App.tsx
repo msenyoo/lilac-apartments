@@ -16,6 +16,7 @@ import AnnouncementsPage  from '@/pages/AnnouncementsPage'
 import ActivityPage       from '@/pages/ActivityPage'
 import UsersPage          from '@/pages/UsersPage'
 import HelpPage           from '@/pages/HelpPage'
+import ProfilePage        from '@/pages/ProfilePage'
 import { RoleProvider } from '@/contexts/RoleContext'
 import { Toaster } from '@/components/ui/sonner'
 
@@ -59,6 +60,7 @@ export default function App() {
           <Route path="activity"      element={<ActivityPage />} />
           <Route path="users"         element={<UsersPage />} />
           <Route path="help"          element={<HelpPage />} />
+          <Route path="profile"       element={<ProfilePage />} />
           {/* Legacy redirects */}
           <Route path="upload"  element={<Navigate to="/transactions" replace />} />
           <Route path="review"  element={<Navigate to="/transactions?tab=review" replace />} />
