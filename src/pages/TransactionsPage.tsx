@@ -560,7 +560,7 @@ function ReviewItem({ item, flats, onSaved }: { item: ReviewEntry; flats: any[];
                 onChange={e => {
                   setCategory(e.target.value)
                   if (e.target.value === 'Corpus') setCorpus('YES')
-                  else setPlanId(null)
+                  else { setCorpus('NO'); setPlanId(null) }
                 }}
                 className="w-full ds-field bg-white"
               >
@@ -575,14 +575,14 @@ function ReviewItem({ item, flats, onSaved }: { item: ReviewEntry; flats: any[];
           <div className="flex flex-col gap-1">
             <Label>Corpus plan</Label>
             <Select
-              value={planId ?? ''}
-              onValueChange={v => setPlanId(v || null)}
+              value={planId ?? '__auto__'}
+              onValueChange={v => setPlanId(v === '__auto__' ? null : v)}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Auto (matched by fiscal year)" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Auto (matched by fiscal year)</SelectItem>
+                <SelectItem value="__auto__">Auto (matched by fiscal year)</SelectItem>
                 {activePlans.map(p => (
                   <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                 ))}
