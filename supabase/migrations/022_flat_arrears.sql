@@ -36,8 +36,17 @@ DECLARE
   new_fy integer;
   n      integer;
 BEGIN
+  IF public.get_my_role() <> 'admin' THEN
+    RAISE EXCEPTION 'permission denied: admin only';
+  END IF;
+
   SELECT value::integer INTO old_fy
     FROM app_settings WHERE key = 'dues_start_fiscal_year';
+
+  IF old_fy IS NULL THEN
+    RAISE EXCEPTION 'app_settings key dues_start_fiscal_year is missing';
+  END IF;
+
   new_fy := old_fy + 1;
 
   INSERT INTO flat_arrears (flat_id, arrears_type, source_label, amount, created_by)
@@ -68,7 +77,17 @@ DECLARE
   plan_name_val text;
   n             integer;
 BEGIN
-  SELECT name INTO plan_name_val FROM corpus_plans WHERE id = p_plan_id;
+  IF public.get_my_role() <> 'admin' THEN
+    RAISE EXCEPTION 'permission denied: admin only';
+  END IF;
+
+  SELECT name INTO plan_name_val
+    FROM corpus_plans
+    WHERE id = p_plan_id AND status IN ('active', 'draft');
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'corpus plan % not found or already closed', p_plan_id;
+  END IF;
 
   INSERT INTO flat_arrears (flat_id, arrears_type, source_label, amount, created_by)
   SELECT
@@ -91,3 +110,9 @@ BEGIN
   RETURN json_build_object('arrears_created', n);
 END;
 $$;
+
+REVOKE EXECUTE ON FUNCTION public.advance_fiscal_year() FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION public.advance_fiscal_year() TO authenticated;
+
+REVOKE EXECUTE ON FUNCTION public.close_corpus_plan(uuid) FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION public.close_corpus_plan(uuid) TO authenticated;
