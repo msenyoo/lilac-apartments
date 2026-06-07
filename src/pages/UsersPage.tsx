@@ -181,7 +181,7 @@ export default function UsersPage() {
             <table className="ds-tbl">
               <thead>
                 <tr>
-                  {['User', 'Role', 'Last sign-in', ''].map(c => (
+                  {['User', 'Role', 'Flat', 'Last sign-in', ''].map(c => (
                     <th key={c}>{c}</th>
                   ))}
                 </tr>
@@ -204,6 +204,11 @@ export default function UsersPage() {
                       </td>
                       <td>
                         <span className={`ds-badge ${roleTone(u.role)}`}>{u.role ?? '—'}</span>
+                      </td>
+                      <td>
+                        {u.flat_code
+                          ? <span className="ds-badge ds-badge-neutral">{u.flat_code}</span>
+                          : <span className="text-[12px]" style={{ color: 'var(--ink-300)' }}>—</span>}
                       </td>
                       <td className="text-[12px] mono" style={{ color: 'var(--ink-500)' }}>
                         {u.last_sign_in_at
