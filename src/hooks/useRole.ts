@@ -15,6 +15,8 @@ export function useRole() {
         supabase.from('user_roles').select('role').eq('user_id', user.id).maybeSingle(),
         supabase.from('profiles').select('flat_id').eq('id', user.id).maybeSingle(),
       ])
+      if (roleRes.error)    console.error('useRole: role fetch failed', roleRes.error)
+      if (profileRes.error) console.error('useRole: profile fetch failed', profileRes.error)
       setRole((roleRes.data?.role as AppRole) ?? null)
       setFlatId(profileRes.data?.flat_id ?? null)
       setLoading(false)
