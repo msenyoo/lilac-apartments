@@ -172,6 +172,101 @@ function GeneralSettings() {
           <p className="text-[11.5px] mt-1" style={{ color: 'var(--ink-400)' }}>React 18 + Supabase · Built for association committee use</p>
         </div>
       </div>
+
+      {isAdmin && <AdvanceFYSection />}
+    </div>
+  )
+}
+
+// ── Advance fiscal year ────────────────────────────────────────
+
+function AdvanceFYSection() {
+  const qc = useQueryClient()
+  const [preview, setPreview] = useState<{ flat_code: string; pending: number }[]>([])
+  const [showModal, setShowModal] = useState(false)
+  const [advancing, setAdvancing] = useState(false)
+
+  const { data: settings } = useQuery({
+    queryKey: ['app-settings'],
+    queryFn: async () => {
+      const { data } = await supabase.from('app_settings').select('*')
+      return Object.fromEntries((data ?? []).map((s: any) => [s.key, s.value]))
+    },
+  })
+
+  const currentFY = settings?.dues_start_fiscal_year
+  const nextFY = currentFY ? parseInt(currentFY) + 1 : null
+
+  async function handlePreview() {
+    const { data } = await supabase
+      .from('v_dues_tracker')
+      .select('flat_code,pending')
+      .gt('pending', 0)
+      .order('flat_code')
+    setPreview((data ?? []) as { flat_code: string; pending: number }[])
+    setShowModal(true)
+  }
+
+  async function handleAdvance() {
+    setAdvancing(true)
+    const { error } = await supabase.rpc('advance_fiscal_year')
+    setAdvancing(false)
+    if (error) { toast.error(error.message); return }
+    toast.success(`Advanced to FY ${nextFY}-${String(nextFY! + 1).slice(-2)}`)
+    setShowModal(false)
+    qc.invalidateQueries({ queryKey: ['app-settings'] })
+    qc.invalidateQueries({ queryKey: ['dues'] })
+  }
+
+  if (!currentFY || !nextFY) return null
+
+  return (
+    <div className="surface !p-5 flex flex-col gap-4">
+      <div>
+        <p className="font-semibold text-[14px]">Advance Fiscal Year</p>
+        <p className="text-[12.5px] mt-0.5" style={{ color: 'var(--ink-500)' }}>
+          Current tracking from FY {currentFY}-{String(parseInt(currentFY) + 1).slice(-2)}.
+          Advancing will snapshot all pending balances as arrears, then start fresh from April {nextFY}.
+        </p>
+      </div>
+      <div className="flex">
+        <Button variant="outline" onClick={handlePreview}>
+          Preview &amp; Advance to FY {nextFY}-{String(nextFY + 1).slice(-2)}
+        </Button>
+      </div>
+
+      <Dialog open={showModal} onOpenChange={setShowModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Advance to FY {nextFY}-{String(nextFY + 1).slice(-2)}</DialogTitle>
+          </DialogHeader>
+          {preview.length === 0 ? (
+            <p className="text-[13px] py-2" style={{ color: 'var(--ink-500)' }}>
+              All flats are fully paid. No arrears will be created.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-2 py-2">
+              <p className="text-[12.5px]" style={{ color: 'var(--ink-500)' }}>
+                The following {preview.length} flat(s) have outstanding balances that will be saved as arrears:
+              </p>
+              <div className="max-h-48 overflow-y-auto flex flex-col gap-1">
+                {preview.map(r => (
+                  <div key={r.flat_code} className="flex justify-between text-[12.5px]">
+                    <span className="font-medium">{r.flat_code}</span>
+                    <span style={{ color: 'var(--bad)' }}>{formatINR(r.pending)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowModal(false)}>Cancel</Button>
+            <Button onClick={handleAdvance} disabled={advancing}>
+              {advancing ? 'Advancing…' : 'Confirm Advance'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
