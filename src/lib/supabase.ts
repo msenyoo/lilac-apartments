@@ -102,6 +102,7 @@ export interface Transaction {
   flat_code: string | null
   category: string | null
   corpus: 'YES' | 'NO'
+  plan_id: string | null
   fiscal_year: number | null
   fiscal_month: string | null
   fiscal_label: string | null
@@ -151,6 +152,17 @@ export interface Profile {
   created_at: string
 }
 
+export interface FlatArrears {
+  id: string
+  flat_id: string
+  arrears_type: 'maintenance' | 'corpus'
+  source_label: string
+  amount: number
+  notes: string | null
+  created_at: string
+  created_by: string
+}
+
 export interface AppSetting {
   key: string
   value: string
@@ -187,6 +199,8 @@ export interface DuesEntry {
   collected_fy: number
   annual_due: number
   pending: number
+  arrears_maintenance: number
+  total_outstanding: number
   status: 'Clear' | 'Partial' | 'Due'
 }
 
