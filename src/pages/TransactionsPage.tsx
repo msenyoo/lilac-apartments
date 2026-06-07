@@ -15,6 +15,8 @@ import {
 } from '@/lib/tagger'
 import { useRoleCtx } from '@/contexts/RoleContext'
 import { toast } from 'sonner'
+import { Label } from '@/components/ui/label'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 
 
 type Tab = 'upload' | 'review' | 'all'
@@ -466,9 +468,22 @@ function ReviewItem({ item, flats, onSaved }: { item: ReviewEntry; flats: any[];
   const [flatCode, setFlatCode]   = useState('')
   const [category, setCategory]   = useState('Maintenance')
   const [corpus, setCorpus]       = useState<'YES' | 'NO'>('NO')
+  const [planId, setPlanId]       = useState<string | null>(null)
   const [saving, setSaving]       = useState(false)
   const [saved, setSaved]         = useState(false)
   const [showSplit, setShowSplit] = useState(false)
+
+  const { data: activePlans = [] } = useQuery({
+    queryKey: ['active-corpus-plans'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('corpus_plans')
+        .select('id, name')
+        .eq('status', 'active')
+        .order('name')
+      return (data ?? []) as { id: string; name: string }[]
+    },
+  })
 
   const isFlat = FLAT_CODES.includes(flatCode)
   const selectedFlat = flats.find(f => f.code === flatCode)
@@ -479,6 +494,8 @@ function ReviewItem({ item, flats, onSaved }: { item: ReviewEntry; flats: any[];
     : 1
   const showMonthHint = suggestedMonths >= 2 && isFlat && category === 'Maintenance'
 
+  const effectiveCorpus: 'YES' | 'NO' = isFlat && category === 'Corpus' ? 'YES' : corpus
+
   async function handleSave() {
     if (!flatCode) return
     setSaving(true)
@@ -486,7 +503,8 @@ function ReviewItem({ item, flats, onSaved }: { item: ReviewEntry; flats: any[];
     const { error } = await supabase.from('transactions').update({
       flat_code: flatCode, flat_id: flatId,
       category: isFlat ? category : flatCode,
-      corpus: isFlat && category === 'Corpus' ? 'YES' : corpus,
+      corpus: effectiveCorpus,
+      plan_id: effectiveCorpus === 'YES' ? planId : null,
       row_type: 'Normal',
     }).eq('id', item.id)
     setSaving(false)
@@ -539,7 +557,11 @@ function ReviewItem({ item, flats, onSaved }: { item: ReviewEntry; flats: any[];
               <label className="ds-lbl">Category</label>
               <select
                 value={category}
-                onChange={e => { setCategory(e.target.value); if (e.target.value === 'Corpus') setCorpus('YES') }}
+                onChange={e => {
+                  setCategory(e.target.value)
+                  if (e.target.value === 'Corpus') setCorpus('YES')
+                  else setPlanId(null)
+                }}
                 className="w-full ds-field bg-white"
               >
                 <option value="Maintenance">Maintenance</option>
@@ -548,6 +570,26 @@ function ReviewItem({ item, flats, onSaved }: { item: ReviewEntry; flats: any[];
             </div>
           )}
         </div>
+
+        {effectiveCorpus === 'YES' && activePlans.length > 1 && (
+          <div className="flex flex-col gap-1">
+            <Label>Corpus plan</Label>
+            <Select
+              value={planId ?? ''}
+              onValueChange={v => setPlanId(v || null)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Auto (matched by fiscal year)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Auto (matched by fiscal year)</SelectItem>
+                {activePlans.map(p => (
+                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         {showMonthHint && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700">
@@ -592,20 +634,34 @@ function EditModal({ txn, flats, onClose, onSaved, onSplit, onVoided }: {
   const [flatCode,     setFlatCode]     = useState(txn.flat_code ?? '')
   const [category,     setCategory]     = useState(txn.category ?? '')
   const [corpus,       setCorpus]       = useState<'YES' | 'NO'>(txn.corpus ?? 'NO')
+  const [planId,       setPlanId]       = useState<string | null>(txn.plan_id ?? null)
   const [saving,       setSaving]       = useState(false)
   const [copied,       setCopied]       = useState(false)
   const [confirmVoid,  setConfirmVoid]  = useState(false)
   const [voiding,      setVoiding]      = useState(false)
 
+  const { data: activePlans = [] } = useQuery({
+    queryKey: ['active-corpus-plans'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('corpus_plans')
+        .select('id, name')
+        .eq('status', 'active')
+        .order('name')
+      return (data ?? []) as { id: string; name: string }[]
+    },
+  })
+
   function handleFlatChange(val: string) {
     setFlatCode(val)
     if (!isFlat(val)) { setCategory(val) }
-    else { setCategory('Maintenance'); setCorpus('NO') }
+    else { setCategory('Maintenance'); setCorpus('NO'); setPlanId(null) }
   }
 
   function handleCategoryChange(val: string) {
     setCategory(val)
-    setCorpus(val === 'Corpus' ? 'YES' : 'NO')
+    if (val === 'Corpus') { setCorpus('YES') }
+    else { setCorpus('NO'); setPlanId(null) }
   }
 
   function handleCopy() {
@@ -618,13 +674,15 @@ function EditModal({ txn, flats, onClose, onSaved, onSplit, onVoided }: {
     setSaving(true)
     const flatId = flats.find(f => f.code === flatCode)?.id ?? null
     const resolvedCategory = isFlat(flatCode) ? category : flatCode
+    const resolvedPlanId = corpus === 'YES' ? planId : null
     const { error } = await supabase.from('transactions').update({
       flat_code: flatCode, flat_id: flatId, category: resolvedCategory, corpus,
+      plan_id: resolvedPlanId,
     }).eq('id', txn.id)
     setSaving(false)
     if (error) { toast.error(error.message); return }
     toast.success('Transaction updated')
-    onSaved({ ...txn, flat_code: flatCode, flat_id: flatId, category: resolvedCategory, corpus })
+    onSaved({ ...txn, flat_code: flatCode, flat_id: flatId, category: resolvedCategory, corpus, plan_id: resolvedPlanId })
   }
 
   async function handleVoid() {
@@ -684,11 +742,35 @@ function EditModal({ txn, flats, onClose, onSaved, onSplit, onVoided }: {
 
           {!isFlat(flatCode) && (
             <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <input type="checkbox" checked={corpus === 'YES'} onChange={e => setCorpus(e.target.checked ? 'YES' : 'NO')}
+              <input type="checkbox" checked={corpus === 'YES'} onChange={e => {
+                const checked = e.target.checked
+                setCorpus(checked ? 'YES' : 'NO')
+                if (!checked) setPlanId(null)
+              }}
                 className="w-4 h-4 rounded" />
               <span className="text-slate-700">Corpus {txn.cr_dr === 'DR' ? 'expenditure' : 'collection'}</span>
               <span className="text-xs text-slate-400">{txn.cr_dr === 'DR' ? '(from corpus fund)' : '(corpus)'}</span>
             </label>
+          )}
+
+          {corpus === 'YES' && activePlans.length > 1 && (
+            <div className="flex flex-col gap-1">
+              <Label>Corpus plan</Label>
+              <Select
+                value={planId ?? ''}
+                onValueChange={v => setPlanId(v || null)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Auto (matched by fiscal year)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Auto (matched by fiscal year)</SelectItem>
+                  {activePlans.map(p => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           )}
 
           <div className="flex gap-2 pt-1">
