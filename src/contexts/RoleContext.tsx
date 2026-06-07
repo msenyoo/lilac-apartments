@@ -7,6 +7,8 @@ interface RoleContextValue {
   hasFlatAssigned: boolean
   loading: boolean
   isAdmin: boolean
+  isCommittee: boolean
+  isAuditor: boolean
   isOwner: boolean
   canWrite: boolean
   canApprove: boolean
@@ -14,7 +16,8 @@ interface RoleContextValue {
 
 const RoleContext = createContext<RoleContextValue>({
   role: null, flatId: null, hasFlatAssigned: false,
-  loading: true, isAdmin: false, isOwner: false, canWrite: false, canApprove: false,
+  loading: true, isAdmin: false, isCommittee: false, isAuditor: false,
+  isOwner: false, canWrite: false, canApprove: false,
 })
 
 export function RoleProvider({ children }: { children: ReactNode }) {
