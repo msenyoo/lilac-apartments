@@ -1,11 +1,16 @@
 import { useState, useMemo, useRef } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AgGridReact } from 'ag-grid-react'
 import type { ColDef } from 'ag-grid-community'
-import { X, TrendingDown, Download, MessageCircle, Check } from 'lucide-react'
+import { X, TrendingDown, Download, MessageCircle, Check, Pencil, Trash2 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { supabase, DuesEntry, Transaction } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
+import { useRoleCtx } from '@/contexts/RoleContext'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 
 type AgingTab = 'All' | 'Due' | '30d+' | '60d+' | '90d+'
 
@@ -71,6 +76,24 @@ export default function DuesPage() {
     { field: 'pending',      headerName: 'Pending',   width: 120, type: 'numericColumn',
       valueFormatter: (p: any) => p.value > 0 ? formatINR(p.value) : '—',
       cellStyle: (p: any) => p.value > 0 ? { color: '#dc2626', fontWeight: 600 } : { color: '#16a34a', fontWeight: 400 },
+    },
+    {
+      headerName: 'Arrears',
+      field: 'arrears_maintenance',
+      width: 110,
+      cellRenderer: ({ value }: any) =>
+        value > 0
+          ? `<span style="color:var(--bad);font-weight:600">${formatINR(value)}</span>`
+          : '<span style="color:var(--ink-300)">—</span>',
+    },
+    {
+      headerName: 'Total Outstanding',
+      field: 'total_outstanding',
+      width: 140,
+      cellRenderer: ({ value }: any) =>
+        value > 0
+          ? `<span style="font-weight:700;color:var(--bad)">${formatINR(value)}</span>`
+          : '<span style="color:var(--ok)">Clear</span>',
     },
     { field: 'status', headerName: 'Status', width: 110, filter: true,
       cellRenderer: (p: any) => (
@@ -321,6 +344,150 @@ function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat
           </div>
         )}
       </div>
+
+      <div className="surface !p-4">
+        <ArrearsMgmt flatCode={flat.flat_code} />
+      </div>
     </div>
+  )
+}
+
+function ArrearsMgmt({ flatCode }: { flatCode: string }) {
+  const qc = useQueryClient()
+  const { isAdmin } = useRoleCtx()
+  const [showAdd, setShowAdd] = useState(false)
+  const [editRow, setEditRow] = useState<any>(null)
+
+  const { data: flatIdData } = useQuery({
+    queryKey: ['flat-id-for-code', flatCode],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('flats').select('id').eq('code', flatCode).single()
+      return data?.id as string | null
+    },
+  })
+
+  const { data: arrears = [] } = useQuery({
+    queryKey: ['arrears-for-flat', flatCode],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('flat_arrears')
+        .select('*')
+        .eq('flat_id', flatIdData!)
+        .eq('arrears_type', 'maintenance')
+        .order('created_at')
+      return data ?? []
+    },
+    enabled: !!flatIdData,
+  })
+
+  async function handleDelete(id: string) {
+    await supabase.from('flat_arrears').delete().eq('id', id)
+    qc.invalidateQueries({ queryKey: ['arrears-for-flat', flatCode] })
+    qc.invalidateQueries({ queryKey: ['dues'] })
+  }
+
+  return (
+    <div className="flex flex-col gap-2 pt-3">
+      <div className="flex items-center justify-between">
+        <p className="text-[12px] font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-400)' }}>
+          Maintenance Arrears
+        </p>
+        {isAdmin && (
+          <Button size="sm" variant="outline" onClick={() => setShowAdd(true)}>
+            + Add
+          </Button>
+        )}
+      </div>
+      {arrears.length === 0 && (
+        <p className="text-[12px]" style={{ color: 'var(--ink-400)' }}>None</p>
+      )}
+      {arrears.map((row: any) => (
+        <div key={row.id} className="flex items-center justify-between text-[12.5px]">
+          <span>{row.source_label}</span>
+          <div className="flex items-center gap-2">
+            <span className="font-semibold" style={{ color: 'var(--bad)' }}>{formatINR(row.amount)}</span>
+            {isAdmin && (
+              <>
+                <button onClick={() => setEditRow(row)} className="text-[var(--ink-400)] hover:text-[var(--ink-700)]">
+                  <Pencil size={13} />
+                </button>
+                <button onClick={() => handleDelete(row.id)} className="text-[var(--bad)] hover:opacity-70">
+                  <Trash2 size={13} />
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      ))}
+      {(showAdd || editRow) && flatIdData && (
+        <ArrearsDialog
+          flatId={flatIdData}
+          row={editRow}
+          onClose={() => { setShowAdd(false); setEditRow(null) }}
+          onSaved={() => {
+            qc.invalidateQueries({ queryKey: ['arrears-for-flat', flatCode] })
+            qc.invalidateQueries({ queryKey: ['dues'] })
+            setShowAdd(false); setEditRow(null)
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function ArrearsDialog({ flatId, row, onClose, onSaved }: {
+  flatId: string
+  row: any | null
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [label, setLabel] = useState(row?.source_label ?? '')
+  const [amount, setAmount] = useState(row?.amount?.toString() ?? '')
+  const [notes, setNotes] = useState(row?.notes ?? '')
+  const [saving, setSaving] = useState(false)
+
+  async function handleSave() {
+    const amt = parseInt(amount)
+    if (!label.trim() || isNaN(amt) || amt <= 0) return
+    setSaving(true)
+    if (row) {
+      await supabase.from('flat_arrears').update({ source_label: label.trim(), amount: amt, notes: notes.trim() || null }).eq('id', row.id)
+    } else {
+      const { data: { user } } = await supabase.auth.getUser()
+      await supabase.from('flat_arrears').insert({
+        flat_id: flatId, arrears_type: 'maintenance',
+        source_label: label.trim(), amount: amt,
+        notes: notes.trim() || null, created_by: user!.id,
+      })
+    }
+    setSaving(false)
+    onSaved()
+  }
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>{row ? 'Edit arrears' : 'Add arrears'}</DialogTitle></DialogHeader>
+        <div className="flex flex-col gap-3 py-2">
+          <div className="flex flex-col gap-1">
+            <Label>Period label (e.g. FY 2024-25)</Label>
+            <Input value={label} onChange={e => setLabel(e.target.value)} />
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label>Amount (₹)</Label>
+            <Input type="number" value={amount} onChange={e => setAmount(e.target.value)} />
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label>Notes</Label>
+            <Input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional" />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
