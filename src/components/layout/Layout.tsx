@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   LayoutDashboard, IndianRupee, Banknote, Building2, Receipt,
   FileText, Users, Settings, LogOut, Menu,
@@ -35,11 +36,10 @@ const NAV = [
 
 // Restricted nav for flat owners — self-service portal only
 const OWNER_NAV = [
-  { to: '/dashboard',     icon: Home,      label: 'My Flat' },
-  { to: '/announcements', icon: Megaphone, label: 'Notices' },
+  { to: '/dashboard',     icon: Home,        label: 'My Flat' },
+  { to: '/announcements', icon: Megaphone,   label: 'Notices' },
   { to: '/settings',      icon: IndianRupee, label: 'Payment Info' },
-  { to: '/profile',       icon: User,      label: 'My Profile' },
-  { to: '/help',          icon: HelpCircle,label: 'Help' },
+  { to: '/profile',       icon: User,        label: 'My Profile' },
 ]
 
 // Pages owners are not allowed to visit
@@ -73,9 +73,10 @@ function Avatar({ name, size = 36 }: { name: string; size?: number }) {
 export default function Layout() {
   const navigate  = useNavigate()
   const location  = useLocation()
+  const qc        = useQueryClient()
   const [open, setOpen]   = useState(false)
   const [notif, setNotif] = useState(false)
-  const { role, isOwner, loading: roleLoading } = useRoleCtx()
+  const { role, isOwner, loading: roleLoading, hasFlatAssigned } = useRoleCtx()
   const [userName, setUserName] = useState('')
 
   useEffect(() => { setOpen(false) }, [location.pathname])
@@ -109,6 +110,7 @@ export default function Layout() {
 
   async function handleLogout() {
     await supabase.auth.signOut()
+    qc.clear()
     navigate('/')
   }
 
@@ -116,7 +118,10 @@ export default function Layout() {
     ? []
     : isOwner
       ? OWNER_NAV
-      : NAV.filter(n => !n.adminOnly || role === 'admin')
+      : [
+          ...NAV.filter(n => !n.adminOnly || role === 'admin'),
+          ...(hasFlatAssigned ? [{ to: '/my-flat', icon: Home, label: 'My Flat' }] : []),
+        ]
   const currentPage = (isOwner ? OWNER_NAV : NAV).find(n => location.pathname.startsWith(n.to))
 
   const sidebar = (
