@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AgGridReact } from 'ag-grid-react'
 import type { ColDef } from 'ag-grid-community'
@@ -1158,57 +1158,74 @@ function ClosePlanDialog({ open, planId, onClose, onSuccess }: {
   onClose: () => void
   onSuccess: () => void
 }) {
-  const [notes, setNotes] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [preview, setPreview] = useState<{ flat_code: string; balance: number }[]>([])
+  const [previewing, setPreviewing] = useState(false)
+  const [closing, setClosing] = useState(false)
+
+  useEffect(() => {
+    if (!open || !planId) {
+      setPreview([])
+      return
+    }
+    setPreviewing(true)
+    supabase
+      .from('v_corpus_tracker')
+      .select('flat_code, balance')
+      .eq('plan_id', planId)
+      .gt('balance', 0)
+      .order('flat_code')
+      .then(({ data }) => {
+        setPreview(data ?? [])
+        setPreviewing(false)
+      })
+  }, [open, planId])
 
   async function confirm() {
-    setLoading(true)
-    const { error } = await supabase.from('corpus_plans').update({
-      status: 'completed',
-      closed_at: new Date().toISOString(),
-      close_notes: notes || null,
-    }).eq('id', planId)
-    setLoading(false)
+    setClosing(true)
+    const { error } = await supabase.rpc('close_corpus_plan', { p_plan_id: planId })
+    setClosing(false)
     if (error) { toast.error(error.message); return }
-    toast.success('Plan closed')
+    toast.success('Plan closed and arrears recorded')
     onSuccess()
     onClose()
   }
 
   return (
-    <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Close corpus plan</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4 mt-2">
-          <div className="rounded-lg px-3 py-2.5 text-sm" style={{ background: 'var(--warn-bg)', border: '1px solid var(--warn-bd)', color: 'var(--warn)' }}>
-            This marks the plan as completed. Existing data is preserved.
-          </div>
-          <div className="space-y-1.5">
-            <Label>Close notes <span className="text-[11px]" style={{ color: 'var(--ink-400)' }}>(optional)</span></Label>
-            <textarea
-              rows={4}
-              className="w-full rounded-lg border px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[var(--brand-400)]"
-              style={{ borderColor: 'var(--ink-200)' }}
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              placeholder="Add any closing notes…"
-            />
-          </div>
-        </div>
-        <DialogFooter className="mt-4 gap-2 sm:gap-2">
-          <Button variant="outline" onClick={onClose} disabled={loading}>Cancel</Button>
-          <Button
-            onClick={confirm}
-            disabled={loading}
-            className="border-red-400 text-red-600 hover:bg-red-50 bg-white"
-            variant="outline"
-          >
-            {loading ? 'Closing…' : 'Mark as Completed'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <AlertDialog open={open} onOpenChange={v => !v && onClose()}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Close corpus plan?</AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div>
+              {previewing ? (
+                <span className="block text-sm">Loading outstanding balances…</span>
+              ) : preview.length > 0 ? (
+                <>
+                  <span className="block mb-2">
+                    {preview.length} flat(s) have outstanding balances that will be saved as corpus arrears:
+                  </span>
+                  <div className="flex flex-col gap-1 max-h-40 overflow-y-auto">
+                    {preview.map(r => (
+                      <span key={r.flat_code} className="flex justify-between text-[12px]">
+                        <span>{r.flat_code}</span>
+                        <span style={{ color: 'var(--bad)' }}>{formatINR(r.balance)}</span>
+                      </span>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <span>All flats have met their corpus target. No arrears will be created.</span>
+              )}
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={onClose} disabled={closing}>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={confirm} disabled={closing || previewing}>
+            {closing ? 'Closing…' : 'Close Plan'}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }
