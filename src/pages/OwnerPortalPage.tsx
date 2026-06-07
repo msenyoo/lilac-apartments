@@ -176,67 +176,69 @@ export default function OwnerPortalPage() {
           {dues && <StatusPill status={dues.status} />}
         </div>
         {dues ? (
-          dues.status === 'Clear' ? (
-            <p className="text-[13px]" style={{ color: 'var(--ok)' }}>No maintenance due</p>
-          ) : (
-            <div className="flex flex-col gap-1.5 text-[13px]">
-              <div className="flex justify-between">
-                <span style={{ color: 'var(--ink-500)' }}>Due this year</span>
-                <span className="font-medium">{formatINR(dues.annual_due)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span style={{ color: 'var(--ink-500)' }}>Collected</span>
-                <span className="font-medium" style={{ color: 'var(--ok)' }}>{formatINR(dues.collected_fy)}</span>
-              </div>
-              {dues.pending > 0 && (
-                <div className="flex flex-col gap-1.5 pt-1 border-t" style={{ borderColor: 'var(--ink-100)' }}>
-                  <div className="flex justify-between">
-                    <span className="font-semibold" style={{ color: 'var(--bad)' }}>Pending</span>
-                    <span className="font-bold" style={{ color: 'var(--bad)' }}>{formatINR(dues.pending)}</span>
-                  </div>
-                  {pendingMonths.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-0.5">
-                      {pendingMonths.length <= 3
-                        ? pendingMonths.map(lbl => (
-                            <span
-                              key={lbl}
-                              className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
-                              style={{ background: 'var(--bad-bg)', color: 'var(--bad)' }}
-                            >
-                              {lbl}
-                            </span>
-                          ))
-                        : (
-                            <span
-                              className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
-                              style={{ background: 'var(--bad-bg)', color: 'var(--bad)' }}
-                            >
-                              {pendingMonths[0]} – {pendingMonths[pendingMonths.length - 1]} ({pendingMonths.length} months)
-                            </span>
-                          )
-                      }
+          <div className="flex flex-col gap-1.5 text-[13px]">
+            {dues.status === 'Clear' ? (
+              <p style={{ color: 'var(--ok)' }}>No maintenance due this year</p>
+            ) : (
+              <>
+                <div className="flex justify-between">
+                  <span style={{ color: 'var(--ink-500)' }}>Due this year</span>
+                  <span className="font-medium">{formatINR(dues.annual_due)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span style={{ color: 'var(--ink-500)' }}>Collected</span>
+                  <span className="font-medium" style={{ color: 'var(--ok)' }}>{formatINR(dues.collected_fy)}</span>
+                </div>
+                {dues.pending > 0 && (
+                  <div className="flex flex-col gap-1.5 pt-1 border-t" style={{ borderColor: 'var(--ink-100)' }}>
+                    <div className="flex justify-between">
+                      <span className="font-semibold" style={{ color: 'var(--bad)' }}>Pending</span>
+                      <span className="font-bold" style={{ color: 'var(--bad)' }}>{formatINR(dues.pending)}</span>
                     </div>
-                  )}
-                </div>
-              )}
-              {(dues?.arrears_maintenance ?? 0) > 0 && (
-                <div className="flex flex-col gap-1.5 pt-1 border-t" style={{ borderColor: 'var(--ink-100)' }}>
-                  <div className="flex justify-between text-[13px]">
-                    <span style={{ color: 'var(--ink-500)' }}>Previous arrears</span>
-                    <span className="font-semibold" style={{ color: 'var(--bad)' }}>
-                      {formatINR(dues!.arrears_maintenance)}
-                    </span>
+                    {pendingMonths.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-0.5">
+                        {pendingMonths.length <= 3
+                          ? pendingMonths.map(lbl => (
+                              <span
+                                key={lbl}
+                                className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                                style={{ background: 'var(--bad-bg)', color: 'var(--bad)' }}
+                              >
+                                {lbl}
+                              </span>
+                            ))
+                          : (
+                              <span
+                                className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                                style={{ background: 'var(--bad-bg)', color: 'var(--bad)' }}
+                              >
+                                {pendingMonths[0]} – {pendingMonths[pendingMonths.length - 1]} ({pendingMonths.length} months)
+                              </span>
+                            )
+                        }
+                      </div>
+                    )}
                   </div>
-                  <div className="flex justify-between text-[13px]">
-                    <span className="font-semibold">Total outstanding</span>
-                    <span className="font-bold" style={{ color: 'var(--bad)' }}>
-                      {formatINR(dues!.total_outstanding)}
-                    </span>
-                  </div>
+                )}
+              </>
+            )}
+            {dues.arrears_maintenance > 0 && (
+              <div className="flex flex-col gap-1.5 pt-1 border-t" style={{ borderColor: 'var(--ink-100)' }}>
+                <div className="flex justify-between">
+                  <span style={{ color: 'var(--ink-500)' }}>Previous arrears</span>
+                  <span className="font-semibold" style={{ color: 'var(--bad)' }}>
+                    {formatINR(dues.arrears_maintenance)}
+                  </span>
                 </div>
-              )}
-            </div>
-          )
+                <div className="flex justify-between">
+                  <span className="font-semibold">Total outstanding</span>
+                  <span className="font-bold" style={{ color: 'var(--bad)' }}>
+                    {formatINR(dues.total_outstanding)}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
         ) : (
           <p className="text-[13px]" style={{ color: 'var(--ink-400)' }}>No dues data</p>
         )}
