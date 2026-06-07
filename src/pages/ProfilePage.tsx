@@ -6,9 +6,11 @@ import { KeyRound, Save, Eye, EyeOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { useRoleCtx } from '@/contexts/RoleContext'
 
 export default function ProfilePage() {
   const qc = useQueryClient()
+  const { flatId } = useRoleCtx()
   const [userId, setUserId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -28,6 +30,19 @@ export default function ProfilePage() {
     },
   })
 
+  const { data: myFlat } = useQuery({
+    queryKey: ['owner-flat-profile', userId, flatId],
+    enabled: !!userId && !!flatId,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('flats')
+        .select('code, block')
+        .eq('id', flatId!)
+        .maybeSingle()
+      return data as { code: string; block: string } | null
+    },
+  })
+
   if (isLoading || !userId) {
     return <div className="surface h-48 animate-pulse" style={{ background: 'var(--ink-100)' }} />
   }
@@ -44,6 +59,7 @@ export default function ProfilePage() {
       <ProfileForm
         userId={userId}
         profile={profile ?? null}
+        flatLabel={myFlat ? `${myFlat.code} · Block ${myFlat.block}` : null}
         onSaved={() => qc.invalidateQueries({ queryKey: ['my-profile', userId] })}
       />
       <ChangePasswordForm />
@@ -51,9 +67,10 @@ export default function ProfilePage() {
   )
 }
 
-function ProfileForm({ userId, profile, onSaved }: {
+function ProfileForm({ userId, profile, flatLabel, onSaved }: {
   userId: string
   profile: { display_name: string | null; mobile: string | null; contact_email: string | null } | null
+  flatLabel: string | null
   onSaved: () => void
 }) {
   const [name, setName]   = useState(profile?.display_name ?? '')
@@ -86,6 +103,13 @@ function ProfileForm({ userId, profile, onSaved }: {
         <Label>Display name</Label>
         <Input value={name} onChange={e => setName(e.target.value)} placeholder="Your full name" />
       </div>
+
+      {flatLabel && (
+        <div className="flex flex-col gap-1">
+          <Label>My flat</Label>
+          <Input value={flatLabel} disabled className="opacity-60 cursor-not-allowed" />
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-4">
         <div className="flex flex-col gap-1">
