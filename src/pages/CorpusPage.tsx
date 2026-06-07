@@ -1174,7 +1174,8 @@ function ClosePlanDialog({ open, planId, onClose, onSuccess }: {
       .eq('plan_id', planId)
       .gt('balance', 0)
       .order('flat_code')
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (error) toast.error('Failed to load outstanding balances')
         setPreview(data ?? [])
         setPreviewing(false)
       })
