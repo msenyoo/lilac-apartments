@@ -3,6 +3,8 @@ import { useRole, AppRole } from '@/hooks/useRole'
 
 interface RoleContextValue {
   role: AppRole | null
+  flatId: string | null
+  hasFlatAssigned: boolean
   loading: boolean
   isAdmin: boolean
   isOwner: boolean
@@ -11,7 +13,8 @@ interface RoleContextValue {
 }
 
 const RoleContext = createContext<RoleContextValue>({
-  role: null, loading: true, isAdmin: false, isOwner: false, canWrite: false, canApprove: false,
+  role: null, flatId: null, hasFlatAssigned: false,
+  loading: true, isAdmin: false, isOwner: false, canWrite: false, canApprove: false,
 })
 
 export function RoleProvider({ children }: { children: ReactNode }) {
