@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { toast } from 'sonner'
 
 type AgingTab = 'All' | 'Due' | '30d+' | '60d+' | '90d+'
 
@@ -382,7 +383,8 @@ function ArrearsMgmt({ flatCode }: { flatCode: string }) {
   })
 
   async function handleDelete(id: string) {
-    await supabase.from('flat_arrears').delete().eq('id', id)
+    const { error } = await supabase.from('flat_arrears').delete().eq('id', id)
+    if (error) { toast.error(error.message); return }
     qc.invalidateQueries({ queryKey: ['arrears-for-flat', flatCode] })
     qc.invalidateQueries({ queryKey: ['dues'] })
   }
@@ -451,17 +453,19 @@ function ArrearsDialog({ flatId, row, onClose, onSaved }: {
     const amt = parseInt(amount)
     if (!label.trim() || isNaN(amt) || amt <= 0) return
     setSaving(true)
+    let error: any
     if (row) {
-      await supabase.from('flat_arrears').update({ source_label: label.trim(), amount: amt, notes: notes.trim() || null }).eq('id', row.id)
+      ;({ error } = await supabase.from('flat_arrears').update({ source_label: label.trim(), amount: amt, notes: notes.trim() || null }).eq('id', row.id))
     } else {
       const { data: { user } } = await supabase.auth.getUser()
-      await supabase.from('flat_arrears').insert({
+      ;({ error } = await supabase.from('flat_arrears').insert({
         flat_id: flatId, arrears_type: 'maintenance',
         source_label: label.trim(), amount: amt,
         notes: notes.trim() || null, created_by: user!.id,
-      })
+      }))
     }
     setSaving(false)
+    if (error) { toast.error(error.message); return }
     onSaved()
   }
 
