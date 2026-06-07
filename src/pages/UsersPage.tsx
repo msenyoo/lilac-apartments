@@ -83,6 +83,7 @@ export default function UsersPage() {
     qc.invalidateQueries({ queryKey: ['v_users'] })
     qc.invalidateQueries({ queryKey: ['owner-flat'] })
     qc.invalidateQueries({ queryKey: ['owner-flat-profile'] })
+    qc.invalidateQueries({ queryKey: ['owner-corpus-arrears'] })
     qc.invalidateQueries({ queryKey: ['flat-assignments'] })
   }
 
