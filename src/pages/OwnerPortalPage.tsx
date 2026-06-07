@@ -4,7 +4,7 @@ import { formatINR } from '@/lib/tagger'
 import { IndianRupee, Building2, CheckCircle2, AlertCircle, Clock, Receipt } from 'lucide-react'
 import { useRoleCtx } from '@/contexts/RoleContext'
 
-interface FlatRow { id: string; code: string; block: string; flat_type: string; bhk_type: string | null; maintenance_amt: number; corpus_target: number }
+interface FlatRow { id: string; code: string; block: string; flat_type: string; bhk_type: string | null; maintenance_amt: number }
 interface DuesRow {
   flat_code: string
   maintenance_amt: number
@@ -70,9 +70,9 @@ export default function OwnerPortalPage() {
     queryFn: async () => {
       const { data } = await supabase
         .from('flats')
-        .select('id,code,block,flat_type,bhk_type,maintenance_amt,corpus_target')
+        .select('id,code,block,flat_type,bhk_type,maintenance_amt')
         .eq('id', flatId!)
-        .single()
+        .maybeSingle()
       return data as FlatRow | null
     },
   })
