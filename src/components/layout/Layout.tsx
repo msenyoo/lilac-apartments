@@ -122,7 +122,7 @@ export default function Layout() {
           ...NAV.filter(n => !n.adminOnly || role === 'admin'),
           ...(hasFlatAssigned ? [{ to: '/my-flat', icon: Home, label: 'My Flat' }] : []),
         ]
-  const currentPage = (isOwner ? OWNER_NAV : NAV).find(n => location.pathname.startsWith(n.to))
+  const currentPage = visibleNav.find(n => location.pathname.startsWith(n.to))
 
   const sidebar = (
     <aside
