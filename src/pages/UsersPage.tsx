@@ -79,7 +79,12 @@ export default function UsersPage() {
     },
   })
 
-  function invalidate() { qc.invalidateQueries({ queryKey: ['v_users'] }) }
+  function invalidate() {
+    qc.invalidateQueries({ queryKey: ['v_users'] })
+    qc.invalidateQueries({ queryKey: ['owner-flat'] })
+    qc.invalidateQueries({ queryKey: ['owner-flat-profile'] })
+    qc.invalidateQueries({ queryKey: ['flat-assignments'] })
+  }
 
   const totals = {
     admin:     (users as any[]).filter(u => u.role === 'admin').length,
