@@ -319,7 +319,11 @@ function ExpenseDetailPanel({ expense: e, onClose }: { expense: Expense; onClose
   const lineTotal = e.line_items.reduce((s, li) => s + li.amount, 0)
 
   return (
-    <div className="w-80 shrink-0 flex flex-col gap-3">
+    <>
+      {/* Mobile backdrop */}
+      <div className="fixed inset-0 bg-black/30 z-40 md:hidden" onClick={onClose} />
+
+      <div className="fixed inset-x-0 bottom-0 z-50 max-h-[85vh] overflow-y-auto rounded-t-2xl bg-white p-3 flex flex-col gap-3 md:static md:w-80 md:shrink-0 md:rounded-none md:bg-transparent md:p-0 md:max-h-none md:overflow-visible md:z-auto">
       <div className="surface !p-4 flex flex-col gap-3">
         <div className="flex items-start justify-between gap-2">
           <div>
@@ -374,7 +378,8 @@ function ExpenseDetailPanel({ expense: e, onClose }: { expense: Expense; onClose
       )}
 
       <AttachmentsSection expenseId={e.id} />
-    </div>
+      </div>
+    </>
   )
 }
 
