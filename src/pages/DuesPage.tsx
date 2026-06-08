@@ -281,8 +281,8 @@ function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat
               {isAdmin && (
                 <button
                   onClick={() => setShowAddArrears(true)}
-                  className="text-[11px] font-semibold px-1.5 py-0.5 rounded-md border transition-colors hover:bg-[var(--ink-100)]"
-                  style={{ color: 'var(--ink-500)', borderColor: 'var(--ink-200)' }}
+                  className="text-[11px] font-semibold px-1.5 py-0.5 rounded-md border transition-colors hover:opacity-80"
+                  style={{ color: 'var(--bad)', borderColor: 'var(--bad-bd)', background: 'var(--bad-bg)' }}
                 >
                   + Arrears
                 </button>
