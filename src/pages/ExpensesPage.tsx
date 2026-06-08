@@ -4,7 +4,7 @@ import { useRoleCtx } from '@/contexts/RoleContext'
 import { useForm, useFieldArray, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Plus, Trash2, Download, Receipt, Users, Building, X, GitMerge, CheckCircle2, Paperclip, RefreshCcw, Coins, Upload, Loader2, Trash } from 'lucide-react'
+import { Plus, Trash2, Download, Receipt, Users, Building, X, GitMerge, CheckCircle2, Paperclip, RefreshCcw, Coins, Upload, Loader2, Trash, Pencil, Ban } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
@@ -12,6 +12,10 @@ import { formatINR } from '@/lib/tagger'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -42,6 +46,7 @@ interface Expense {
   transaction_id: string | null; reconciled_at: string | null
   reconciliation_notes: string | null
   notes: string | null; created_at: string
+  voided_at: string | null; voided_by: string | null; void_reason: string | null
   category: ExpenseCategory | null
   vendor: Vendor | null
   staff_member: StaffMember | null
@@ -170,14 +175,17 @@ export default function ExpensesPage() {
 
 function DayBook() {
   const [detailId, setDetailId] = useState<string | null>(null)
+  const [showVoided, setShowVoided] = useState(false)
 
   const { data: expenses = [], isLoading } = useQuery({
-    queryKey: ['expenses'],
+    queryKey: ['expenses', showVoided],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let q = supabase
         .from('expenses')
         .select(`
-          *,
+          id,expense_date,description,payee_type,payee_name_raw,amount,payment_mode,
+          reference_no,cheque_number,voucher_no,transaction_id,reconciled_at,
+          reconciliation_notes,notes,created_at,voided_at,voided_by,void_reason,
           category:category_id(id,name,budget_type,is_utility),
           vendor:vendor_id(id,name,type,phone),
           staff_member:staff_id(id,name,role,assigned_area,phone,left_date),
@@ -186,8 +194,10 @@ function DayBook() {
           line_items:expense_line_items(*, category:category_id(id,name,budget_type,is_utility))
         `)
         .order('expense_date', { ascending: false })
+      if (!showVoided) q = q.is('voided_at', null)
+      const { data, error } = await q
       if (error) throw error
-      return (data ?? []) as Expense[]
+      return (data ?? []) as unknown as Expense[]
     },
   })
 
@@ -214,15 +224,16 @@ function DayBook() {
     XLSX.writeFile(wb, 'Expenses_DayBook.xlsx')
   }
 
-  // Summary cards
+  // Summary cards — exclude voided from totals
   const now = new Date()
   const fyStartYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
   const fyStart = `${fyStartYear}-04-01`
   const fyEnd   = `${fyStartYear + 1}-03-31`
   const fyLabel = `FY ${fyStartYear}-${(fyStartYear + 1).toString().slice(2)}`
-  const totalThisFY  = expenses.filter(e => e.expense_date >= fyStart && e.expense_date <= fyEnd).reduce((s, e) => s + e.amount, 0)
-  const unreconciled = expenses.filter(e => expenseStatus(e) === 'Unreconciled').length
-  const totalAll     = expenses.reduce((s, e) => s + e.amount, 0)
+  const activeExpenses = expenses.filter(e => !e.voided_at)
+  const totalThisFY  = activeExpenses.filter(e => e.expense_date >= fyStart && e.expense_date <= fyEnd).reduce((s, e) => s + e.amount, 0)
+  const unreconciled = activeExpenses.filter(e => expenseStatus(e) === 'Unreconciled').length
+  const totalAll     = activeExpenses.reduce((s, e) => s + e.amount, 0)
 
   if (isLoading) return <div className="surface h-48 animate-pulse" style={{ background: 'var(--ink-100)' }} />
 
@@ -244,12 +255,21 @@ function DayBook() {
         </div>
         <div className="surface !p-4">
           <p className="text-xs mb-1" style={{ color: 'var(--ink-500)' }}>Total entries</p>
-          <p className="text-xl font-bold" style={{ color: 'var(--ink-800)' }}>{expenses.length}</p>
+          <p className="text-xl font-bold" style={{ color: 'var(--ink-800)' }}>{activeExpenses.length}</p>
         </div>
       </div>
 
-      {/* Export */}
-      <div className="flex justify-end">
+      {/* Toolbar */}
+      <div className="flex items-center justify-between">
+        <label className="flex items-center gap-2 text-sm cursor-pointer select-none" style={{ color: 'var(--ink-500)' }}>
+          <input
+            type="checkbox"
+            checked={showVoided}
+            onChange={e => { setShowVoided(e.target.checked); setDetailId(null) }}
+            className="rounded"
+          />
+          Show voided
+        </label>
         <button onClick={handleExport} disabled={!expenses.length}
           className="flex items-center gap-1.5 text-sm text-brand-700 hover:text-brand-900 disabled:opacity-40">
           <Download size={14} /> Export
@@ -273,14 +293,15 @@ function DayBook() {
             {expenses.map(e => {
               const status = expenseStatus(e)
               const payeeName = e.payee_name_raw ?? e.vendor?.name ?? e.staff_member?.name ?? ''
+              const isVoided = !!e.voided_at
               return (
                 <button
                   key={e.id}
                   onClick={() => setDetailId(d => d === e.id ? null : e.id)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-[var(--ink-50)] text-left transition-colors ${detailId === e.id ? 'bg-[var(--brand-50)]' : ''}`}
+                  className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-[var(--ink-50)] text-left transition-colors ${detailId === e.id ? 'bg-[var(--brand-50)]' : ''} ${isVoided ? 'opacity-60' : ''}`}
                 >
                   <div className="shrink-0 text-center w-10">
-                    <p className="text-xs font-bold leading-tight" style={{ color: 'var(--ink-800)' }}>
+                    <p className={`text-xs font-bold leading-tight ${isVoided ? 'line-through text-muted-foreground' : ''}`} style={isVoided ? undefined : { color: 'var(--ink-800)' }}>
                       {new Date(e.expense_date).getDate().toString().padStart(2, '0')}
                     </p>
                     <p className="text-[10px] uppercase" style={{ color: 'var(--ink-400)' }}>
@@ -289,7 +310,7 @@ function DayBook() {
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium line-clamp-2 leading-snug" style={{ color: 'var(--ink-800)' }}>{e.description}</p>
+                    <p className={`text-sm font-medium line-clamp-2 leading-snug ${isVoided ? 'line-through text-muted-foreground' : ''}`} style={isVoided ? undefined : { color: 'var(--ink-800)' }}>{e.description}</p>
                     <p className="text-xs mt-0.5" style={{ color: 'var(--ink-500)' }}>
                       {payeeName} · {e.category?.name ?? e.payment_mode}
                       {e.voucher_no && <span className="ml-1.5" style={{ color: 'var(--ink-400)' }}>{e.voucher_no}</span>}
@@ -297,10 +318,14 @@ function DayBook() {
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${STATUS_STYLE[status]}`} style={STATUS_INLINE[status]}>
-                      {status}
-                    </span>
-                    <span className="text-sm font-semibold" style={{ color: 'var(--ink-800)' }}>{formatINR(e.amount)}</span>
+                    {isVoided ? (
+                      <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-red-100 text-red-600">Voided</span>
+                    ) : (
+                      <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${STATUS_STYLE[status]}`} style={STATUS_INLINE[status]}>
+                        {status}
+                      </span>
+                    )}
+                    <span className={`text-sm font-semibold ${isVoided ? 'line-through text-muted-foreground' : ''}`} style={isVoided ? undefined : { color: 'var(--ink-800)' }}>{formatINR(e.amount)}</span>
                   </div>
                 </button>
               )
@@ -309,7 +334,11 @@ function DayBook() {
 
           {/* Detail panel */}
           {selectedExpense && (
-            <ExpenseDetailPanel expense={selectedExpense} onClose={() => setDetailId(null)} />
+            <ExpenseDetailPanel
+              expense={selectedExpense}
+              onClose={() => setDetailId(null)}
+              onVoidSuccess={() => setDetailId(null)}
+            />
           )}
         </div>
       )}
@@ -319,10 +348,46 @@ function DayBook() {
 
 // ── Expense detail panel ──────────────────────────────────────
 
-function ExpenseDetailPanel({ expense: e, onClose }: { expense: Expense; onClose: () => void }) {
+function ExpenseDetailPanel({
+  expense: e, onClose, onVoidSuccess,
+}: {
+  expense: Expense
+  onClose: () => void
+  onVoidSuccess: () => void
+}) {
+  const { isAdmin, canWrite } = useRoleCtx()
+  const qc = useQueryClient()
   const status = expenseStatus(e)
   const payeeName = e.payee_name_raw ?? e.vendor?.name ?? e.staff_member?.name ?? '—'
   const lineTotal = e.line_items.reduce((s, li) => s + li.amount, 0)
+  const isVoided = !!e.voided_at
+
+  const [voidOpen, setVoidOpen] = useState(false)
+  const [voidReason, setVoidReason] = useState('')
+  const [voiding, setVoiding] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
+
+  async function handleVoid() {
+    if (!voidReason.trim()) return
+    setVoiding(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      const { error } = await supabase.from('expenses').update({
+        voided_at: new Date().toISOString(),
+        voided_by: user?.id ?? null,
+        void_reason: voidReason.trim(),
+      }).eq('id', e.id)
+      if (error) throw error
+      qc.invalidateQueries({ queryKey: ['expenses'] })
+      setVoidOpen(false)
+      setVoidReason('')
+      onVoidSuccess()
+    } catch (err: any) {
+      toast.error(err.message ?? 'Failed to void expense')
+    } finally {
+      setVoiding(false)
+    }
+  }
 
   return (
     <>
@@ -332,14 +397,20 @@ function ExpenseDetailPanel({ expense: e, onClose }: { expense: Expense; onClose
       <div className="fixed inset-x-0 bottom-0 z-50 max-h-[85vh] overflow-y-auto rounded-t-2xl bg-white p-3 flex flex-col gap-3 md:static md:w-80 md:shrink-0 md:rounded-none md:bg-transparent md:p-0 md:max-h-none md:overflow-visible md:z-auto">
       <div className="surface !p-4 flex flex-col gap-3">
         <div className="flex items-start justify-between gap-2">
-          <div>
+          <div className="flex items-center gap-2 flex-wrap">
             <h3 className="font-semibold" style={{ color: 'var(--ink-800)' }}>{e.description}</h3>
-            {e.voucher_no && <p className="text-xs mt-0.5" style={{ color: 'var(--ink-400)' }}>{e.voucher_no}</p>}
+            {isVoided && (
+              <span className="text-[11px] px-2 py-0.5 rounded-full font-semibold bg-red-100 text-red-600 uppercase tracking-wide">Voided</span>
+            )}
           </div>
           <button onClick={onClose} className="p-1 rounded hover:bg-[var(--ink-100)] shrink-0"><X size={15} /></button>
         </div>
 
-        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_STYLE[status]}`} style={STATUS_INLINE[status]}>{status}</span>
+        {e.voucher_no && <p className="text-xs" style={{ color: 'var(--ink-400)' }}>{e.voucher_no}</p>}
+
+        {!isVoided && (
+          <span className={`text-xs px-2 py-0.5 rounded-full font-medium self-start ${STATUS_STYLE[status]}`} style={STATUS_INLINE[status]}>{status}</span>
+        )}
 
         <div className="flex flex-col gap-1.5 text-sm">
           <Row label="Date"     value={e.expense_date} />
@@ -359,7 +430,26 @@ function ExpenseDetailPanel({ expense: e, onClose }: { expense: Expense; onClose
             } />
           )}
           {e.notes && !e.notes.startsWith('Imported from') && <Row label="Notes" value={e.notes} />}
+          {isVoided && e.void_reason && <Row label="Void reason" value={e.void_reason} />}
+          {isVoided && e.voided_at && (
+            <Row label="Voided on" value={new Date(e.voided_at).toLocaleDateString('en-IN')} />
+          )}
         </div>
+
+        {!isVoided && (
+          <div className="flex gap-2 pt-1">
+            {canWrite && (
+              <Button size="sm" variant="outline" className="flex items-center gap-1.5" onClick={() => setEditOpen(true)}>
+                <Pencil size={13} /> Edit
+              </Button>
+            )}
+            {isAdmin && (
+              <Button size="sm" variant="outline" className="flex items-center gap-1.5 text-red-600 border-red-200 hover:bg-red-50" onClick={() => setVoidOpen(true)}>
+                <Ban size={13} /> Void
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
       {e.line_items.length > 0 && (
@@ -399,6 +489,46 @@ function ExpenseDetailPanel({ expense: e, onClose }: { expense: Expense; onClose
 
       <AttachmentsSection expenseId={e.id} />
       </div>
+
+      {/* Void confirm dialog */}
+      <AlertDialog open={voidOpen} onOpenChange={setVoidOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Void Expense</AlertDialogTitle>
+            <AlertDialogDescription>
+              This cannot be undone. The expense will be excluded from all financial totals.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex flex-col gap-1 py-2">
+            <Label>Reason for voiding *</Label>
+            <Textarea
+              value={voidReason}
+              onChange={ev => setVoidReason(ev.target.value)}
+              placeholder="Describe why this expense is being voided"
+              rows={3}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setVoidReason('')}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleVoid}
+              disabled={!voidReason.trim() || voiding}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {voiding ? 'Voiding…' : 'Void Expense'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Edit dialog */}
+      {editOpen && (
+        <AddExpenseDialog
+          open={editOpen}
+          onClose={() => setEditOpen(false)}
+          editExpense={e}
+        />
+      )}
     </>
   )
 }
@@ -414,7 +544,12 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 
 // ── Add Expense dialog ────────────────────────────────────────
 
-function AddExpenseDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+function AddExpenseDialog({ open, onClose, editExpense }: {
+  open: boolean
+  onClose: () => void
+  editExpense?: Expense
+}) {
+  const isEditMode = !!editExpense
   const qc = useQueryClient()
 
   const { data: categories = [] } = useQuery({
@@ -452,7 +587,36 @@ function AddExpenseDialog({ open, onClose }: { open: boolean; onClose: () => voi
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { register, control, handleSubmit, watch, reset, formState: { errors, isSubmitting } } = useForm<ExpenseFormData>({
     resolver: zodResolver(expenseSchema) as any,
-    defaultValues: {
+    defaultValues: editExpense ? {
+      expense_date:   editExpense.expense_date,
+      description:    editExpense.description,
+      payee_type:     editExpense.payee_type,
+      payee_name_raw: editExpense.payee_name_raw ?? undefined,
+      staff_id:       editExpense.staff_member?.id ?? undefined,
+      vendor_id:      editExpense.vendor?.id ?? undefined,
+      amount:         editExpense.amount,
+      payment_mode:   editExpense.payment_mode,
+      reference_no:   editExpense.reference_no ?? undefined,
+      cheque_number:  editExpense.cheque_number ?? undefined,
+      category_id:    editExpense.category?.id ?? undefined,
+      notes:          editExpense.notes ?? undefined,
+      line_items: editExpense.line_items.length > 0
+        ? editExpense.line_items.map(li => ({
+            description:    li.description,
+            payee_type:     li.payee_type,
+            payee_name_raw: li.payee_name_raw ?? undefined,
+            staff_id:       undefined,
+            vendor_id:      undefined,
+            category_id:    li.category?.id ?? '',
+            cost_center:    li.cost_center,
+            amount:         li.amount,
+            utility_units:  li.utility_units ?? undefined,
+            utility_rate:   li.utility_rate ?? undefined,
+            period_from:    li.period_from ?? undefined,
+            period_to:      li.period_to ?? undefined,
+          }))
+        : [{ description: '', payee_type: 'Other', cost_center: 'Common', category_id: '', amount: 0 }],
+    } : {
       expense_date: new Date().toISOString().slice(0, 10),
       payee_type:   'Vendor',
       payment_mode: 'Online',
@@ -505,18 +669,34 @@ function AddExpenseDialog({ open, onClose }: { open: boolean; onClose: () => voi
         category_id:    data.category_id    || null,
         corpus_plan_id: data.corpus_plan_id || null,
         notes:          data.notes || null,
-        created_by:     user?.id ?? null,
       }
 
-      const { data: expense, error: hErr } = await supabase
-        .from('expenses')
-        .insert(headerPayload)
-        .select()
-        .single()
-      if (hErr) throw hErr
+      let expenseId: string
+
+      if (isEditMode && editExpense) {
+        const { error: hErr } = await supabase
+          .from('expenses')
+          .update(headerPayload)
+          .eq('id', editExpense.id)
+        if (hErr) throw hErr
+        expenseId = editExpense.id
+        const { error: delErr } = await supabase
+          .from('expense_line_items')
+          .delete()
+          .eq('expense_id', expenseId)
+        if (delErr) throw delErr
+      } else {
+        const { data: expense, error: hErr } = await supabase
+          .from('expenses')
+          .insert({ ...headerPayload, created_by: user?.id ?? null })
+          .select()
+          .single()
+        if (hErr) throw hErr
+        expenseId = expense.id
+      }
 
       const linePayloads = data.line_items.map(li => ({
-        expense_id:     expense.id,
+        expense_id:     expenseId,
         payee_type:     li.payee_type,
         payee_name_raw: li.payee_name_raw || null,
         staff_id:       li.staff_id   || null,
@@ -535,7 +715,7 @@ function AddExpenseDialog({ open, onClose }: { open: boolean; onClose: () => voi
       if (liErr) throw liErr
     },
     onSuccess: () => {
-      toast.success('Expense saved')
+      toast.success(isEditMode ? 'Expense updated' : 'Expense saved')
       qc.invalidateQueries({ queryKey: ['expenses'] })
       reset()
       onClose()
@@ -556,7 +736,7 @@ function AddExpenseDialog({ open, onClose }: { open: boolean; onClose: () => voi
     <Dialog open={open} onOpenChange={v => { if (!v) { reset(); onClose() } }}>
       <DialogContent className="max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Add Expense</DialogTitle>
+          <DialogTitle>{isEditMode ? 'Edit Expense' : 'Add Expense'}</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit((d: any) => mutation.mutateAsync(d))} className="flex flex-col gap-6">
@@ -843,7 +1023,7 @@ function AddExpenseDialog({ open, onClose }: { open: boolean; onClose: () => voi
               disabled={isSubmitting || mutation.isPending || lineBalanceDiff !== 0}
               title={lineBalanceDiff !== 0 ? `Line items must sum to header amount (off by ${formatINR(Math.abs(lineBalanceDiff))})` : ''}
             >
-              {mutation.isPending ? 'Saving…' : 'Save Expense'}
+              {mutation.isPending ? 'Saving…' : isEditMode ? 'Update Expense' : 'Save Expense'}
             </Button>
           </DialogFooter>
         </form>
