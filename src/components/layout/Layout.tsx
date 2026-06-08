@@ -5,7 +5,7 @@ import {
   LayoutDashboard, IndianRupee, Banknote, Building2, Receipt,
   FileText, Users, Settings, LogOut, Menu,
   Megaphone, History, Shield, Search, Bell,
-  MoreHorizontal, HelpCircle, Home, User,
+  MoreHorizontal, HelpCircle, Home, User, PiggyBank,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useQuery } from '@tanstack/react-query'
@@ -24,6 +24,7 @@ const NAV = [
   { to: '/dues',          icon: IndianRupee,     label: 'Dues',              badge: 'dues' },
   { to: '/transactions',  icon: Banknote,        label: 'Transactions',      badge: 'review' },
   { to: '/corpus',        icon: Building2,       label: 'Corpus' },
+  { to: '/finance',       icon: PiggyBank,       label: 'Finance' },
   { to: '/expenses',      icon: Receipt,         label: 'Expenses' },
   { to: '/announcements', icon: Megaphone,       label: 'Announcements' },
   { to: '/flats',         icon: Users,           label: 'Flats & residents' },
@@ -43,7 +44,7 @@ const OWNER_NAV = [
 ]
 
 // Pages owners are not allowed to visit
-const OWNER_BLOCKED = ['/transactions', '/dues', '/corpus', '/expenses', '/flats', '/reports', '/activity', '/users']
+const OWNER_BLOCKED = ['/transactions', '/dues', '/corpus', '/finance', '/expenses', '/flats', '/reports', '/activity', '/users']
 
 const BOTTOM_NAV = [
   { to: '/dashboard',     icon: LayoutDashboard, label: 'Home' },
