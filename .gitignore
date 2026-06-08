@@ -29,3 +29,4 @@ test-results/
 scripts/apply_views.py
 scripts/migrate-history.js
 scripts/verify-migration.js
+.worktrees
