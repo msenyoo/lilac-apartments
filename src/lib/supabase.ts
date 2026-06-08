@@ -258,3 +258,20 @@ export interface ReviewEntry {
   upload_id: string | null
   created_at: string
 }
+
+export interface Deposit {
+  id: string
+  deposit_no: string
+  bank: string
+  principal: number
+  interest_rate: number
+  opened_date: string
+  maturity_date: string
+  matured_date: string | null
+  maturity_amount: number | null
+  status: 'active' | 'matured' | 'closed'
+  source_type: string
+  corpus_plan_id: string | null
+  notes: string | null
+  created_at: string
+}
