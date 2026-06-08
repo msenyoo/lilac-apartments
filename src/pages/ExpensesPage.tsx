@@ -1163,7 +1163,7 @@ function ReconcileTab() {
   function getSuggestionTier(t: UnmatchedDR): 'exact' | 'close' | null {
     if (!selExp) return null
     if (t.amount === selExp.amount) return 'exact'
-    const pctDiff = Math.abs(t.amount - selExp.amount) / selExp.amount
+    const pctDiff = selExp.amount !== 0 ? Math.abs(t.amount - selExp.amount) / selExp.amount : Infinity
     const absDiff = Math.abs(t.amount - selExp.amount)
     if ((pctDiff <= 0.05 || absDiff <= 500) && isWithin7Days(selExp.expense_date, t.value_date)) return 'close'
     return null
