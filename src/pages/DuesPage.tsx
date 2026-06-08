@@ -315,23 +315,37 @@ function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat
           ))}
           <div className="flex justify-between border-t hairline pt-1.5">
             <span style={{ color: 'var(--ink-500)' }}>Pending</span>
-            <span className="font-bold" style={{ color: flat.pending > 0 ? 'var(--bad)' : 'var(--ok)' }}>
+            <span className="font-medium" style={{ color: flat.pending > 0 ? 'var(--bad)' : 'var(--ok)' }}>
               {flat.pending > 0 ? formatINR(flat.pending) : '✓ Clear'}
             </span>
           </div>
+          {flat.advance_credits > 0 && (
+            <div className="flex justify-between">
+              <span style={{ color: 'var(--ink-500)' }}>Advance paid</span>
+              <span className="font-medium" style={{ color: 'var(--ok)' }}>− {formatINR(flat.advance_credits)}</span>
+            </div>
+          )}
+          {flat.advance_credits > 0 && (
+            <div className="flex justify-between border-t hairline pt-1.5">
+              <span className="font-semibold" style={{ color: 'var(--ink-700)' }}>Net outstanding</span>
+              <span className="font-bold" style={{ color: flat.total_outstanding > 0 ? 'var(--bad)' : 'var(--ok)' }}>
+                {flat.total_outstanding > 0 ? formatINR(flat.total_outstanding) : '✓ Clear'}
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="ds-track">
           <div
             className="ds-track-fill"
             style={{
-              width: `${Math.min(100, (flat.collected_fy / flat.annual_due) * 100)}%`,
-              background: flat.status === 'Clear' ? 'var(--ok)' : flat.status === 'Partial' ? 'var(--warn)' : 'var(--bad)',
+              width: `${flat.total_outstanding <= 0 ? 100 : Math.min(100, (flat.collected_fy / flat.annual_due) * 100)}%`,
+              background: flat.total_outstanding <= 0 ? 'var(--ok)' : flat.pending === flat.total_outstanding ? 'var(--bad)' : 'var(--warn)',
             }}
           />
         </div>
 
-        {flat.pending > 0 && (
+        {flat.total_outstanding > 0 && (
           <button
             onClick={handleCopyReminder}
             className="w-full flex items-center justify-center gap-2 py-2 rounded-[10px] border font-medium text-[13px] transition-colors"
