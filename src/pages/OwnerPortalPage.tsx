@@ -12,6 +12,7 @@ interface DuesRow {
   collected_fy: number
   pending: number
   arrears_maintenance: number
+  advance_credits: number
   total_outstanding: number
   status: string
   start_fiscal_year: number
@@ -143,11 +144,14 @@ export default function OwnerPortalPage() {
   const bank = settings?.collection_bank ?? ''
   const currentMonth = new Date().toLocaleString('en-IN', { month: 'short' })
 
-  const monthlyRate   = myFlat?.maintenance_amt ?? 0
-  const startFy       = dues?.start_fiscal_year ?? currentFiscalYear()
-  const allMonths     = elapsedMonthsSince(startFy)
-  const paidCount     = monthlyRate > 0 ? Math.floor((dues?.collected_fy ?? 0) / monthlyRate) : 0
-  const pendingMonths = dues?.status !== 'Clear' ? allMonths.slice(paidCount) : []
+  const monthlyRate     = myFlat?.maintenance_amt ?? 0
+  const startFy         = dues?.start_fiscal_year ?? currentFiscalYear()
+  const allMonths       = elapsedMonthsSince(startFy)
+  const paidCount       = monthlyRate > 0 ? Math.floor((dues?.collected_fy ?? 0) / monthlyRate) : 0
+  const effectiveStatus = dues
+    ? (dues.total_outstanding <= 0 ? 'Clear' : dues.status)
+    : 'Due'
+  const pendingMonths   = effectiveStatus !== 'Clear' ? allMonths.slice(paidCount) : []
 
   return (
     <div className="flex flex-col gap-5 fade-in max-w-2xl">
@@ -173,11 +177,11 @@ export default function OwnerPortalPage() {
       <div className="surface !p-5 flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <p className="font-semibold text-[14px]">Maintenance dues</p>
-          {dues && <StatusPill status={dues.status} />}
+          {dues && <StatusPill status={effectiveStatus} />}
         </div>
         {dues ? (
           <div className="flex flex-col gap-1.5 text-[13px]">
-            {dues.status === 'Clear' ? (
+            {effectiveStatus === 'Clear' ? (
               <p style={{ color: 'var(--ok)' }}>No maintenance due this year</p>
             ) : (
               <>
