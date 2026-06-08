@@ -4,7 +4,7 @@ import { useRoleCtx } from '@/contexts/RoleContext'
 import { useForm, useFieldArray, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Plus, Trash2, Download, Receipt, Users, Building, X, GitMerge, CheckCircle2, Paperclip, RefreshCcw, Coins, Upload, Loader2, Trash } from 'lucide-react'
+import { Plus, Trash2, Download, Receipt, Users, Building, X, GitMerge, CheckCircle2, Paperclip, RefreshCcw, Coins, Upload, Loader2, Trash, Pencil, Ban } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
@@ -12,6 +12,10 @@ import { formatINR } from '@/lib/tagger'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -24,7 +28,7 @@ import { toast } from 'sonner'
 // ── Types ─────────────────────────────────────────────────────
 
 interface ExpenseCategory { id: string; name: string; budget_type: string; is_utility: boolean }
-interface Vendor  { id: string; name: string; type: string | null; phone: string | null; pan_number: string | null; notes: string | null }
+interface Vendor  { id: string; name: string; type: string | null; phone: string | null; pan_number: string | null; notes: string | null; is_active: boolean }
 interface RecurringTemplate {
   id: string; name: string; description: string | null
   vendor: { id: string; name: string } | null
@@ -33,7 +37,7 @@ interface RecurringTemplate {
 }
 interface PettyCashTxn { id: string; txn_date: string; txn_type: string; amount: number; notes: string | null }
 interface Attachment { id: string; expense_id: string; file_name: string; file_url: string; file_size: number | null; uploaded_at: string }
-interface StaffMember { id: string; name: string; role: string; assigned_area: string | null; phone: string | null; left_date: string | null }
+interface StaffMember { id: string; name: string; role: string; assigned_area: string | null; phone: string | null; joined_date: string | null; left_date: string | null }
 interface Expense {
   id: string; expense_date: string; description: string
   payee_type: string; payee_name_raw: string | null
@@ -42,9 +46,11 @@ interface Expense {
   transaction_id: string | null; reconciled_at: string | null
   reconciliation_notes: string | null
   notes: string | null; created_at: string
+  voided_at: string | null; voided_by: string | null; void_reason: string | null
   category: ExpenseCategory | null
   vendor: Vendor | null
   staff_member: StaffMember | null
+  corpus_plan_id: string | null
   corpus_plan: { name: string } | null
   transaction: { id: string; value_date: string; description: string; amount: number } | null
   line_items: ExpenseLineItem[]
@@ -170,14 +176,17 @@ export default function ExpensesPage() {
 
 function DayBook() {
   const [detailId, setDetailId] = useState<string | null>(null)
+  const [showVoided, setShowVoided] = useState(false)
 
   const { data: expenses = [], isLoading } = useQuery({
-    queryKey: ['expenses'],
+    queryKey: ['expenses', showVoided],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let q = supabase
         .from('expenses')
         .select(`
-          *,
+          id,expense_date,description,payee_type,payee_name_raw,amount,payment_mode,
+          reference_no,cheque_number,voucher_no,transaction_id,reconciled_at,
+          reconciliation_notes,notes,created_at,voided_at,voided_by,void_reason,corpus_plan_id,
           category:category_id(id,name,budget_type,is_utility),
           vendor:vendor_id(id,name,type,phone),
           staff_member:staff_id(id,name,role,assigned_area,phone,left_date),
@@ -186,8 +195,10 @@ function DayBook() {
           line_items:expense_line_items(*, category:category_id(id,name,budget_type,is_utility))
         `)
         .order('expense_date', { ascending: false })
+      if (!showVoided) q = q.is('voided_at', null)
+      const { data, error } = await q
       if (error) throw error
-      return (data ?? []) as Expense[]
+      return (data ?? []) as unknown as Expense[]
     },
   })
 
@@ -214,15 +225,16 @@ function DayBook() {
     XLSX.writeFile(wb, 'Expenses_DayBook.xlsx')
   }
 
-  // Summary cards
+  // Summary cards — exclude voided from totals
   const now = new Date()
   const fyStartYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
   const fyStart = `${fyStartYear}-04-01`
   const fyEnd   = `${fyStartYear + 1}-03-31`
   const fyLabel = `FY ${fyStartYear}-${(fyStartYear + 1).toString().slice(2)}`
-  const totalThisFY  = expenses.filter(e => e.expense_date >= fyStart && e.expense_date <= fyEnd).reduce((s, e) => s + e.amount, 0)
-  const unreconciled = expenses.filter(e => expenseStatus(e) === 'Unreconciled').length
-  const totalAll     = expenses.reduce((s, e) => s + e.amount, 0)
+  const activeExpenses = expenses.filter(e => !e.voided_at)
+  const totalThisFY  = activeExpenses.filter(e => e.expense_date >= fyStart && e.expense_date <= fyEnd).reduce((s, e) => s + e.amount, 0)
+  const unreconciled = activeExpenses.filter(e => expenseStatus(e) === 'Unreconciled').length
+  const totalAll     = activeExpenses.reduce((s, e) => s + e.amount, 0)
 
   if (isLoading) return <div className="surface h-48 animate-pulse" style={{ background: 'var(--ink-100)' }} />
 
@@ -244,12 +256,21 @@ function DayBook() {
         </div>
         <div className="surface !p-4">
           <p className="text-xs mb-1" style={{ color: 'var(--ink-500)' }}>Total entries</p>
-          <p className="text-xl font-bold" style={{ color: 'var(--ink-800)' }}>{expenses.length}</p>
+          <p className="text-xl font-bold" style={{ color: 'var(--ink-800)' }}>{activeExpenses.length}</p>
         </div>
       </div>
 
-      {/* Export */}
-      <div className="flex justify-end">
+      {/* Toolbar */}
+      <div className="flex items-center justify-between">
+        <label className="flex items-center gap-2 text-sm cursor-pointer select-none" style={{ color: 'var(--ink-500)' }}>
+          <input
+            type="checkbox"
+            checked={showVoided}
+            onChange={e => { setShowVoided(e.target.checked); setDetailId(null) }}
+            className="rounded"
+          />
+          Show voided
+        </label>
         <button onClick={handleExport} disabled={!expenses.length}
           className="flex items-center gap-1.5 text-sm text-brand-700 hover:text-brand-900 disabled:opacity-40">
           <Download size={14} /> Export
@@ -273,14 +294,15 @@ function DayBook() {
             {expenses.map(e => {
               const status = expenseStatus(e)
               const payeeName = e.payee_name_raw ?? e.vendor?.name ?? e.staff_member?.name ?? ''
+              const isVoided = !!e.voided_at
               return (
                 <button
                   key={e.id}
                   onClick={() => setDetailId(d => d === e.id ? null : e.id)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-[var(--ink-50)] text-left transition-colors ${detailId === e.id ? 'bg-[var(--brand-50)]' : ''}`}
+                  className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-[var(--ink-50)] text-left transition-colors ${detailId === e.id ? 'bg-[var(--brand-50)]' : ''} ${isVoided ? 'opacity-60' : ''}`}
                 >
                   <div className="shrink-0 text-center w-10">
-                    <p className="text-xs font-bold leading-tight" style={{ color: 'var(--ink-800)' }}>
+                    <p className={`text-xs font-bold leading-tight ${isVoided ? 'line-through text-muted-foreground' : ''}`} style={isVoided ? undefined : { color: 'var(--ink-800)' }}>
                       {new Date(e.expense_date).getDate().toString().padStart(2, '0')}
                     </p>
                     <p className="text-[10px] uppercase" style={{ color: 'var(--ink-400)' }}>
@@ -289,7 +311,7 @@ function DayBook() {
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium line-clamp-2 leading-snug" style={{ color: 'var(--ink-800)' }}>{e.description}</p>
+                    <p className={`text-sm font-medium line-clamp-2 leading-snug ${isVoided ? 'line-through text-muted-foreground' : ''}`} style={isVoided ? undefined : { color: 'var(--ink-800)' }}>{e.description}</p>
                     <p className="text-xs mt-0.5" style={{ color: 'var(--ink-500)' }}>
                       {payeeName} · {e.category?.name ?? e.payment_mode}
                       {e.voucher_no && <span className="ml-1.5" style={{ color: 'var(--ink-400)' }}>{e.voucher_no}</span>}
@@ -297,10 +319,14 @@ function DayBook() {
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${STATUS_STYLE[status]}`} style={STATUS_INLINE[status]}>
-                      {status}
-                    </span>
-                    <span className="text-sm font-semibold" style={{ color: 'var(--ink-800)' }}>{formatINR(e.amount)}</span>
+                    {isVoided ? (
+                      <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-red-100 text-red-600">Voided</span>
+                    ) : (
+                      <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${STATUS_STYLE[status]}`} style={STATUS_INLINE[status]}>
+                        {status}
+                      </span>
+                    )}
+                    <span className={`text-sm font-semibold ${isVoided ? 'line-through text-muted-foreground' : ''}`} style={isVoided ? undefined : { color: 'var(--ink-800)' }}>{formatINR(e.amount)}</span>
                   </div>
                 </button>
               )
@@ -309,7 +335,11 @@ function DayBook() {
 
           {/* Detail panel */}
           {selectedExpense && (
-            <ExpenseDetailPanel expense={selectedExpense} onClose={() => setDetailId(null)} />
+            <ExpenseDetailPanel
+              expense={selectedExpense}
+              onClose={() => setDetailId(null)}
+              onVoidSuccess={() => setDetailId(null)}
+            />
           )}
         </div>
       )}
@@ -319,10 +349,48 @@ function DayBook() {
 
 // ── Expense detail panel ──────────────────────────────────────
 
-function ExpenseDetailPanel({ expense: e, onClose }: { expense: Expense; onClose: () => void }) {
+function ExpenseDetailPanel({
+  expense: e, onClose, onVoidSuccess,
+}: {
+  expense: Expense
+  onClose: () => void
+  onVoidSuccess: () => void
+}) {
+  const { isAdmin, canWrite } = useRoleCtx()
+  const qc = useQueryClient()
   const status = expenseStatus(e)
   const payeeName = e.payee_name_raw ?? e.vendor?.name ?? e.staff_member?.name ?? '—'
   const lineTotal = e.line_items.reduce((s, li) => s + li.amount, 0)
+  const isVoided = !!e.voided_at
+
+  const [voidOpen, setVoidOpen] = useState(false)
+  const [voidReason, setVoidReason] = useState('')
+  const [voiding, setVoiding] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
+
+  async function handleVoid() {
+    if (!voidReason.trim()) return
+    setVoiding(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      const { error } = await supabase.from('expenses').update({
+        voided_at: new Date().toISOString(),
+        voided_by: user?.id ?? null,
+        void_reason: voidReason.trim(),
+      }).eq('id', e.id)
+      if (error) throw error
+      qc.invalidateQueries({ queryKey: ['expenses'] })
+      qc.invalidateQueries({ queryKey: ['unreconciled-expenses'] })
+      qc.invalidateQueries({ queryKey: ['unreconciled-count'] })
+      setVoidOpen(false)
+      setVoidReason('')
+      onVoidSuccess()
+    } catch (err: any) {
+      toast.error(err.message ?? 'Failed to void expense')
+    } finally {
+      setVoiding(false)
+    }
+  }
 
   return (
     <>
@@ -332,14 +400,20 @@ function ExpenseDetailPanel({ expense: e, onClose }: { expense: Expense; onClose
       <div className="fixed inset-x-0 bottom-0 z-50 max-h-[85vh] overflow-y-auto rounded-t-2xl bg-white p-3 flex flex-col gap-3 md:static md:w-80 md:shrink-0 md:rounded-none md:bg-transparent md:p-0 md:max-h-none md:overflow-visible md:z-auto">
       <div className="surface !p-4 flex flex-col gap-3">
         <div className="flex items-start justify-between gap-2">
-          <div>
+          <div className="flex items-center gap-2 flex-wrap">
             <h3 className="font-semibold" style={{ color: 'var(--ink-800)' }}>{e.description}</h3>
-            {e.voucher_no && <p className="text-xs mt-0.5" style={{ color: 'var(--ink-400)' }}>{e.voucher_no}</p>}
+            {isVoided && (
+              <span className="text-[11px] px-2 py-0.5 rounded-full font-semibold bg-red-100 text-red-600 uppercase tracking-wide">Voided</span>
+            )}
           </div>
           <button onClick={onClose} className="p-1 rounded hover:bg-[var(--ink-100)] shrink-0"><X size={15} /></button>
         </div>
 
-        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_STYLE[status]}`} style={STATUS_INLINE[status]}>{status}</span>
+        {e.voucher_no && <p className="text-xs" style={{ color: 'var(--ink-400)' }}>{e.voucher_no}</p>}
+
+        {!isVoided && (
+          <span className={`text-xs px-2 py-0.5 rounded-full font-medium self-start ${STATUS_STYLE[status]}`} style={STATUS_INLINE[status]}>{status}</span>
+        )}
 
         <div className="flex flex-col gap-1.5 text-sm">
           <Row label="Date"     value={e.expense_date} />
@@ -359,7 +433,26 @@ function ExpenseDetailPanel({ expense: e, onClose }: { expense: Expense; onClose
             } />
           )}
           {e.notes && !e.notes.startsWith('Imported from') && <Row label="Notes" value={e.notes} />}
+          {isVoided && e.void_reason && <Row label="Void reason" value={e.void_reason} />}
+          {isVoided && e.voided_at && (
+            <Row label="Voided on" value={new Date(e.voided_at).toLocaleDateString('en-IN')} />
+          )}
         </div>
+
+        {!isVoided && (
+          <div className="flex gap-2 pt-1">
+            {canWrite && (
+              <Button size="sm" variant="outline" className="flex items-center gap-1.5" onClick={() => setEditOpen(true)}>
+                <Pencil size={13} /> Edit
+              </Button>
+            )}
+            {isAdmin && (
+              <Button size="sm" variant="outline" className="flex items-center gap-1.5 text-red-600 border-red-200 hover:bg-red-50" onClick={() => setVoidOpen(true)}>
+                <Ban size={13} /> Void
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
       {e.line_items.length > 0 && (
@@ -399,6 +492,46 @@ function ExpenseDetailPanel({ expense: e, onClose }: { expense: Expense; onClose
 
       <AttachmentsSection expenseId={e.id} />
       </div>
+
+      {/* Void confirm dialog */}
+      <AlertDialog open={voidOpen} onOpenChange={setVoidOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Void Expense</AlertDialogTitle>
+            <AlertDialogDescription>
+              This cannot be undone. The expense will be excluded from all financial totals.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex flex-col gap-1 py-2">
+            <Label>Reason for voiding *</Label>
+            <Textarea
+              value={voidReason}
+              onChange={ev => setVoidReason(ev.target.value)}
+              placeholder="Describe why this expense is being voided"
+              rows={3}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setVoidReason('')}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleVoid}
+              disabled={!voidReason.trim() || voiding}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {voiding ? 'Voiding…' : 'Void Expense'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Edit dialog */}
+      {editOpen && (
+        <AddExpenseDialog
+          open={editOpen}
+          onClose={() => setEditOpen(false)}
+          editExpense={e}
+        />
+      )}
     </>
   )
 }
@@ -414,21 +547,26 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 
 // ── Add Expense dialog ────────────────────────────────────────
 
-function AddExpenseDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+function AddExpenseDialog({ open, onClose, editExpense }: {
+  open: boolean
+  onClose: () => void
+  editExpense?: Expense
+}) {
+  const isEditMode = !!editExpense
   const qc = useQueryClient()
 
   const { data: categories = [] } = useQuery({
     queryKey: ['expense-categories'],
     queryFn: async () => {
-      const { data } = await supabase.from('expense_categories').select('*').order('sort_order')
+      const { data } = await supabase.from('expense_categories').select('*').eq('is_active', true).order('sort_order')
       return (data ?? []) as ExpenseCategory[]
     },
   })
 
   const { data: vendors = [] } = useQuery({
-    queryKey: ['vendors'],
+    queryKey: ['vendors', 'active'],
     queryFn: async () => {
-      const { data } = await supabase.from('vendors').select('*').order('name')
+      const { data } = await supabase.from('vendors').select('*').eq('is_active', true).order('name')
       return (data ?? []) as Vendor[]
     },
   })
@@ -452,7 +590,37 @@ function AddExpenseDialog({ open, onClose }: { open: boolean; onClose: () => voi
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { register, control, handleSubmit, watch, reset, formState: { errors, isSubmitting } } = useForm<ExpenseFormData>({
     resolver: zodResolver(expenseSchema) as any,
-    defaultValues: {
+    defaultValues: editExpense ? {
+      expense_date:   editExpense.expense_date,
+      description:    editExpense.description,
+      payee_type:     editExpense.payee_type,
+      payee_name_raw: editExpense.payee_name_raw ?? undefined,
+      staff_id:       editExpense.staff_member?.id ?? undefined,
+      vendor_id:      editExpense.vendor?.id ?? undefined,
+      amount:         editExpense.amount,
+      payment_mode:   editExpense.payment_mode,
+      reference_no:   editExpense.reference_no ?? undefined,
+      cheque_number:  editExpense.cheque_number ?? undefined,
+      category_id:    editExpense.category?.id ?? undefined,
+      corpus_plan_id: editExpense.corpus_plan_id ?? undefined,
+      notes:          editExpense.notes ?? undefined,
+      line_items: editExpense.line_items.length > 0
+        ? editExpense.line_items.map(li => ({
+            description:    li.description,
+            payee_type:     li.payee_type,
+            payee_name_raw: li.payee_name_raw ?? undefined,
+            staff_id:       undefined,
+            vendor_id:      undefined,
+            category_id:    li.category?.id ?? '',
+            cost_center:    li.cost_center,
+            amount:         li.amount,
+            utility_units:  li.utility_units ?? undefined,
+            utility_rate:   li.utility_rate ?? undefined,
+            period_from:    li.period_from ?? undefined,
+            period_to:      li.period_to ?? undefined,
+          }))
+        : [{ description: '', payee_type: 'Other', cost_center: 'Common', category_id: '', amount: 0 }],
+    } : {
       expense_date: new Date().toISOString().slice(0, 10),
       payee_type:   'Vendor',
       payment_mode: 'Online',
@@ -482,6 +650,7 @@ function AddExpenseDialog({ open, onClose }: { open: boolean; onClose: () => voi
         .eq('vendor_id', watchedVendorId!)
         .gte('expense_date', `${fyYear}-04-01`)
         .lte('expense_date', `${fyYear + 1}-03-31`)
+        .is('voided_at', null)
       return (data ?? []).reduce((s: number, r: any) => s + r.amount, 0)
     },
   })
@@ -505,18 +674,36 @@ function AddExpenseDialog({ open, onClose }: { open: boolean; onClose: () => voi
         category_id:    data.category_id    || null,
         corpus_plan_id: data.corpus_plan_id || null,
         notes:          data.notes || null,
-        created_by:     user?.id ?? null,
       }
 
-      const { data: expense, error: hErr } = await supabase
-        .from('expenses')
-        .insert(headerPayload)
-        .select()
-        .single()
-      if (hErr) throw hErr
+      let expenseId: string
+
+      if (isEditMode && editExpense) {
+        const { error: hErr } = await supabase
+          .from('expenses')
+          .update(headerPayload)
+          .eq('id', editExpense.id)
+        if (hErr) throw hErr
+        expenseId = editExpense.id
+        const { error: delErr } = await supabase
+          .from('expense_line_items')
+          .delete()
+          .eq('expense_id', expenseId)
+        if (delErr) throw delErr
+        // linePayloads built below; insert happens after this block.
+        // If the insert below fails we restore the originals in onError.
+      } else {
+        const { data: expense, error: hErr } = await supabase
+          .from('expenses')
+          .insert({ ...headerPayload, created_by: user?.id ?? null })
+          .select()
+          .single()
+        if (hErr) throw hErr
+        expenseId = expense.id
+      }
 
       const linePayloads = data.line_items.map(li => ({
-        expense_id:     expense.id,
+        expense_id:     expenseId,
         payee_type:     li.payee_type,
         payee_name_raw: li.payee_name_raw || null,
         staff_id:       li.staff_id   || null,
@@ -532,10 +719,29 @@ function AddExpenseDialog({ open, onClose }: { open: boolean; onClose: () => voi
       }))
 
       const { error: liErr } = await supabase.from('expense_line_items').insert(linePayloads)
-      if (liErr) throw liErr
+      if (liErr) {
+        // Insert failed after delete — attempt to restore original line items
+        if (isEditMode && editExpense && editExpense.line_items.length > 0) {
+          const originals = editExpense.line_items.map(li => ({
+            expense_id:     editExpense.id,
+            payee_type:     li.payee_type,
+            payee_name_raw: li.payee_name_raw ?? null,
+            description:    li.description,
+            category_id:    li.category?.id ?? null,
+            cost_center:    li.cost_center,
+            amount:         li.amount,
+            utility_units:  li.utility_units ?? null,
+            utility_rate:   li.utility_rate ?? null,
+            period_from:    li.period_from ?? null,
+            period_to:      li.period_to ?? null,
+          }))
+          await supabase.from('expense_line_items').insert(originals)
+        }
+        throw liErr
+      }
     },
     onSuccess: () => {
-      toast.success('Expense saved')
+      toast.success(isEditMode ? 'Expense updated' : 'Expense saved')
       qc.invalidateQueries({ queryKey: ['expenses'] })
       reset()
       onClose()
@@ -556,7 +762,7 @@ function AddExpenseDialog({ open, onClose }: { open: boolean; onClose: () => voi
     <Dialog open={open} onOpenChange={v => { if (!v) { reset(); onClose() } }}>
       <DialogContent className="max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Add Expense</DialogTitle>
+          <DialogTitle>{isEditMode ? 'Edit Expense' : 'Add Expense'}</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit((d: any) => mutation.mutateAsync(d))} className="flex flex-col gap-6">
@@ -843,7 +1049,7 @@ function AddExpenseDialog({ open, onClose }: { open: boolean; onClose: () => voi
               disabled={isSubmitting || mutation.isPending || lineBalanceDiff !== 0}
               title={lineBalanceDiff !== 0 ? `Line items must sum to header amount (off by ${formatINR(Math.abs(lineBalanceDiff))})` : ''}
             >
-              {mutation.isPending ? 'Saving…' : 'Save Expense'}
+              {mutation.isPending ? 'Saving…' : isEditMode ? 'Update Expense' : 'Save Expense'}
             </Button>
           </DialogFooter>
         </form>
@@ -878,6 +1084,7 @@ function ReconcileTab() {
         .select('id,expense_date,description,amount,payment_mode,voucher_no,payee_name_raw,reference_no')
         .neq('payment_mode', 'Cash')
         .is('transaction_id', null)
+        .is('voided_at', null)
         .order('expense_date', { ascending: false })
       return (data ?? []) as UnreconciledExpense[]
     },
@@ -1105,10 +1312,14 @@ function ReconcileTab() {
 // ── Vendors tab ───────────────────────────────────────────────
 
 function VendorsTab() {
-  const { canWrite } = useRoleCtx()
-  const [addOpen, setAddOpen] = useState(false)
+  const { canWrite, isAdmin } = useRoleCtx()
+  const qc = useQueryClient()
+  const [addOpen, setAddOpen]         = useState(false)
+  const [showInactive, setShowInactive] = useState(false)
+  const [editVendor, setEditVendor]   = useState<Vendor | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Vendor | null>(null)
 
-  const { data: vendors = [], isLoading } = useQuery({
+  const { data: allVendors = [], isLoading } = useQuery({
     queryKey: ['vendors'],
     queryFn: async () => {
       const { data } = await supabase.from('vendors').select('*').order('name')
@@ -1116,36 +1327,91 @@ function VendorsTab() {
     },
   })
 
+  const vendors = showInactive ? allVendors : allVendors.filter(v => v.is_active)
+
+  async function toggleActive(v: Vendor) {
+    const { error } = await supabase.from('vendors').update({ is_active: !v.is_active }).eq('id', v.id)
+    if (error) { toast.error(error.message); return }
+    qc.invalidateQueries({ queryKey: ['vendors'] })
+    qc.invalidateQueries({ queryKey: ['vendors', 'active'] })
+  }
+
+  async function handleDelete(v: Vendor) {
+    const { count } = await supabase.from('expenses').select('id', { count: 'exact', head: true }).eq('vendor_id', v.id)
+    if ((count ?? 0) > 0) {
+      toast.error('Cannot delete: vendor has linked expenses')
+      setDeleteTarget(null)
+      return
+    }
+    const { error } = await supabase.from('vendors').delete().eq('id', v.id)
+    if (error) { toast.error(error.message); setDeleteTarget(null); return }
+    qc.invalidateQueries({ queryKey: ['vendors'] })
+    qc.invalidateQueries({ queryKey: ['vendors', 'active'] })
+    setDeleteTarget(null)
+  }
+
   if (isLoading) return <div className="surface h-32 animate-pulse" style={{ background: 'var(--ink-100)' }} />
 
   return (
     <div className="flex flex-col gap-3">
-      {canWrite && (
-        <div className="flex justify-end">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={showInactive}
+            onChange={e => setShowInactive(e.target.checked)}
+            className="rounded border-gray-300"
+          />
+          <span className="text-sm" style={{ color: 'var(--ink-500)' }}>Show inactive</span>
+        </label>
+        {canWrite && (
           <Button size="sm" onClick={() => setAddOpen(true)} className="flex items-center gap-1.5">
             <Plus size={14} /> Add Vendor
           </Button>
-        </div>
-      )}
+        )}
+      </div>
 
       {vendors.length === 0 ? (
         <div className="surface !p-10 text-center" style={{ color: 'var(--ink-400)' }}>
           <Building size={28} className="mx-auto mb-2 opacity-40" />
-          <p className="text-sm">No vendors added yet</p>
+          <p className="text-sm">{showInactive ? 'No vendors found' : 'No active vendors'}</p>
         </div>
       ) : (
         <div className="surface !p-0 divide-rows">
           {vendors.map(v => (
             <div key={v.id} className="flex items-center gap-3 px-4 py-3">
-              <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: 'var(--ink-100)' }}>
-                <Building size={14} style={{ color: 'var(--ink-400)' }} />
+              <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: v.is_active ? 'var(--ink-100)' : 'var(--ink-50)' }}>
+                <Building size={14} style={{ color: v.is_active ? 'var(--ink-400)' : 'var(--ink-300)' }} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium" style={{ color: 'var(--ink-800)' }}>{v.name}</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium" style={{ color: v.is_active ? 'var(--ink-800)' : 'var(--ink-400)' }}>{v.name}</p>
+                  {v.is_active
+                    ? <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">Active</span>
+                    : <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: 'var(--ink-100)', color: 'var(--ink-500)' }}>Inactive</span>
+                  }
+                </div>
                 <p className="text-xs" style={{ color: 'var(--ink-400)' }}>
                   {v.type ?? 'Vendor'}{v.phone ? ` · ${v.phone}` : ''}{v.pan_number ? ` · PAN: ${v.pan_number}` : ''}
                 </p>
                 {v.notes && <p className="text-xs truncate" style={{ color: 'var(--ink-400)' }}>{v.notes}</p>}
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                {canWrite && (
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setEditVendor(v)}>
+                    <Pencil size={13} />
+                  </Button>
+                )}
+                {isAdmin && (
+                  <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => toggleActive(v)}>
+                    {v.is_active ? 'Deactivate' : 'Activate'}
+                  </Button>
+                )}
+                {isAdmin && (
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-500 hover:text-red-600" onClick={() => setDeleteTarget(v)}>
+                    <Trash2 size={13} />
+                  </Button>
+                )}
               </div>
             </div>
           ))}
@@ -1153,6 +1419,24 @@ function VendorsTab() {
       )}
 
       <AddVendorDialog open={addOpen} onClose={() => setAddOpen(false)} />
+      {editVendor && <EditVendorDialog vendor={editVendor} onClose={() => setEditVendor(null)} />}
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={open => { if (!open) setDeleteTarget(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete vendor?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Delete <strong>{deleteTarget?.name}</strong>? This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction className="bg-red-600 hover:bg-red-700" onClick={() => deleteTarget && handleDelete(deleteTarget)}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
@@ -1160,8 +1444,14 @@ function VendorsTab() {
 // ── Staff tab ─────────────────────────────────────────────────
 
 function StaffTab() {
-  const { canWrite } = useRoleCtx()
+  const { canWrite, isAdmin } = useRoleCtx()
+  const qc = useQueryClient()
   const [addOpen, setAddOpen] = useState(false)
+  const [editStaff, setEditStaff] = useState<StaffMember | null>(null)
+  const [showFormer, setShowFormer] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<StaffMember | null>(null)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [actionBusy, setActionBusy] = useState<string | null>(null)
 
   const { data: staffList = [], isLoading } = useQuery({
     queryKey: ['staff'],
@@ -1173,69 +1463,145 @@ function StaffTab() {
 
   const active   = staffList.filter(s => !s.left_date)
   const inactive = staffList.filter(s => s.left_date)
+  const displayed = showFormer ? staffList : active
+
+  async function handleMarkLeft(s: StaffMember) {
+    setActionBusy(s.id)
+    const today = new Date().toISOString().slice(0, 10)
+    const { error } = await supabase.from('staff').update({ left_date: today }).eq('id', s.id)
+    setActionBusy(null)
+    if (error) { toast.error(error.message); return }
+    qc.invalidateQueries({ queryKey: ['staff'] })
+  }
+
+  async function handleReactivate(s: StaffMember) {
+    setActionBusy(s.id)
+    const { error } = await supabase.from('staff').update({ left_date: null }).eq('id', s.id)
+    setActionBusy(null)
+    if (error) { toast.error(error.message); return }
+    qc.invalidateQueries({ queryKey: ['staff'] })
+  }
+
+  async function handleDeleteClick(s: StaffMember) {
+    const [{ count: expCount, error: e1 }, { count: liCount, error: e2 }] = await Promise.all([
+      supabase.from('expenses').select('id', { count: 'exact', head: true }).eq('staff_id', s.id),
+      supabase.from('expense_line_items').select('id', { count: 'exact', head: true }).eq('staff_id', s.id),
+    ])
+    if (e1 || e2) { toast.error((e1 ?? e2)!.message); return }
+    if ((expCount ?? 0) + (liCount ?? 0) > 0) {
+      toast.error('Cannot delete: staff member has linked expense records')
+      return
+    }
+    setDeleteTarget(s)
+    setDeleteConfirmOpen(true)
+  }
+
+  async function handleDeleteConfirm() {
+    if (!deleteTarget) { setDeleteConfirmOpen(false); return }
+    const { error } = await supabase.from('staff').delete().eq('id', deleteTarget.id)
+    if (error) { toast.error(error.message); return }
+    setDeleteConfirmOpen(false)
+    setDeleteTarget(null)
+    qc.invalidateQueries({ queryKey: ['staff'] })
+  }
 
   if (isLoading) return <div className="surface h-32 animate-pulse" style={{ background: 'var(--ink-100)' }} />
 
   return (
     <div className="flex flex-col gap-3">
-      {canWrite && (
-        <div className="flex justify-end">
+      <div className="flex items-center justify-between">
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={showFormer}
+            onChange={e => setShowFormer(e.target.checked)}
+            className="rounded border-gray-300"
+          />
+          <span className="text-sm" style={{ color: 'var(--ink-500)' }}>Show former staff</span>
+        </label>
+        {canWrite && (
           <Button size="sm" onClick={() => setAddOpen(true)} className="flex items-center gap-1.5">
             <Plus size={14} /> Add Staff
           </Button>
-        </div>
-      )}
-
-      {staffList.length === 0 ? (
-        <div className="surface !p-10 text-center" style={{ color: 'var(--ink-400)' }}>
-          <Users size={28} className="mx-auto mb-2 opacity-40" />
-          <p className="text-sm">No staff added yet</p>
-        </div>
-      ) : (<>
-      <div className="surface !p-0 divide-rows">
-        <div className="px-4 py-2 rounded-t-xl" style={{ background: 'var(--ink-50)' }}>
-          <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-500)' }}>Active ({active.length})</p>
-        </div>
-        {active.map(s => (
-          <div key={s.id} className="flex items-center gap-3 px-4 py-3">
-            <div className="w-8 h-8 rounded-full bg-[var(--brand-100)] flex items-center justify-center shrink-0">
-              <Users size={14} className="text-violet-500" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium" style={{ color: 'var(--ink-800)' }}>{s.name}</p>
-              <p className="text-xs" style={{ color: 'var(--ink-400)' }}>{s.role}{s.assigned_area ? ` · ${s.assigned_area}` : ''}{s.phone ? ` · ${s.phone}` : ''}</p>
-            </div>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">Active</span>
-          </div>
-        ))}
+        )}
       </div>
 
-      {inactive.length > 0 && (
+      {displayed.length === 0 ? (
+        <div className="surface !p-10 text-center" style={{ color: 'var(--ink-400)' }}>
+          <Users size={28} className="mx-auto mb-2 opacity-40" />
+          <p className="text-sm">{showFormer ? 'No staff found' : 'No active staff'}</p>
+        </div>
+      ) : (
         <div className="surface !p-0 divide-rows">
-          <div className="px-4 py-2 rounded-t-xl" style={{ background: 'var(--ink-50)' }}>
-            <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-500)' }}>Former ({inactive.length})</p>
-          </div>
-          {inactive.map(s => (
-            <div key={s.id} className="flex items-center gap-3 px-4 py-3 opacity-60">
-              <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: 'var(--ink-100)' }}>
-                <Users size={14} style={{ color: 'var(--ink-400)' }} />
+          {displayed.map(s => (
+            <div key={s.id} className={`flex items-center gap-3 px-4 py-3 ${s.left_date ? 'opacity-60' : ''}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${s.left_date ? '' : 'bg-[var(--brand-100)]'}`} style={s.left_date ? { background: 'var(--ink-100)' } : {}}>
+                <Users size={14} className={s.left_date ? '' : 'text-violet-500'} style={s.left_date ? { color: 'var(--ink-400)' } : {}} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium" style={{ color: 'var(--ink-700)' }}>{s.name}</p>
-                <p className="text-xs" style={{ color: 'var(--ink-400)' }}>{s.role}{s.left_date ? ` · Left ${s.left_date}` : ''}</p>
+                <p className="text-sm font-medium" style={{ color: s.left_date ? 'var(--ink-700)' : 'var(--ink-800)' }}>{s.name}</p>
+                <p className="text-xs" style={{ color: 'var(--ink-400)' }}>
+                  {s.role}{s.assigned_area ? ` · ${s.assigned_area}` : ''}{s.phone ? ` · ${s.phone}` : ''}
+                  {s.left_date ? ` · Left ${s.left_date}` : ''}
+                </p>
+              </div>
+              {s.left_date
+                ? <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium shrink-0">Left</span>
+                : <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium shrink-0">Active</span>
+              }
+              <div className="flex items-center gap-1 shrink-0">
+                {canWrite && (
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setEditStaff(s)}>
+                    <Pencil size={13} />
+                  </Button>
+                )}
+                {isAdmin && (
+                  s.left_date
+                    ? (
+                      <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={actionBusy === s.id} onClick={() => handleReactivate(s)}>
+                        Reactivate
+                      </Button>
+                    ) : (
+                      <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={actionBusy === s.id} onClick={() => handleMarkLeft(s)}>
+                        Mark as left
+                      </Button>
+                    )
+                )}
+                {isAdmin && (
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-400 hover:text-red-600" onClick={() => handleDeleteClick(s)}>
+                    <Trash2 size={13} />
+                  </Button>
+                )}
               </div>
             </div>
           ))}
         </div>
       )}
-      </>)}
+
+      {showFormer && inactive.length === 0 && active.length > 0 && (
+        <p className="text-xs text-center" style={{ color: 'var(--ink-400)' }}>No former staff</p>
+      )}
 
       <AddStaffDialog open={addOpen} onClose={() => setAddOpen(false)} />
+      {editStaff && <EditStaffDialog staff={editStaff} onClose={() => setEditStaff(null)} />}
+
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete staff member?</AlertDialogTitle>
+            <AlertDialogDescription>Delete {deleteTarget?.name}? This cannot be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteConfirm} className="bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
 
-// â”€â”€ Add Vendor dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€ Add Vendor dialog â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 function AddVendorDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const qc = useQueryClient()
@@ -1260,6 +1626,7 @@ function AddVendorDialog({ open, onClose }: { open: boolean; onClose: () => void
       if (error) throw error
       toast.success('Vendor added')
       qc.invalidateQueries({ queryKey: ['vendors'] })
+      qc.invalidateQueries({ queryKey: ['vendors', 'active'] })
       reset(); onClose()
     } catch (e: any) { setErr(e.message); toast.error(e.message ?? 'Failed to add vendor') }
     finally { setSaving(false) }
@@ -1280,7 +1647,7 @@ function AddVendorDialog({ open, onClose }: { open: boolean; onClose: () => void
               <Select value={type} onValueChange={setType}>
                 <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
                 <SelectContent>
-                  {['Individual','Company','Agency','Municipal'].map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                  {VENDOR_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -1310,9 +1677,162 @@ function AddVendorDialog({ open, onClose }: { open: boolean; onClose: () => void
   )
 }
 
-// â”€â”€ Add Staff dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+const VENDOR_TYPES = ['Contractor', 'Supplier', 'Utility', 'Service', 'Other']
+
+function EditVendorDialog({ vendor, onClose }: { vendor: Vendor; onClose: () => void }) {
+  const qc = useQueryClient()
+  const [name, setName]   = useState(vendor.name)
+  const [type, setType]   = useState(vendor.type ?? '')
+  const [phone, setPhone] = useState(vendor.phone ?? '')
+  const [pan, setPan]     = useState(vendor.pan_number ?? '')
+  const [notes, setNotes] = useState(vendor.notes ?? '')
+  const [saving, setSaving] = useState(false)
+  const [err, setErr]       = useState('')
+
+  async function handleSave() {
+    if (!name.trim()) return
+    setSaving(true); setErr('')
+    try {
+      const { error } = await supabase.from('vendors').update({
+        name: name.trim(), type: type || null, phone: phone || null,
+        pan_number: pan || null, notes: notes || null,
+      }).eq('id', vendor.id)
+      if (error) throw error
+      qc.invalidateQueries({ queryKey: ['vendors'] })
+      qc.invalidateQueries({ queryKey: ['vendors', 'active'] })
+      onClose()
+    } catch (e: any) { setErr(e.message) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <Dialog open onOpenChange={v => { if (!v) onClose() }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader><DialogTitle>Edit Vendor</DialogTitle></DialogHeader>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1">
+            <Label>Name *</Label>
+            <Input value={name} onChange={e => setName(e.target.value)} placeholder="Vendor / company name" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1">
+              <Label>Type</Label>
+              <Select value={type} onValueChange={setType}>
+                <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
+                <SelectContent>
+                  {VENDOR_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label>Phone</Label>
+              <Input value={phone} onChange={e => setPhone(e.target.value)} placeholder="Mobile number" />
+            </div>
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label>PAN number</Label>
+            <Input value={pan} onChange={e => setPan(e.target.value)} placeholder="For TDS tracking" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label>Notes</Label>
+            <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Optional remarks" />
+          </div>
+          {err && <p className="text-sm text-red-500">{err}</p>}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSave} disabled={!name.trim() || saving}>
+            {saving ? 'Saving...' : 'Save'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// â"€â"€ Add Staff dialog â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 const STAFF_ROLES = ['Security', 'Sweeper', 'Gardener', 'Plumber', 'Electrician', 'Lift Operator', 'Other']
+
+function EditStaffDialog({ staff, onClose }: { staff: StaffMember; onClose: () => void }) {
+  const qc = useQueryClient()
+  const [form, setForm] = useState({
+    name:  staff.name,
+    role:  staff.role,
+    area:  staff.assigned_area ?? '',
+    phone: staff.phone ?? '',
+    joined: staff.joined_date ?? '',
+  })
+  const [saving, setSaving] = useState(false)
+  const [err, setErr]       = useState('')
+
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setForm(f => ({ ...f, [k]: e.target.value }))
+
+  async function handleSave() {
+    if (!form.name.trim() || !form.role) return
+    setSaving(true); setErr('')
+    try {
+      const { error } = await supabase.from('staff').update({
+        name:          form.name.trim(),
+        role:          form.role,
+        assigned_area: form.area  || null,
+        phone:         form.phone || null,
+        joined_date:   form.joined || null,
+      }).eq('id', staff.id)
+      if (error) throw error
+      qc.invalidateQueries({ queryKey: ['staff'] })
+      onClose()
+    } catch (e: any) { setErr(e.message); toast.error(e.message ?? 'Failed to update staff') }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <Dialog open onOpenChange={v => { if (!v) onClose() }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader><DialogTitle>Edit Staff Member</DialogTitle></DialogHeader>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1">
+            <Label>Full name *</Label>
+            <Input value={form.name} onChange={set('name')} placeholder="e.g. Murugan" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1">
+              <Label>Role *</Label>
+              <Select value={form.role} onValueChange={r => setForm(f => ({ ...f, role: r }))}>
+                <SelectTrigger><SelectValue placeholder="Select role" /></SelectTrigger>
+                <SelectContent>
+                  {STAFF_ROLES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label>Assigned area</Label>
+              <Input value={form.area} onChange={set('area')} placeholder="Block-A, Common, All..." />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1">
+              <Label>Phone</Label>
+              <Input value={form.phone} onChange={set('phone')} placeholder="Mobile number" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label>Joined date</Label>
+              <Input type="date" value={form.joined} onChange={set('joined')} />
+            </div>
+          </div>
+          {err && <p className="text-sm text-red-500">{err}</p>}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSave} disabled={!form.name.trim() || !form.role || saving}>
+            {saving ? 'Saving...' : 'Save'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
 
 function AddStaffDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const qc = useQueryClient()
@@ -1403,12 +1923,15 @@ function AddStaffDialog({ open, onClose }: { open: boolean; onClose: () => void 
   )
 }
 
-// â”€â”€ Recurring templates tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€ Recurring templates tab â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 function RecurringTab() {
-  const { canWrite } = useRoleCtx()
+  const { canWrite, isAdmin } = useRoleCtx()
   const qc = useQueryClient()
   const [addOpen, setAddOpen] = useState(false)
+  const [showPaused, setShowPaused] = useState(false)
+  const [editTemplate, setEditTemplate] = useState<RecurringTemplate | null>(null)
+  const [deleteTemplate, setDeleteTemplate] = useState<RecurringTemplate | null>(null)
 
   const { data: templates = [], isLoading } = useQuery({
     queryKey: ['recurring-templates'],
@@ -1425,22 +1948,32 @@ function RecurringTab() {
     const { error } = await supabase.from('recurring_expense_templates').update({ active: !current }).eq('id', id)
     if (error) { toast.error(error.message); return }
     qc.invalidateQueries({ queryKey: ['recurring-templates'] })
-    toast.success(current ? 'Template deactivated' : 'Template activated')
   }
+
+  const visible = showPaused ? templates : templates.filter(t => t.active)
 
   if (isLoading) return <div className="surface h-40 animate-pulse" style={{ background: 'var(--ink-100)' }} />
 
   return (
     <div className="flex flex-col gap-3">
-      {canWrite && (
-        <div className="flex justify-end">
+      <div className="flex items-center justify-between">
+        <label className="flex items-center gap-2 cursor-pointer select-none text-sm" style={{ color: 'var(--ink-500)' }}>
+          <input
+            type="checkbox"
+            checked={showPaused}
+            onChange={e => setShowPaused(e.target.checked)}
+            className="rounded"
+          />
+          Show paused
+        </label>
+        {canWrite && (
           <Button size="sm" onClick={() => setAddOpen(true)} className="flex items-center gap-1.5">
             <Plus size={14} /> Add Template
           </Button>
-        </div>
-      )}
+        )}
+      </div>
 
-      {templates.length === 0 ? (
+      {visible.length === 0 ? (
         <div className="surface !p-12 flex flex-col items-center gap-3 text-center" style={{ color: 'var(--ink-400)' }}>
           <RefreshCcw size={28} className="opacity-40" />
           <div>
@@ -1450,8 +1983,8 @@ function RecurringTab() {
         </div>
       ) : (
         <div className="surface !p-0 divide-rows">
-          {templates.map(t => (
-            <div key={t.id} className={`flex items-center gap-3 px-4 py-3 ${!t.active ? 'opacity-50' : ''}`}>
+          {visible.map(t => (
+            <div key={t.id} className={`flex items-center gap-3 px-4 py-3 ${!t.active ? 'opacity-60' : ''}`}>
               <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: 'var(--brand-50)' }}>
                 <RefreshCcw size={14} className="text-violet-500" />
               </div>
@@ -1463,33 +1996,46 @@ function RecurringTab() {
                     t.frequency === 'Quarterly' ? 'bg-amber-100 text-amber-700' :
                     'bg-purple-100 text-purple-700'
                   }`}>{t.frequency}</span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                    t.active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                  }`}>{t.active ? 'Active' : 'Paused'}</span>
                 </div>
                 <p className="text-xs" style={{ color: 'var(--ink-400)' }}>
                   {t.vendor?.name ?? 'No vendor'} {t.category ? '· ' + t.category.name : ''}
                   {t.description ? ' · ' + t.description : ''}
                 </p>
               </div>
-              <div className="flex items-center gap-3 shrink-0">
+              <div className="flex items-center gap-2 shrink-0">
                 <span className="text-sm font-semibold" style={{ color: 'var(--ink-800)' }}>{formatINR(t.amount)}</span>
-                {canWrite ? (
-                  <button
+                {isAdmin && (
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => toggleActive(t.id, t.active)}
-                    className={`text-xs px-2 py-0.5 rounded-full font-medium transition-colors ${
-                      t.active
-                        ? 'bg-green-100 text-green-700 hover:bg-red-100 hover:text-red-700'
-                        : 'hover:bg-green-100 hover:text-green-700'
-                    }`}
-                    style={!t.active ? { background: 'var(--ink-100)', color: 'var(--ink-500)' } : undefined}
+                    className="h-7 text-xs"
                   >
-                    {t.active ? 'Active' : 'Inactive'}
-                  </button>
-                ) : (
-                  <span
-                    className={`text-xs px-2 py-0.5 rounded-full font-medium ${t.active ? 'bg-green-100 text-green-700' : ''}`}
-                    style={!t.active ? { background: 'var(--ink-100)', color: 'var(--ink-500)' } : undefined}
+                    {t.active ? 'Pause' : 'Activate'}
+                  </Button>
+                )}
+                {canWrite && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setEditTemplate(t)}
+                    className="h-7 w-7 p-0"
                   >
-                    {t.active ? 'Active' : 'Inactive'}
-                  </span>
+                    <Pencil size={12} />
+                  </Button>
+                )}
+                {isAdmin && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setDeleteTemplate(t)}
+                    className="h-7 w-7 p-0 text-red-500 hover:text-red-600 hover:border-red-300"
+                  >
+                    <Trash2 size={12} />
+                  </Button>
                 )}
               </div>
             </div>
@@ -1498,6 +2044,8 @@ function RecurringTab() {
       )}
 
       <AddRecurringDialog open={addOpen} onClose={() => setAddOpen(false)} />
+      <EditRecurringDialog template={editTemplate} onClose={() => setEditTemplate(null)} />
+      <DeleteRecurringDialog template={deleteTemplate} onClose={() => setDeleteTemplate(null)} />
     </div>
   )
 }
@@ -1508,12 +2056,12 @@ function AddRecurringDialog({ open, onClose }: { open: boolean; onClose: () => v
   const [saving, setSaving] = useState(false)
   const [err, setErr]       = useState('')
 
-  const { data: vendors = [] } = useQuery({ queryKey: ['vendors'], queryFn: async () => {
-    const { data } = await supabase.from('vendors').select('id,name').order('name')
+  const { data: vendors = [] } = useQuery({ queryKey: ['vendors', 'active'], queryFn: async () => {
+    const { data } = await supabase.from('vendors').select('id,name').eq('is_active', true).order('name')
     return (data ?? []) as { id: string; name: string }[]
   }})
-  const { data: categories = [] } = useQuery({ queryKey: ['expense-categories'], queryFn: async () => {
-    const { data } = await supabase.from('expense_categories').select('id,name').order('sort_order')
+  const { data: categories = [] } = useQuery({ queryKey: ['expense-categories-simple'], queryFn: async () => {
+    const { data } = await supabase.from('expense_categories').select('id,name').eq('is_active', true).order('sort_order')
     return (data ?? []) as { id: string; name: string }[]
   }})
 
@@ -1610,7 +2158,163 @@ function AddRecurringDialog({ open, onClose }: { open: boolean; onClose: () => v
   )
 }
 
-// â”€â”€ Petty cash tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function EditRecurringDialog({ template, onClose }: { template: RecurringTemplate | null; onClose: () => void }) {
+  const qc = useQueryClient()
+  const [form, setForm] = useState({ name: '', description: '', vendor_id: '', category_id: '', amount: '', payment_mode: 'Online', frequency: 'Monthly' })
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
+
+  const { data: vendors = [] } = useQuery({ queryKey: ['vendors', 'active'], queryFn: async () => {
+    const { data } = await supabase.from('vendors').select('id,name').eq('is_active', true).order('name')
+    return (data ?? []) as { id: string; name: string }[]
+  }})
+  const { data: categories = [] } = useQuery({ queryKey: ['expense-categories-simple'], queryFn: async () => {
+    const { data } = await supabase.from('expense_categories').select('id,name').eq('is_active', true).order('sort_order')
+    return (data ?? []) as { id: string; name: string }[]
+  }})
+
+  React.useEffect(() => {
+    if (template) {
+      setForm({
+        name: template.name,
+        description: template.description ?? '',
+        vendor_id: template.vendor?.id ?? '',
+        category_id: template.category?.id ?? '',
+        amount: String(template.amount),
+        payment_mode: template.payment_mode,
+        frequency: template.frequency,
+      })
+      setErr('')
+    }
+  }, [template])
+
+  const set = (k: keyof typeof form) => (v: string) => setForm(f => ({ ...f, [k]: v }))
+
+  async function handleSave() {
+    if (!template || !form.name.trim() || !form.amount) return
+    setSaving(true); setErr('')
+    try {
+      const { error } = await supabase.from('recurring_expense_templates').update({
+        name: form.name.trim(),
+        description: form.description || null,
+        vendor_id: form.vendor_id || null,
+        category_id: form.category_id || null,
+        amount: Number(form.amount),
+        payment_mode: form.payment_mode,
+        frequency: form.frequency,
+      }).eq('id', template.id)
+      if (error) throw error
+      qc.invalidateQueries({ queryKey: ['recurring-templates'] })
+      onClose()
+    } catch (e: any) { setErr(e.message); toast.error(e.message ?? 'Failed to update template') }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <Dialog open={!!template} onOpenChange={v => { if (!v) onClose() }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader><DialogTitle>Edit Recurring Template</DialogTitle></DialogHeader>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1">
+            <Label>Name *</Label>
+            <Input value={form.name} onChange={e => set('name')(e.target.value)} placeholder="e.g. Lift AMC" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label>Description</Label>
+            <Input value={form.description} onChange={e => set('description')(e.target.value)} placeholder="Optional details" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1">
+              <Label>Amount (Rs) *</Label>
+              <Input type="number" value={form.amount} onChange={e => set('amount')(e.target.value)} placeholder="0" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label>Frequency</Label>
+              <Select value={form.frequency} onValueChange={set('frequency')}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {['Monthly', 'Quarterly', 'Annual', 'One-time'].map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1">
+              <Label>Vendor</Label>
+              <Select value={form.vendor_id} onValueChange={set('vendor_id')}>
+                <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                <SelectContent>
+                  {vendors.map(v => <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label>Category</Label>
+              <Select value={form.category_id} onValueChange={set('category_id')}>
+                <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                <SelectContent>
+                  {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label>Payment mode</Label>
+            <Select value={form.payment_mode} onValueChange={set('payment_mode')}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {PAYMENT_MODES.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          {err && <p className="text-sm text-red-500">{err}</p>}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSave} disabled={!form.name.trim() || !form.amount || saving}>
+            {saving ? 'Saving...' : 'Save Changes'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function DeleteRecurringDialog({ template, onClose }: { template: RecurringTemplate | null; onClose: () => void }) {
+  const qc = useQueryClient()
+  const [deleting, setDeleting] = useState(false)
+
+  async function handleDelete() {
+    if (!template) return
+    setDeleting(true)
+    const { error } = await supabase.from('recurring_expense_templates').delete().eq('id', template.id)
+    setDeleting(false)
+    if (error) { toast.error(error.message); return }
+    qc.invalidateQueries({ queryKey: ['recurring-templates'] })
+    onClose()
+  }
+
+  return (
+    <AlertDialog open={!!template} onOpenChange={v => { if (!v) onClose() }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete template?</AlertDialogTitle>
+          <AlertDialogDescription>
+            "{template?.name}" will be permanently deleted. This cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+            {deleting ? 'Deleting...' : 'Delete'}
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
+
+// â"€â"€ Petty cash tab â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 const TXN_TYPE_STYLE: Record<string, string> = {
   Opening:       'bg-blue-100 text-blue-700',
@@ -1771,7 +2475,7 @@ function AddPettyCashDialog({ open, onClose, onSave }: {
   )
 }
 
-// â”€â”€ Attachments section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€ Attachments section â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 function AttachmentsSection({ expenseId }: { expenseId: string }) {
   const { canWrite } = useRoleCtx()
