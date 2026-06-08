@@ -50,6 +50,7 @@ interface Expense {
   category: ExpenseCategory | null
   vendor: Vendor | null
   staff_member: StaffMember | null
+  corpus_plan_id: string | null
   corpus_plan: { name: string } | null
   transaction: { id: string; value_date: string; description: string; amount: number } | null
   line_items: ExpenseLineItem[]
@@ -185,7 +186,7 @@ function DayBook() {
         .select(`
           id,expense_date,description,payee_type,payee_name_raw,amount,payment_mode,
           reference_no,cheque_number,voucher_no,transaction_id,reconciled_at,
-          reconciliation_notes,notes,created_at,voided_at,voided_by,void_reason,
+          reconciliation_notes,notes,created_at,voided_at,voided_by,void_reason,corpus_plan_id,
           category:category_id(id,name,budget_type,is_utility),
           vendor:vendor_id(id,name,type,phone),
           staff_member:staff_id(id,name,role,assigned_area,phone,left_date),
@@ -599,6 +600,7 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
       reference_no:   editExpense.reference_no ?? undefined,
       cheque_number:  editExpense.cheque_number ?? undefined,
       category_id:    editExpense.category?.id ?? undefined,
+      corpus_plan_id: editExpense.corpus_plan_id ?? undefined,
       notes:          editExpense.notes ?? undefined,
       line_items: editExpense.line_items.length > 0
         ? editExpense.line_items.map(li => ({
@@ -685,6 +687,8 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
           .delete()
           .eq('expense_id', expenseId)
         if (delErr) throw delErr
+        // linePayloads built below; insert happens after this block.
+        // If the insert below fails we restore the originals in onError.
       } else {
         const { data: expense, error: hErr } = await supabase
           .from('expenses')
@@ -712,7 +716,26 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
       }))
 
       const { error: liErr } = await supabase.from('expense_line_items').insert(linePayloads)
-      if (liErr) throw liErr
+      if (liErr) {
+        // Insert failed after delete — attempt to restore original line items
+        if (isEditMode && editExpense && editExpense.line_items.length > 0) {
+          const originals = editExpense.line_items.map(li => ({
+            expense_id:     editExpense.id,
+            payee_type:     li.payee_type,
+            payee_name_raw: li.payee_name_raw ?? null,
+            description:    li.description,
+            category_id:    li.category?.id ?? null,
+            cost_center:    li.cost_center,
+            amount:         li.amount,
+            utility_units:  li.utility_units ?? null,
+            utility_rate:   li.utility_rate ?? null,
+            period_from:    li.period_from ?? null,
+            period_to:      li.period_to ?? null,
+          }))
+          await supabase.from('expense_line_items').insert(originals)
+        }
+        throw liErr
+      }
     },
     onSuccess: () => {
       toast.success(isEditMode ? 'Expense updated' : 'Expense saved')
@@ -1058,6 +1081,7 @@ function ReconcileTab() {
         .select('id,expense_date,description,amount,payment_mode,voucher_no,payee_name_raw,reference_no')
         .neq('payment_mode', 'Cash')
         .is('transaction_id', null)
+        .is('voided_at', null)
         .order('expense_date', { ascending: false })
       return (data ?? []) as UnreconciledExpense[]
     },
