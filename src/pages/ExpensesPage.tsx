@@ -407,7 +407,7 @@ function ExpenseDetailPanel({
         .eq('id', txnId)
       if (e2) {
         await supabase.from('expenses')
-          .update({ transaction_id: txnId, reconciled_at: new Date().toISOString() })
+          .update({ transaction_id: txnId, reconciled_at: e.reconciled_at })
           .eq('id', e.id)
         throw e2
       }
