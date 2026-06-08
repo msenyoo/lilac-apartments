@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { PiggyBank, Plus, CalendarClock } from 'lucide-react'
 import { supabase, type Deposit } from '@/lib/supabase'
@@ -247,15 +247,13 @@ function MarkMaturedDialog({ deposit, onClose }: MarkMaturedDialogProps) {
   const [linkedCrId, setLinkedCrId] = useState<string>('')
   const [notes, setNotes] = useState('')
 
-  // Pre-fill notes when deposit changes
-  const [lastDepositId, setLastDepositId] = useState<string | null>(null)
-  if (deposit && deposit.id !== lastDepositId) {
-    setLastDepositId(deposit.id)
+  useEffect(() => {
+    if (!deposit) return
     setMaturedDate(todayISO())
     setMaturityAmount('')
     setLinkedCrId('')
     setNotes(deposit.notes ?? '')
-  }
+  }, [deposit?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: crOptions = [] } = useQuery<TxnOption[]>({
     queryKey: ['deposit-cr-options'],
@@ -265,6 +263,7 @@ function MarkMaturedDialog({ deposit, onClose }: MarkMaturedDialogProps) {
         .select('id,value_date,description,amount')
         .eq('cr_dr', 'CR')
         .is('deposit_id', null)
+        .or('category.eq.FD,description.ilike.%FD%,description.ilike.%fixed deposit%')
         .order('value_date', { ascending: false })
       if (error) throw error
       return (data ?? []) as TxnOption[]
@@ -316,7 +315,6 @@ function MarkMaturedDialog({ deposit, onClose }: MarkMaturedDialogProps) {
     setMaturityAmount('')
     setLinkedCrId('')
     setNotes('')
-    setLastDepositId(null)
     onClose()
   }
 
@@ -419,9 +417,8 @@ function EditDepositDialog({ deposit, onClose }: EditDepositDialogProps) {
   const [sourceType, setSourceType] = useState<'surplus' | 'corpus' | 'other'>('surplus')
   const [notes, setNotes] = useState('')
 
-  const [lastDepositId, setLastDepositId] = useState<string | null>(null)
-  if (deposit && deposit.id !== lastDepositId) {
-    setLastDepositId(deposit.id)
+  useEffect(() => {
+    if (!deposit) return
     setDepositNo(deposit.deposit_no)
     setBank(deposit.bank)
     setPrincipal(String(deposit.principal))
@@ -430,7 +427,7 @@ function EditDepositDialog({ deposit, onClose }: EditDepositDialogProps) {
     setMaturityDate(deposit.maturity_date)
     setSourceType((deposit.source_type as 'surplus' | 'corpus' | 'other') ?? 'surplus')
     setNotes(deposit.notes ?? '')
-  }
+  }, [deposit?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -458,7 +455,6 @@ function EditDepositDialog({ deposit, onClose }: EditDepositDialogProps) {
   })
 
   function handleClose() {
-    setLastDepositId(null)
     onClose()
   }
 
