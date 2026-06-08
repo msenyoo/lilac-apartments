@@ -4,7 +4,7 @@ import { useRoleCtx } from '@/contexts/RoleContext'
 import { useForm, useFieldArray, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Plus, Trash2, Download, Receipt, Users, Building, X, GitMerge, CheckCircle2, Paperclip, RefreshCcw, Coins, Upload, Loader2, Trash, Pencil, Ban, Unlink } from 'lucide-react'
+import { Plus, Trash2, Download, Receipt, Users, Building, X, GitMerge, CheckCircle2, Paperclip, RefreshCcw, Coins, Upload, Loader2, Trash, Pencil, Ban, Unlink, AlertTriangle } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
@@ -1118,6 +1118,7 @@ function ReconcileTab() {
   const qc = useQueryClient()
   const [selectedExpenseId, setSelectedExpenseId] = useState<string | null>(null)
   const [selectedTxnId,     setSelectedTxnId]     = useState<string | null>(null)
+  const [forceMatchOpen,    setForceMatchOpen]    = useState(false)
 
   const { data: expenses = [], isLoading: loadingExp } = useQuery({
     queryKey: ['unreconciled-expenses'],
@@ -1191,6 +1192,7 @@ function ReconcileTab() {
       qc.invalidateQueries({ queryKey: ['expenses'] })
       setSelectedExpenseId(null)
       setSelectedTxnId(null)
+      setForceMatchOpen(false)
     },
     onError: (e: any) => {
       toast.error(e.message ?? 'Failed to reconcile')
@@ -1252,7 +1254,10 @@ function ReconcileTab() {
           {canWrite && (
             <Button
               size="sm"
-              onClick={() => matchMutation.mutate()}
+              onClick={() => {
+                if (!amountMatch) { setForceMatchOpen(true); return }
+                matchMutation.mutate()
+              }}
               disabled={matchMutation.isPending}
               className="shrink-0"
             >
@@ -1261,11 +1266,37 @@ function ReconcileTab() {
             </Button>
           )}
           <button
-            onClick={() => { setSelectedExpenseId(null); setSelectedTxnId(null) }}
+            onClick={() => { setSelectedExpenseId(null); setSelectedTxnId(null); setForceMatchOpen(false) }}
             className="hover:text-[var(--ink-600)] shrink-0" style={{ color: 'var(--ink-400)' }}
           >
             <X size={15} />
           </button>
+        </div>
+      )}
+
+      {forceMatchOpen && !amountMatch && selExp && selTxn && (
+        <div className="rounded-xl p-4 flex items-start gap-3" style={{ background: 'var(--warn-bg)', border: '1px solid var(--warn-bd)' }}>
+          <AlertTriangle size={18} className="text-orange-500 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold" style={{ color: 'var(--ink-800)' }}>Amount mismatch — match anyway?</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--ink-500)' }}>
+              Expense: {formatINR(selExp.amount)} · Bank DR: {formatINR(selTxn.amount)} · Diff: {formatINR(Math.abs(selExp.amount - selTxn.amount))}
+            </p>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--ink-400)' }}>
+              This will link them as-is. You can edit the expense amount or un-reconcile later.
+            </p>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <Button size="sm" variant="outline" onClick={() => setForceMatchOpen(false)}>Cancel</Button>
+            <Button
+              size="sm"
+              className="bg-orange-500 hover:bg-orange-600 text-white"
+              onClick={() => { setForceMatchOpen(false); matchMutation.mutate() }}
+              disabled={matchMutation.isPending}
+            >
+              {matchMutation.isPending ? 'Matching…' : 'Match anyway'}
+            </Button>
+          </div>
         </div>
       )}
 
