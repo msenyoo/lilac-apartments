@@ -1190,6 +1190,7 @@ function ReconcileTab() {
       qc.invalidateQueries({ queryKey: ['unreconciled-expenses'] })
       qc.invalidateQueries({ queryKey: ['unmatched-bank-drs'] })
       qc.invalidateQueries({ queryKey: ['expenses'] })
+      qc.invalidateQueries({ queryKey: ['unreconciled-count'] })
       setSelectedExpenseId(null)
       setSelectedTxnId(null)
       setForceMatchOpen(false)
