@@ -76,7 +76,6 @@ function AddDepositDialog({ open, onClose }: AddDepositDialogProps) {
         .select('id,value_date,description,amount')
         .eq('cr_dr', 'DR')
         .is('deposit_id', null)
-        .or('category.eq.FD,description.ilike.%FD%,description.ilike.%fixed deposit%')
         .order('value_date', { ascending: false })
       if (error) throw error
       return (data ?? []) as TxnOption[]
@@ -263,7 +262,6 @@ function MarkMaturedDialog({ deposit, onClose }: MarkMaturedDialogProps) {
         .select('id,value_date,description,amount')
         .eq('cr_dr', 'CR')
         .is('deposit_id', null)
-        .or('category.eq.FD,description.ilike.%FD%,description.ilike.%fixed deposit%')
         .order('value_date', { ascending: false })
       if (error) throw error
       return (data ?? []) as TxnOption[]
