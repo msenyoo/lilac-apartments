@@ -385,19 +385,22 @@ function ArrearsMgmt({ flatCode, showAdd = false, onCloseAdd }: { flatCode: stri
     },
   })
 
-  const { data: arrears = [] } = useQuery({
+  const { data: rows = [] } = useQuery({
     queryKey: ['arrears-for-flat', flatCode],
     queryFn: async () => {
       const { data } = await supabase
         .from('flat_arrears')
         .select('*')
         .eq('flat_id', flatIdData!)
-        .eq('arrears_type', 'maintenance')
+        .in('arrears_type', ['maintenance', 'credit'])
         .order('created_at')
       return data ?? []
     },
     enabled: !!flatIdData,
   })
+
+  const arrears = rows.filter((r: any) => r.arrears_type === 'maintenance')
+  const credits = rows.filter((r: any) => r.arrears_type === 'credit')
 
   async function handleDelete(id: string) {
     const { error } = await supabase.from('flat_arrears').delete().eq('id', id)
@@ -406,31 +409,47 @@ function ArrearsMgmt({ flatCode, showAdd = false, onCloseAdd }: { flatCode: stri
     qc.invalidateQueries({ queryKey: ['dues'] })
   }
 
-  if (arrears.length === 0 && !showAdd && !editRow) return null
+  if (rows.length === 0 && !showAdd && !editRow) return null
+
+  function renderRow(row: any, color: string) {
+    return (
+      <div key={row.id} className="flex items-center justify-between text-[12.5px]">
+        <span>{row.source_label}</span>
+        <div className="flex items-center gap-2">
+          <span className="font-semibold" style={{ color }}>{formatINR(row.amount)}</span>
+          {isAdmin && (
+            <>
+              <button onClick={() => setEditRow(row)} className="text-[var(--ink-400)] hover:text-[var(--ink-700)]">
+                <Pencil size={13} />
+              </button>
+              <button onClick={() => handleDelete(row.id)} className="text-[var(--bad)] hover:opacity-70">
+                <Trash2 size={13} />
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-2 border-t hairline pt-3">
-      <p className="text-[11.5px] font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-400)' }}>
-        Maintenance Arrears
-      </p>
-      {arrears.map((row: any) => (
-        <div key={row.id} className="flex items-center justify-between text-[12.5px]">
-          <span>{row.source_label}</span>
-          <div className="flex items-center gap-2">
-            <span className="font-semibold" style={{ color: 'var(--bad)' }}>{formatINR(row.amount)}</span>
-            {isAdmin && (
-              <>
-                <button onClick={() => setEditRow(row)} className="text-[var(--ink-400)] hover:text-[var(--ink-700)]">
-                  <Pencil size={13} />
-                </button>
-                <button onClick={() => handleDelete(row.id)} className="text-[var(--bad)] hover:opacity-70">
-                  <Trash2 size={13} />
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      ))}
+      {arrears.length > 0 && (
+        <>
+          <p className="text-[11.5px] font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-400)' }}>
+            Arrears
+          </p>
+          {arrears.map((row: any) => renderRow(row, 'var(--bad)'))}
+        </>
+      )}
+      {credits.length > 0 && (
+        <>
+          <p className="text-[11.5px] font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-400)' }}>
+            Advance Credits
+          </p>
+          {credits.map((row: any) => renderRow(row, 'var(--ok)'))}
+        </>
+      )}
       {(showAdd || editRow) && flatIdData && (
         <ArrearsDialog
           flatId={flatIdData}
@@ -453,9 +472,10 @@ function ArrearsDialog({ flatId, row, onClose, onSaved }: {
   onClose: () => void
   onSaved: () => void
 }) {
-  const [label, setLabel] = useState(row?.source_label ?? '')
+  const [type, setType]     = useState<'maintenance' | 'credit'>(row?.arrears_type ?? 'maintenance')
+  const [label, setLabel]   = useState(row?.source_label ?? '')
   const [amount, setAmount] = useState(row?.amount?.toString() ?? '')
-  const [notes, setNotes] = useState(row?.notes ?? '')
+  const [notes, setNotes]   = useState(row?.notes ?? '')
   const [saving, setSaving] = useState(false)
 
   async function handleSave() {
@@ -464,11 +484,13 @@ function ArrearsDialog({ flatId, row, onClose, onSaved }: {
     setSaving(true)
     let error: any
     if (row) {
-      ;({ error } = await supabase.from('flat_arrears').update({ source_label: label.trim(), amount: amt, notes: notes.trim() || null }).eq('id', row.id))
+      ;({ error } = await supabase.from('flat_arrears').update({
+        source_label: label.trim(), amount: amt, notes: notes.trim() || null,
+      }).eq('id', row.id))
     } else {
       const { data: { user } } = await supabase.auth.getUser()
       ;({ error } = await supabase.from('flat_arrears').insert({
-        flat_id: flatId, arrears_type: 'maintenance',
+        flat_id: flatId, arrears_type: type,
         source_label: label.trim(), amount: amt,
         notes: notes.trim() || null, created_by: user!.id,
       }))
@@ -481,8 +503,26 @@ function ArrearsDialog({ flatId, row, onClose, onSaved }: {
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent>
-        <DialogHeader><DialogTitle>{row ? 'Edit arrears' : 'Add arrears'}</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>{row ? 'Edit entry' : 'Add arrears / credit'}</DialogTitle>
+        </DialogHeader>
         <div className="flex flex-col gap-3 py-2">
+          {!row && (
+            <div className="flex rounded-lg border hairline overflow-hidden text-[13px] font-medium">
+              {(['maintenance', 'credit'] as const).map(t => (
+                <button
+                  key={t}
+                  onClick={() => setType(t)}
+                  className="flex-1 py-1.5 transition-colors"
+                  style={type === t
+                    ? { background: t === 'credit' ? 'var(--ok-bg)' : 'var(--bad-bg)', color: t === 'credit' ? 'var(--ok)' : 'var(--bad)' }
+                    : { color: 'var(--ink-500)' }}
+                >
+                  {t === 'maintenance' ? 'Arrears' : 'Advance credit'}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="flex flex-col gap-1">
             <Label>Period label (e.g. FY 2024-25)</Label>
             <Input value={label} onChange={e => setLabel(e.target.value)} />
