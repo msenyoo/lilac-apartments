@@ -83,7 +83,9 @@ export default function DuesPage() {
       field: 'arrears_maintenance',
       width: 110,
       valueFormatter: (p: any) => p.value > 0 ? formatINR(p.value) : '—',
-      cellStyle: (p: any) => p.value > 0 ? { color: '#dc2626', fontWeight: 600 } : { color: 'var(--ink-300)' },
+      cellStyle: (p: any) => p.value > 0
+        ? { color: '#dc2626', fontWeight: 600 }
+        : { color: 'var(--ink-300)', fontWeight: 400 },
     },
     {
       headerName: 'Total Outstanding',
