@@ -486,7 +486,8 @@ function AGMReportsTab() {
       const [{ data: exps }, { data: cats }] = await Promise.all([
         supabase.from('expenses').select('amount, category_id')
           .gte('expense_date', selectedFy.start)
-          .lte('expense_date', selectedFy.end),
+          .lte('expense_date', selectedFy.end)
+          .is('voided_at', null),
         supabase.from('expense_categories').select('id, name'),
       ])
       const catMap = new Map((cats ?? []).map((c: any) => [c.id, c.name as string]))
@@ -1003,7 +1004,8 @@ function ExpenditureReportsTab() {
       const [{ data: exps }, { data: cats }] = await Promise.all([
         supabase.from('expenses').select('amount, category_id')
           .gte('expense_date', selectedFy.start)
-          .lte('expense_date', selectedFy.end),
+          .lte('expense_date', selectedFy.end)
+          .is('voided_at', null),
         supabase.from('expense_categories').select('id, name, budget_type'),
       ])
       const catMap = new Map((cats ?? []).map((c: any) => [c.id, { name: c.name as string, budget_type: c.budget_type as string }]))
@@ -1026,7 +1028,8 @@ function ExpenditureReportsTab() {
       const [{ data: exps }, { data: vendors }] = await Promise.all([
         supabase.from('expenses').select('amount, vendor_id, payee_name_raw, payment_mode')
           .gte('expense_date', selectedFy.start)
-          .lte('expense_date', selectedFy.end),
+          .lte('expense_date', selectedFy.end)
+          .is('voided_at', null),
         supabase.from('vendors').select('id, name'),
       ])
       const vendorMap = new Map((vendors ?? []).map((v: any) => [v.id, v.name as string]))

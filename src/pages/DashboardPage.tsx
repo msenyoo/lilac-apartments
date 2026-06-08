@@ -75,6 +75,7 @@ export default function DashboardPage() {
         .select('*', { count: 'exact', head: true })
         .neq('payment_mode', 'Cash')
         .is('transaction_id', null)
+        .is('voided_at', null)
       return count ?? 0
     },
     refetchInterval: 60_000,
@@ -85,7 +86,7 @@ export default function DashboardPage() {
     queryFn: async () => {
       const now = new Date()
       const from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
-      const { data } = await supabase.from('expenses').select('amount').gte('expense_date', from)
+      const { data } = await supabase.from('expenses').select('amount').gte('expense_date', from).is('voided_at', null)
       return (data ?? []).reduce((s: number, e: any) => s + e.amount, 0)
     },
   })
