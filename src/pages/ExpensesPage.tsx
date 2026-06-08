@@ -4,7 +4,7 @@ import { useRoleCtx } from '@/contexts/RoleContext'
 import { useForm, useFieldArray, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Plus, Trash2, Download, Receipt, Users, Building, X, GitMerge, CheckCircle2, Paperclip, RefreshCcw, Coins, Upload, Loader2, Trash, Pencil, Ban } from 'lucide-react'
+import { Plus, Trash2, Download, Receipt, Users, Building, X, GitMerge, CheckCircle2, Paperclip, RefreshCcw, Coins, Upload, Loader2, Trash, Pencil, Ban, Unlink, AlertTriangle } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
@@ -367,6 +367,7 @@ function ExpenseDetailPanel({
   const [voidReason, setVoidReason] = useState('')
   const [voiding, setVoiding] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
+  const [unreconciling, setUnreconciling] = useState(false)
 
   async function handleVoid() {
     if (!voidReason.trim()) return
@@ -389,6 +390,37 @@ function ExpenseDetailPanel({
       toast.error(err.message ?? 'Failed to void expense')
     } finally {
       setVoiding(false)
+    }
+  }
+
+  async function handleUnreconcile() {
+    if (!e.transaction_id) return
+    setUnreconciling(true)
+    try {
+      const txnId = e.transaction_id
+      const { error: e1 } = await supabase.from('expenses')
+        .update({ transaction_id: null, reconciled_at: null })
+        .eq('id', e.id)
+      if (e1) throw e1
+      const { error: e2 } = await supabase.from('transactions')
+        .update({ expense_id: null })
+        .eq('id', txnId)
+      if (e2) {
+        await supabase.from('expenses')
+          .update({ transaction_id: txnId, reconciled_at: e.reconciled_at })
+          .eq('id', e.id)
+        throw e2
+      }
+      toast.success('Reconciliation removed')
+      qc.invalidateQueries({ queryKey: ['unreconciled-expenses'] })
+      qc.invalidateQueries({ queryKey: ['unmatched-bank-drs'] })
+      qc.invalidateQueries({ queryKey: ['expenses'] })
+      qc.invalidateQueries({ queryKey: ['unreconciled-count'] })
+      onClose()
+    } catch (err: any) {
+      toast.error(err.message ?? 'Failed to un-reconcile')
+    } finally {
+      setUnreconciling(false)
     }
   }
 
@@ -444,6 +476,17 @@ function ExpenseDetailPanel({
             {canWrite && (
               <Button size="sm" variant="outline" className="flex items-center gap-1.5" onClick={() => setEditOpen(true)}>
                 <Pencil size={13} /> Edit
+              </Button>
+            )}
+            {isAdmin && e.transaction_id && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="flex items-center gap-1.5 text-orange-600 border-orange-200 hover:bg-orange-50"
+                onClick={handleUnreconcile}
+                disabled={unreconciling}
+              >
+                <Unlink size={13} /> {unreconciling ? 'Removing…' : 'Un-reconcile'}
               </Button>
             )}
             {isAdmin && (
@@ -1075,6 +1118,7 @@ function ReconcileTab() {
   const qc = useQueryClient()
   const [selectedExpenseId, setSelectedExpenseId] = useState<string | null>(null)
   const [selectedTxnId,     setSelectedTxnId]     = useState<string | null>(null)
+  const [forceMatchOpen,    setForceMatchOpen]    = useState(false)
 
   const { data: expenses = [], isLoading: loadingExp } = useQuery({
     queryKey: ['unreconciled-expenses'],
@@ -1111,6 +1155,21 @@ function ReconcileTab() {
   const amountMatch = selExp && selTxn && selExp.amount === selTxn.amount
   const canMatch    = !!selExp && !!selTxn
 
+  function isWithin7Days(expDate: string, txnDate: string) {
+    const [ey, em, ed] = expDate.split('-').map(Number)
+    const [ty, tm, td] = txnDate.split('-').map(Number)
+    return Math.abs(new Date(ey, em - 1, ed).getTime() - new Date(ty, tm - 1, td).getTime()) <= 7 * 24 * 60 * 60 * 1000
+  }
+
+  function getSuggestionTier(t: UnmatchedDR): 'exact' | 'close' | null {
+    if (!selExp) return null
+    if (t.amount === selExp.amount) return 'exact'
+    const pctDiff = selExp.amount !== 0 ? Math.abs(t.amount - selExp.amount) / selExp.amount : Infinity
+    const absDiff = Math.abs(t.amount - selExp.amount)
+    if ((pctDiff <= 0.05 || absDiff <= 500) && isWithin7Days(selExp.expense_date, t.value_date)) return 'close'
+    return null
+  }
+
   const matchMutation = useMutation({
     mutationFn: async () => {
       if (!selectedExpenseId || !selectedTxnId) return
@@ -1131,8 +1190,10 @@ function ReconcileTab() {
       qc.invalidateQueries({ queryKey: ['unreconciled-expenses'] })
       qc.invalidateQueries({ queryKey: ['unmatched-bank-drs'] })
       qc.invalidateQueries({ queryKey: ['expenses'] })
+      qc.invalidateQueries({ queryKey: ['unreconciled-count'] })
       setSelectedExpenseId(null)
       setSelectedTxnId(null)
+      setForceMatchOpen(false)
     },
     onError: (e: any) => {
       toast.error(e.message ?? 'Failed to reconcile')
@@ -1194,7 +1255,10 @@ function ReconcileTab() {
           {canWrite && (
             <Button
               size="sm"
-              onClick={() => matchMutation.mutate()}
+              onClick={() => {
+                if (!amountMatch) { setForceMatchOpen(true); return }
+                matchMutation.mutate()
+              }}
               disabled={matchMutation.isPending}
               className="shrink-0"
             >
@@ -1203,11 +1267,37 @@ function ReconcileTab() {
             </Button>
           )}
           <button
-            onClick={() => { setSelectedExpenseId(null); setSelectedTxnId(null) }}
+            onClick={() => { setSelectedExpenseId(null); setSelectedTxnId(null); setForceMatchOpen(false) }}
             className="hover:text-[var(--ink-600)] shrink-0" style={{ color: 'var(--ink-400)' }}
           >
             <X size={15} />
           </button>
+        </div>
+      )}
+
+      {forceMatchOpen && !amountMatch && selExp && selTxn && (
+        <div className="rounded-xl p-4 flex items-start gap-3" style={{ background: 'var(--warn-bg)', border: '1px solid var(--warn-bd)' }}>
+          <AlertTriangle size={18} className="text-orange-500 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold" style={{ color: 'var(--ink-800)' }}>Amount mismatch — match anyway?</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--ink-500)' }}>
+              Expense: {formatINR(selExp.amount)} · Bank DR: {formatINR(selTxn.amount)} · Diff: {formatINR(Math.abs(selExp.amount - selTxn.amount))}
+            </p>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--ink-400)' }}>
+              This will link them as-is. You can edit the expense amount or un-reconcile later.
+            </p>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <Button size="sm" variant="outline" onClick={() => setForceMatchOpen(false)}>Cancel</Button>
+            <Button
+              size="sm"
+              className="bg-orange-500 hover:bg-orange-600 text-white"
+              onClick={() => { setForceMatchOpen(false); matchMutation.mutate() }}
+              disabled={matchMutation.isPending}
+            >
+              {matchMutation.isPending ? 'Matching…' : 'Match anyway'}
+            </Button>
+          </div>
         </div>
       )}
 
@@ -1233,7 +1323,7 @@ function ReconcileTab() {
                 {expenses.map(e => (
                   <button
                     key={e.id}
-                    onClick={() => setSelectedExpenseId(id => id === e.id ? null : e.id)}
+                    onClick={() => { setForceMatchOpen(false); setSelectedExpenseId(id => id === e.id ? null : e.id) }}
                     className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-[var(--ink-50)] text-left transition-colors ${
                       selectedExpenseId === e.id ? 'bg-[var(--brand-50)] border-l-2 border-violet-500' : ''
                     }`}
@@ -1265,7 +1355,15 @@ function ReconcileTab() {
               <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-600)' }}>
                 Unmatched bank DRs ({bankDRs.length})
               </p>
-              <p className="text-xs mt-0.5" style={{ color: 'var(--ink-400)' }}>Select one to match with an expense</p>
+              <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: 'var(--ink-400)' }}>
+                Select one to match
+                {selExp && (
+                  <span className="ml-2 flex items-center gap-1">
+                    <span className="inline-block w-2 h-2 rounded-sm bg-green-400" />exact
+                    <span className="inline-block w-2 h-2 rounded-sm bg-amber-300 ml-1" />close
+                  </span>
+                )}
+              </p>
             </div>
             {bankDRs.length === 0 ? (
               <p className="px-4 py-8 text-sm text-center" style={{ color: 'var(--ink-400)' }}>No unmatched bank debits</p>
@@ -1274,10 +1372,15 @@ function ReconcileTab() {
                 {bankDRs.map(t => (
                   <button
                     key={t.id}
-                    onClick={() => setSelectedTxnId(id => id === t.id ? null : t.id)}
-                    className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-[var(--ink-50)] text-left transition-colors ${
-                      selectedTxnId === t.id ? 'bg-[var(--brand-50)] border-l-2 border-violet-500' : ''
-                    }`}
+                    onClick={() => { setForceMatchOpen(false); setSelectedTxnId(id => id === t.id ? null : t.id) }}
+                    className={(() => {
+                      const tier = getSuggestionTier(t)
+                      const base = 'w-full flex items-center gap-3 px-4 py-3 text-left transition-colors '
+                      if (selectedTxnId === t.id) return base + 'bg-[var(--brand-50)] border-l-2 border-violet-500'
+                      if (tier === 'exact') return base + 'bg-[var(--ok-bg)] border-l-2 border-green-500 hover:bg-green-50'
+                      if (tier === 'close') return base + 'bg-[var(--warn-bg)] border-l-2 border-amber-400 hover:bg-amber-50'
+                      return base + 'hover:bg-[var(--ink-50)]'
+                    })()}
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-baseline justify-between gap-2">
