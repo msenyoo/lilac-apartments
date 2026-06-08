@@ -82,19 +82,17 @@ export default function DuesPage() {
       headerName: 'Arrears',
       field: 'arrears_maintenance',
       width: 110,
-      cellRenderer: ({ value }: any) =>
-        value > 0
-          ? `<span style="color:var(--bad);font-weight:600">${formatINR(value)}</span>`
-          : '<span style="color:var(--ink-300)">—</span>',
+      valueFormatter: (p: any) => p.value > 0 ? formatINR(p.value) : '—',
+      cellStyle: (p: any) => p.value > 0 ? { color: '#dc2626', fontWeight: 600 } : { color: 'var(--ink-300)' },
     },
     {
       headerName: 'Total Outstanding',
       field: 'total_outstanding',
       width: 140,
-      cellRenderer: ({ value }: any) =>
-        value > 0
-          ? `<span style="font-weight:700;color:var(--bad)">${formatINR(value)}</span>`
-          : '<span style="color:var(--ok)">Clear</span>',
+      valueFormatter: (p: any) => p.value > 0 ? formatINR(p.value) : 'Clear',
+      cellStyle: (p: any) => p.value > 0
+        ? { color: '#dc2626', fontWeight: 700 }
+        : { color: '#16a34a', fontWeight: 600 },
     },
     { field: 'status', headerName: 'Status', width: 110, filter: true,
       cellRenderer: (p: any) => (
