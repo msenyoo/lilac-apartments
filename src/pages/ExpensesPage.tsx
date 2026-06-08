@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRoleCtx } from '@/contexts/RoleContext'
 import { useForm, useFieldArray, Controller } from 'react-hook-form'
@@ -40,11 +40,13 @@ interface Expense {
   amount: number; payment_mode: string
   reference_no: string | null; cheque_number: string | null; voucher_no: string | null
   transaction_id: string | null; reconciled_at: string | null
+  reconciliation_notes: string | null
   notes: string | null; created_at: string
   category: ExpenseCategory | null
   vendor: Vendor | null
   staff_member: StaffMember | null
   corpus_plan: { name: string } | null
+  transaction: { id: string; value_date: string; description: string; amount: number } | null
   line_items: ExpenseLineItem[]
 }
 interface ExpenseLineItem {
@@ -180,6 +182,7 @@ function DayBook() {
           vendor:vendor_id(id,name,type,phone),
           staff_member:staff_id(id,name,role,assigned_area,phone,left_date),
           corpus_plan:corpus_plan_id(name),
+          transaction:transaction_id(id,value_date,description,amount),
           line_items:expense_line_items(*, category:category_id(id,name,budget_type,is_utility))
         `)
         .order('expense_date', { ascending: false })
@@ -189,6 +192,10 @@ function DayBook() {
   })
 
   const selectedExpense = expenses.find(e => e.id === detailId) ?? null
+
+  useEffect(() => {
+    if (detailId) document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [detailId])
 
   function handleExport() {
     const ws = XLSX.utils.json_to_sheet(expenses.map(e => ({
@@ -208,9 +215,12 @@ function DayBook() {
   }
 
   // Summary cards
-  const totalThisMonth = expenses
-    .filter(e => e.expense_date.startsWith(new Date().toISOString().slice(0, 7)))
-    .reduce((s, e) => s + e.amount, 0)
+  const now = new Date()
+  const fyStartYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
+  const fyStart = `${fyStartYear}-04-01`
+  const fyEnd   = `${fyStartYear + 1}-03-31`
+  const fyLabel = `FY ${fyStartYear}-${(fyStartYear + 1).toString().slice(2)}`
+  const totalThisFY  = expenses.filter(e => e.expense_date >= fyStart && e.expense_date <= fyEnd).reduce((s, e) => s + e.amount, 0)
   const unreconciled = expenses.filter(e => expenseStatus(e) === 'Unreconciled').length
   const totalAll     = expenses.reduce((s, e) => s + e.amount, 0)
 
@@ -221,8 +231,8 @@ function DayBook() {
       {/* KPI strip */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="surface !p-4">
-          <p className="text-xs mb-1" style={{ color: 'var(--ink-500)' }}>This month</p>
-          <p className="text-xl font-bold" style={{ color: 'var(--ink-800)' }}>{formatINR(totalThisMonth)}</p>
+          <p className="text-xs mb-1" style={{ color: 'var(--ink-500)' }}>{fyLabel}</p>
+          <p className="text-xl font-bold" style={{ color: 'var(--ink-800)' }}>{formatINR(totalThisFY)}</p>
         </div>
         <div className="surface !p-4">
           <p className="text-xs mb-1" style={{ color: 'var(--ink-500)' }}>Total recorded</p>
@@ -279,14 +289,10 @@ function DayBook() {
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-baseline gap-2">
-                      <p className="text-sm font-medium truncate" style={{ color: 'var(--ink-800)' }}>{e.description}</p>
-                      {e.voucher_no && (
-                        <span className="text-[10px] shrink-0" style={{ color: 'var(--ink-400)' }}>{e.voucher_no}</span>
-                      )}
-                    </div>
-                    <p className="text-xs truncate mt-0.5" style={{ color: 'var(--ink-500)' }}>
+                    <p className="text-sm font-medium line-clamp-2 leading-snug" style={{ color: 'var(--ink-800)' }}>{e.description}</p>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--ink-500)' }}>
                       {payeeName} · {e.category?.name ?? e.payment_mode}
+                      {e.voucher_no && <span className="ml-1.5" style={{ color: 'var(--ink-400)' }}>{e.voucher_no}</span>}
                     </p>
                   </div>
 
@@ -344,7 +350,15 @@ function ExpenseDetailPanel({ expense: e, onClose }: { expense: Expense; onClose
           {e.cheque_number  && <Row label="Cheque"    value={e.cheque_number} />}
           {e.category       && <Row label="Category"  value={e.category.name} />}
           {e.corpus_plan    && <Row label="Corpus"    value={e.corpus_plan.name} />}
-          {e.notes          && <Row label="Notes"     value={e.notes} />}
+          {e.transaction    && (
+            <Row label="Bank debit" value={
+              <span className="text-right">
+                <span className="block">{e.transaction.value_date} · {formatINR(e.transaction.amount)}</span>
+                <span className="text-[11px]" style={{ color: 'var(--ink-400)' }}>{e.transaction.description.slice(0, 40)}</span>
+              </span>
+            } />
+          )}
+          {e.notes && !e.notes.startsWith('Imported from') && <Row label="Notes" value={e.notes} />}
         </div>
       </div>
 
@@ -373,6 +387,12 @@ function ExpenseDetailPanel({ expense: e, onClose }: { expense: Expense; onClose
                 </div>
               </div>
             ))}
+            {e.line_items.length > 1 && (
+              <div className="flex justify-between text-xs font-semibold pt-1 border-t" style={{ borderColor: 'var(--ink-200)', color: 'var(--ink-700)' }}>
+                <span>Total ({e.line_items.length} items)</span>
+                <span>{formatINR(lineTotal)}</span>
+              </div>
+            )}
           </div>
         </div>
       )}
