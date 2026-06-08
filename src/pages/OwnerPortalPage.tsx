@@ -53,6 +53,7 @@ function StatusPill({ status }: { status: string }) {
     Clear:   { bg: 'var(--ok-bg)',   color: 'var(--ok)',   icon: <CheckCircle2 size={13} /> },
     Partial: { bg: 'var(--warn-bg)', color: 'var(--warn)', icon: <Clock size={13} /> },
     Due:     { bg: 'var(--bad-bg)',  color: 'var(--bad)',  icon: <AlertCircle size={13} /> },
+    Arrears: { bg: 'var(--bad-bg)',  color: 'var(--bad)',  icon: <AlertCircle size={13} /> },
   }
   const c = cfg[status] ?? { bg: 'var(--ink-100)', color: 'var(--ink-500)', icon: null }
   return (
@@ -148,9 +149,10 @@ export default function OwnerPortalPage() {
   const startFy         = dues?.start_fiscal_year ?? currentFiscalYear()
   const allMonths       = elapsedMonthsSince(startFy)
   const paidCount       = monthlyRate > 0 ? Math.floor((dues?.collected_fy ?? 0) / monthlyRate) : 0
-  const effectiveStatus = dues
-    ? (dues.total_outstanding <= 0 ? 'Clear' : dues.status)
-    : 'Due'
+  const effectiveStatus = !dues ? 'Due'
+    : dues.total_outstanding <= 0 ? 'Clear'
+    : dues.pending <= 0 ? 'Arrears'
+    : dues.status
   const effectivePaidCount = effectiveStatus === 'Clear' && monthlyRate > 0
     ? Math.min(allMonths.length, Math.floor(((dues?.collected_fy ?? 0) + (dues?.advance_credits ?? 0)) / monthlyRate))
     : paidCount
@@ -196,6 +198,23 @@ export default function OwnerPortalPage() {
                   <span className="font-semibold" style={{ color: 'var(--ink-800)' }}>{effectivePaidCount} of {allMonths.length}</span>
                 </div>
               </>
+            ) : effectiveStatus === 'Arrears' ? (
+              <>
+                <div className="flex justify-between">
+                  <span style={{ color: 'var(--ink-500)' }}>Paid this year</span>
+                  <span className="font-semibold" style={{ color: 'var(--ok)' }}>{formatINR(dues.collected_fy)} ✓</span>
+                </div>
+                <div className="flex flex-col gap-1.5 pt-1 border-t" style={{ borderColor: 'var(--ink-100)' }}>
+                  <div className="flex justify-between">
+                    <span style={{ color: 'var(--ink-500)' }}>Previous balance</span>
+                    <span className="font-semibold" style={{ color: 'var(--bad)' }}>{formatINR(dues.arrears_maintenance)}</span>
+                  </div>
+                  <div className="flex justify-between border-t pt-1.5" style={{ borderColor: 'var(--ink-100)' }}>
+                    <span className="font-semibold" style={{ color: 'var(--ink-700)' }}>Outstanding</span>
+                    <span className="font-bold" style={{ color: 'var(--bad)' }}>{formatINR(dues.total_outstanding)}</span>
+                  </div>
+                </div>
+              </>
             ) : (
               <>
                 <div className="flex justify-between">
@@ -216,19 +235,14 @@ export default function OwnerPortalPage() {
                       <div className="flex flex-wrap gap-1 mt-0.5">
                         {pendingMonths.length <= 3
                           ? pendingMonths.map(lbl => (
-                              <span
-                                key={lbl}
-                                className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
-                                style={{ background: 'var(--bad-bg)', color: 'var(--bad)' }}
-                              >
+                              <span key={lbl} className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                                style={{ background: 'var(--bad-bg)', color: 'var(--bad)' }}>
                                 {lbl}
                               </span>
                             ))
                           : (
-                              <span
-                                className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
-                                style={{ background: 'var(--bad-bg)', color: 'var(--bad)' }}
-                              >
+                              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                                style={{ background: 'var(--bad-bg)', color: 'var(--bad)' }}>
                                 {pendingMonths[0]} – {pendingMonths[pendingMonths.length - 1]} ({pendingMonths.length} months)
                               </span>
                             )
@@ -237,23 +251,19 @@ export default function OwnerPortalPage() {
                     )}
                   </div>
                 )}
+                {dues.arrears_maintenance > 0 && (
+                  <div className="flex flex-col gap-1.5 pt-1 border-t" style={{ borderColor: 'var(--ink-100)' }}>
+                    <div className="flex justify-between">
+                      <span style={{ color: 'var(--ink-500)' }}>Previous arrears</span>
+                      <span className="font-semibold" style={{ color: 'var(--bad)' }}>{formatINR(dues.arrears_maintenance)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-semibold">Total outstanding</span>
+                      <span className="font-bold" style={{ color: 'var(--bad)' }}>{formatINR(dues.total_outstanding)}</span>
+                    </div>
+                  </div>
+                )}
               </>
-            )}
-            {dues.arrears_maintenance > 0 && (
-              <div className="flex flex-col gap-1.5 pt-1 border-t" style={{ borderColor: 'var(--ink-100)' }}>
-                <div className="flex justify-between">
-                  <span style={{ color: 'var(--ink-500)' }}>Previous arrears</span>
-                  <span className="font-semibold" style={{ color: 'var(--bad)' }}>
-                    {formatINR(dues.arrears_maintenance)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-semibold">Total outstanding</span>
-                  <span className="font-bold" style={{ color: 'var(--bad)' }}>
-                    {formatINR(dues.total_outstanding)}
-                  </span>
-                </div>
-              </div>
             )}
           </div>
         ) : (
