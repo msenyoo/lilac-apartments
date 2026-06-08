@@ -1446,7 +1446,6 @@ function StaffTab() {
   const [editStaff, setEditStaff] = useState<StaffMember | null>(null)
   const [showFormer, setShowFormer] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<StaffMember | null>(null)
-  const [deleteBlocked, setDeleteBlocked] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [actionBusy, setActionBusy] = useState<string | null>(null)
 
@@ -1486,22 +1485,19 @@ function StaffTab() {
       .ilike('payee_name_raw', s.name)
     if (error) { toast.error(error.message); return }
     if ((count ?? 0) > 0) {
-      setDeleteBlocked(true)
-      setDeleteTarget(s)
-      setDeleteConfirmOpen(true)
+      toast.error('Cannot delete: staff member has linked expense records')
       return
     }
-    setDeleteBlocked(false)
     setDeleteTarget(s)
     setDeleteConfirmOpen(true)
   }
 
   async function handleDeleteConfirm() {
-    if (!deleteTarget || deleteBlocked) { setDeleteConfirmOpen(false); return }
+    if (!deleteTarget) { setDeleteConfirmOpen(false); return }
     const { error } = await supabase.from('staff').delete().eq('id', deleteTarget.id)
+    if (error) { toast.error(error.message); return }
     setDeleteConfirmOpen(false)
     setDeleteTarget(null)
-    if (error) { toast.error(error.message); return }
     qc.invalidateQueries({ queryKey: ['staff'] })
   }
 
@@ -1588,21 +1584,12 @@ function StaffTab() {
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{deleteBlocked ? 'Cannot delete staff member' : 'Delete staff member?'}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {deleteBlocked
-                ? `${deleteTarget?.name} has linked expense records and cannot be deleted.`
-                : 'Delete staff member? This cannot be undone.'}
-            </AlertDialogDescription>
+            <AlertDialogTitle>Delete staff member?</AlertDialogTitle>
+            <AlertDialogDescription>Delete {deleteTarget?.name}? This cannot be undone.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            {deleteBlocked
-              ? <AlertDialogCancel>OK</AlertDialogCancel>
-              : <>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleDeleteConfirm} className="bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
-                </>
-            }
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteConfirm} className="bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -1792,7 +1779,7 @@ function EditStaffDialog({ staff, onClose }: { staff: StaffMember; onClose: () =
       if (error) throw error
       qc.invalidateQueries({ queryKey: ['staff'] })
       onClose()
-    } catch (e: any) { setErr(e.message) }
+    } catch (e: any) { setErr(e.message); toast.error(e.message ?? 'Failed to update staff') }
     finally { setSaving(false) }
   }
 
