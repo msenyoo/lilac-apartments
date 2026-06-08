@@ -1322,7 +1322,7 @@ function ReconcileTab() {
                 {expenses.map(e => (
                   <button
                     key={e.id}
-                    onClick={() => setSelectedExpenseId(id => id === e.id ? null : e.id)}
+                    onClick={() => { setForceMatchOpen(false); setSelectedExpenseId(id => id === e.id ? null : e.id) }}
                     className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-[var(--ink-50)] text-left transition-colors ${
                       selectedExpenseId === e.id ? 'bg-[var(--brand-50)] border-l-2 border-violet-500' : ''
                     }`}
@@ -1371,7 +1371,7 @@ function ReconcileTab() {
                 {bankDRs.map(t => (
                   <button
                     key={t.id}
-                    onClick={() => setSelectedTxnId(id => id === t.id ? null : t.id)}
+                    onClick={() => { setForceMatchOpen(false); setSelectedTxnId(id => id === t.id ? null : t.id) }}
                     className={(() => {
                       const tier = getSuggestionTier(t)
                       const base = 'w-full flex items-center gap-3 px-4 py-3 text-left transition-colors '
