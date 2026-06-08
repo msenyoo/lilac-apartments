@@ -182,7 +182,17 @@ export default function OwnerPortalPage() {
         {dues ? (
           <div className="flex flex-col gap-1.5 text-[13px]">
             {effectiveStatus === 'Clear' ? (
-              <p style={{ color: 'var(--ok)' }}>No maintenance due this year</p>
+              <>
+                <p style={{ color: 'var(--ok)' }}>No maintenance due this year</p>
+                <div className="flex justify-between pt-1 border-t" style={{ borderColor: 'var(--ink-100)' }}>
+                  <span style={{ color: 'var(--ink-500)' }}>Paid this year</span>
+                  <span className="font-semibold" style={{ color: 'var(--ok)' }}>{formatINR(dues.collected_fy)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span style={{ color: 'var(--ink-500)' }}>Months covered</span>
+                  <span className="font-semibold" style={{ color: 'var(--ink-800)' }}>{paidCount} of {allMonths.length}</span>
+                </div>
+              </>
             ) : (
               <>
                 <div className="flex justify-between">
@@ -249,32 +259,41 @@ export default function OwnerPortalPage() {
       </div>
 
       {/* Corpus cards — one per active plan */}
-      {corpusList.map(corpus => (
-        <div key={corpus.plan_id} className="surface !p-5 flex flex-col gap-3">
-          <p className="font-semibold text-[14px]">
-            Corpus — {corpus.plan_name}
-          </p>
-          <div className="flex flex-col gap-2">
-            <div className="flex items-end justify-between">
-              <span className="text-[22px] font-extrabold" style={{ color: 'var(--brand-700)' }}>
-                {formatINR(corpus.collected)}
-              </span>
-              <span className="text-[12px]" style={{ color: 'var(--ink-400)' }}>
-                of {formatINR(corpus.corpus_target)}
-              </span>
+      {corpusList.map(corpus => {
+        const isDone = corpus.status === 'Done'
+        return (
+          <div key={corpus.plan_id} className="surface !p-5 flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <p className="font-semibold text-[14px]">Corpus — {corpus.plan_name}</p>
+              {isDone && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[12px] font-semibold"
+                  style={{ background: 'var(--ok-bg)', color: 'var(--ok)' }}>
+                  <CheckCircle2 size={13} /> Paid
+                </span>
+              )}
             </div>
-            <div className="h-2 rounded-full overflow-hidden" style={{ background: 'var(--ink-100)' }}>
-              <div
-                className="h-full rounded-full transition-all"
-                style={{ width: `${Math.min(corpus.pct_paid ?? 0, 100)}%`, background: 'var(--brand-500)' }}
-              />
+            <div className="flex flex-col gap-2">
+              <div className="flex items-end justify-between">
+                <span className="text-[22px] font-extrabold" style={{ color: isDone ? 'var(--ok)' : 'var(--brand-700)' }}>
+                  {formatINR(corpus.collected)}
+                </span>
+                <span className="text-[12px]" style={{ color: 'var(--ink-400)' }}>
+                  of {formatINR(corpus.corpus_target)}
+                </span>
+              </div>
+              <div className="h-2 rounded-full overflow-hidden" style={{ background: 'var(--ink-100)' }}>
+                <div
+                  className="h-full rounded-full transition-all"
+                  style={{ width: `${Math.min(corpus.pct_paid ?? 0, 100)}%`, background: isDone ? 'var(--ok)' : 'var(--brand-500)' }}
+                />
+              </div>
+              <p className="text-[11.5px]" style={{ color: isDone ? 'var(--ok)' : 'var(--ink-400)' }}>
+                {isDone ? 'Fully paid — thank you!' : `${corpus.pct_paid?.toFixed(0) ?? 0}% paid`}
+              </p>
             </div>
-            <p className="text-[11.5px]" style={{ color: 'var(--ink-400)' }}>
-              {corpus.pct_paid?.toFixed(0) ?? 0}% complete · {corpus.status}
-            </p>
           </div>
-        </div>
-      ))}
+        )
+      })}
 
       {/* Previous corpus arrears from closed plans */}
       {corpusArrears.map(row => (
