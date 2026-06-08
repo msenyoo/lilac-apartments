@@ -1,7 +1,7 @@
 -- Deposits (Fixed Deposits / term deposits) table
 CREATE TABLE IF NOT EXISTS public.deposits (
   id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  deposit_no     text NOT NULL,
+  deposit_no     text NOT NULL UNIQUE,
   bank           text NOT NULL,
   principal      integer NOT NULL,
   interest_rate  numeric(5,2) NOT NULL,
@@ -35,11 +35,23 @@ ALTER TABLE public.deposits ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "deposits_read" ON public.deposits
   FOR SELECT TO authenticated USING (true);
 
-CREATE POLICY "deposits_admin_write" ON public.deposits
-  FOR ALL TO authenticated
+CREATE POLICY "deposits_admin_insert" ON public.deposits
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    EXISTS (SELECT 1 FROM public.user_roles WHERE user_id = auth.uid() AND role = 'admin')
+  );
+
+CREATE POLICY "deposits_admin_update" ON public.deposits
+  FOR UPDATE TO authenticated
   USING (
     EXISTS (SELECT 1 FROM public.user_roles WHERE user_id = auth.uid() AND role = 'admin')
   )
   WITH CHECK (
+    EXISTS (SELECT 1 FROM public.user_roles WHERE user_id = auth.uid() AND role = 'admin')
+  );
+
+CREATE POLICY "deposits_admin_delete" ON public.deposits
+  FOR DELETE TO authenticated
+  USING (
     EXISTS (SELECT 1 FROM public.user_roles WHERE user_id = auth.uid() AND role = 'admin')
   );
