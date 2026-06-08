@@ -319,15 +319,21 @@ function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat
               {flat.pending > 0 ? formatINR(flat.pending) : '✓ Clear'}
             </span>
           </div>
+          {flat.arrears_maintenance > 0 && (
+            <div className="flex justify-between">
+              <span style={{ color: 'var(--ink-500)' }}>Previous arrears</span>
+              <span className="font-medium" style={{ color: 'var(--bad)' }}>{formatINR(flat.arrears_maintenance)}</span>
+            </div>
+          )}
           {flat.advance_credits > 0 && (
             <div className="flex justify-between">
               <span style={{ color: 'var(--ink-500)' }}>Advance paid</span>
               <span className="font-medium" style={{ color: 'var(--ok)' }}>− {formatINR(flat.advance_credits)}</span>
             </div>
           )}
-          {flat.advance_credits > 0 && (
+          {(flat.arrears_maintenance > 0 || flat.advance_credits > 0) && (
             <div className="flex justify-between border-t hairline pt-1.5">
-              <span className="font-semibold" style={{ color: 'var(--ink-700)' }}>Net outstanding</span>
+              <span className="font-semibold" style={{ color: 'var(--ink-700)' }}>Total outstanding</span>
               <span className="font-bold" style={{ color: flat.total_outstanding > 0 ? 'var(--bad)' : 'var(--ok)' }}>
                 {flat.total_outstanding > 0 ? formatINR(flat.total_outstanding) : '✓ Clear'}
               </span>
