@@ -1326,7 +1326,8 @@ function VendorsTab() {
   const vendors = showInactive ? allVendors : allVendors.filter(v => v.is_active)
 
   async function toggleActive(v: Vendor) {
-    await supabase.from('vendors').update({ is_active: !v.is_active }).eq('id', v.id)
+    const { error } = await supabase.from('vendors').update({ is_active: !v.is_active }).eq('id', v.id)
+    if (error) { toast.error(error.message); return }
     qc.invalidateQueries({ queryKey: ['vendors'] })
     qc.invalidateQueries({ queryKey: ['vendors', 'active'] })
   }
@@ -1338,7 +1339,8 @@ function VendorsTab() {
       setDeleteTarget(null)
       return
     }
-    await supabase.from('vendors').delete().eq('id', v.id)
+    const { error } = await supabase.from('vendors').delete().eq('id', v.id)
+    if (error) { toast.error(error.message); setDeleteTarget(null); return }
     qc.invalidateQueries({ queryKey: ['vendors'] })
     qc.invalidateQueries({ queryKey: ['vendors', 'active'] })
     setDeleteTarget(null)
@@ -1538,6 +1540,7 @@ function AddVendorDialog({ open, onClose }: { open: boolean; onClose: () => void
       if (error) throw error
       toast.success('Vendor added')
       qc.invalidateQueries({ queryKey: ['vendors'] })
+      qc.invalidateQueries({ queryKey: ['vendors', 'active'] })
       reset(); onClose()
     } catch (e: any) { setErr(e.message); toast.error(e.message ?? 'Failed to add vendor') }
     finally { setSaving(false) }
@@ -1558,7 +1561,7 @@ function AddVendorDialog({ open, onClose }: { open: boolean; onClose: () => void
               <Select value={type} onValueChange={setType}>
                 <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
                 <SelectContent>
-                  {['Individual','Company','Agency','Municipal'].map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                  {VENDOR_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
