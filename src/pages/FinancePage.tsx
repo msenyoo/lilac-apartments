@@ -1,40 +1,27 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { PiggyBank, Plus, CalendarClock } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { supabase, type Deposit } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useRoleCtx } from '@/contexts/RoleContext'
 import { toast } from 'sonner'
 
-interface Deposit {
-  id: string
-  deposit_no: string
-  bank: string
-  principal: number
-  interest_rate: number
-  opened_date: string
-  maturity_date: string
-  matured_date: string | null
-  maturity_amount: number | null
-  status: 'active' | 'matured' | 'closed'
-  source_type: string
-  corpus_plan_id: string | null
-  notes: string | null
-  created_at: string
+function parseLocalDate(dateStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return new Date(y, m - 1, d)
 }
 
 function daysUntil(dateStr: string): number {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  const target = new Date(dateStr)
-  target.setHours(0, 0, 0, 0)
+  const target = parseLocalDate(dateStr)
   return Math.round((target.getTime() - today.getTime()) / 86_400_000)
 }
 
 function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+  return parseLocalDate(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
 const STATUS_STYLES: Record<Deposit['status'], string> = {
