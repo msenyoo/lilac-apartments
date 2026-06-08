@@ -332,7 +332,7 @@ function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat
         {!payments?.length ? (
           <p className="text-[13px]" style={{ color: 'var(--ink-400)' }}>No payments yet</p>
         ) : (
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2 overflow-y-auto" style={{ maxHeight: 220 }}>
             {payments.map(p => (
               <div key={p.id} className="flex justify-between text-[13px]">
                 <div>
