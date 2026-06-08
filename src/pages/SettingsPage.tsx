@@ -616,6 +616,7 @@ function CategoriesSettings() {
     qc.invalidateQueries({ queryKey: ['expense-categories-all'] })
     qc.invalidateQueries({ queryKey: ['utility-categories'] })
     qc.invalidateQueries({ queryKey: ['expense-categories'] })
+    qc.invalidateQueries({ queryKey: ['expense-categories-simple'] })
   }
 
   async function toggleActive(cat: ExpenseCategory) {
@@ -628,12 +629,12 @@ function CategoriesSettings() {
   }
 
   async function handleDelete(cat: ExpenseCategory) {
-    const { count, error: countErr } = await supabase
-      .from('expenses')
-      .select('id', { count: 'exact', head: true })
-      .eq('category_id', cat.id)
-    if (countErr) { toast.error(countErr.message); return }
-    if ((count ?? 0) > 0) { toast.error('Cannot delete: category has linked expenses'); return }
+    const [{ count: expCount, error: e1 }, { count: liCount, error: e2 }] = await Promise.all([
+      supabase.from('expenses').select('id', { count: 'exact', head: true }).eq('category_id', cat.id),
+      supabase.from('expense_line_items').select('id', { count: 'exact', head: true }).eq('category_id', cat.id),
+    ])
+    if (e1 || e2) { toast.error((e1 ?? e2)!.message); return }
+    if ((expCount ?? 0) + (liCount ?? 0) > 0) { toast.error('Cannot delete: category has linked expenses'); return }
     const { error } = await supabase.from('expense_categories').delete().eq('id', cat.id)
     if (error) { toast.error(error.message); return }
     setDeleteTarget(null)
