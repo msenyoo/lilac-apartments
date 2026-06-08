@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRoleCtx } from '@/contexts/RoleContext'
 import { useForm, useFieldArray, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Plus, Trash2, Download, Receipt, Users, Building, X, GitMerge, CheckCircle2, Paperclip, RefreshCcw, Coins, Upload, Loader2, Trash, Pencil, Ban, Unlink, AlertTriangle } from 'lucide-react'
+import { Plus, Trash2, Download, Receipt, Users, Building, X, GitMerge, CheckCircle2, Paperclip, RefreshCcw, Coins, Upload, Loader2, Trash, Pencil, Ban, Unlink, AlertTriangle, PiggyBank } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
@@ -1116,6 +1117,7 @@ interface UnmatchedDR {
 function ReconcileTab() {
   const { canWrite } = useRoleCtx()
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const [selectedExpenseId, setSelectedExpenseId] = useState<string | null>(null)
   const [selectedTxnId,     setSelectedTxnId]     = useState<string | null>(null)
   const [forceMatchOpen,    setForceMatchOpen]    = useState(false)
@@ -1142,7 +1144,6 @@ function ReconcileTab() {
         .select('id,value_date,description,amount,txn_id,category')
         .eq('cr_dr', 'DR')
         .neq('row_type', 'VOIDED')
-        .neq('category', 'FD')
         .is('expense_id', null)
         .is('deposit_id', null)
         .order('value_date', { ascending: false })
@@ -1298,6 +1299,21 @@ function ReconcileTab() {
               {matchMutation.isPending ? 'Matching…' : 'Match anyway'}
             </Button>
           </div>
+        </div>
+      )}
+
+      {selectedTxnId && !selectedExpenseId && selTxn && (
+        <div className="flex items-center gap-3 p-3 rounded-xl" style={{ background: 'var(--ink-50)', border: '1px solid var(--ink-200)' }}>
+          <PiggyBank size={16} className="shrink-0" style={{ color: 'var(--ink-400)' }} />
+          <div className="flex-1 text-sm truncate" style={{ color: 'var(--ink-600)' }}>
+            {selTxn.description.slice(0, 50)} · {formatINR(selTxn.amount)}
+          </div>
+          <Button size="sm" variant="outline" className="shrink-0" onClick={() => navigate('/finance')}>
+            <PiggyBank size={13} className="mr-1.5" /> Mark as Deposit →
+          </Button>
+          <button onClick={() => setSelectedTxnId(null)} className="shrink-0" style={{ color: 'var(--ink-400)' }}>
+            <X size={15} />
+          </button>
         </div>
       )}
 
