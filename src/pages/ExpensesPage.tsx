@@ -380,6 +380,8 @@ function ExpenseDetailPanel({
       }).eq('id', e.id)
       if (error) throw error
       qc.invalidateQueries({ queryKey: ['expenses'] })
+      qc.invalidateQueries({ queryKey: ['unreconciled-expenses'] })
+      qc.invalidateQueries({ queryKey: ['unreconciled-count'] })
       setVoidOpen(false)
       setVoidReason('')
       onVoidSuccess()
@@ -648,6 +650,7 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
         .eq('vendor_id', watchedVendorId!)
         .gte('expense_date', `${fyYear}-04-01`)
         .lte('expense_date', `${fyYear + 1}-03-31`)
+        .is('voided_at', null)
       return (data ?? []).reduce((s: number, r: any) => s + r.amount, 0)
     },
   })
@@ -1479,12 +1482,12 @@ function StaffTab() {
   }
 
   async function handleDeleteClick(s: StaffMember) {
-    const { count, error } = await supabase
-      .from('expense_line_items')
-      .select('id', { count: 'exact', head: true })
-      .ilike('payee_name_raw', s.name)
-    if (error) { toast.error(error.message); return }
-    if ((count ?? 0) > 0) {
+    const [{ count: expCount, error: e1 }, { count: liCount, error: e2 }] = await Promise.all([
+      supabase.from('expenses').select('id', { count: 'exact', head: true }).eq('staff_id', s.id),
+      supabase.from('expense_line_items').select('id', { count: 'exact', head: true }).eq('staff_id', s.id),
+    ])
+    if (e1 || e2) { toast.error((e1 ?? e2)!.message); return }
+    if ((expCount ?? 0) + (liCount ?? 0) > 0) {
       toast.error('Cannot delete: staff member has linked expense records')
       return
     }
