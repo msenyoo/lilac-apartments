@@ -216,6 +216,8 @@ export default function DuesPage() {
 
 function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat: DuesEntry; fiscalYear: number; startFiscalYear: number; onClose: () => void }) {
   const [copied, setCopied] = useState(false)
+  const [showAddArrears, setShowAddArrears] = useState(false)
+  const { isAdmin } = useRoleCtx()
 
   const { data: payments } = useQuery({
     queryKey: ['flat-payments', flat.flat_code, startFiscalYear, fiscalYear],
@@ -274,7 +276,18 @@ function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat
       <div className="surface !p-4 flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="font-bold text-[15px]">{flat.flat_code} — {flat.bhk_type}</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-[15px]">{flat.flat_code} — {flat.bhk_type}</h3>
+              {isAdmin && (
+                <button
+                  onClick={() => setShowAddArrears(true)}
+                  className="text-[11px] font-semibold px-1.5 py-0.5 rounded-md border transition-colors hover:bg-[var(--ink-100)]"
+                  style={{ color: 'var(--ink-500)', borderColor: 'var(--ink-200)' }}
+                >
+                  + Arrears
+                </button>
+              )}
+            </div>
             <p className="text-[12px] mt-0.5" style={{ color: 'var(--ink-400)' }}>Block {flat.block}</p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[var(--ink-100)]" style={{ color: 'var(--ink-500)' }}>
@@ -324,7 +337,7 @@ function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat
           </button>
         )}
 
-        <ArrearsMgmt flatCode={flat.flat_code} />
+        <ArrearsMgmt flatCode={flat.flat_code} showAdd={showAddArrears} onCloseAdd={() => setShowAddArrears(false)} />
       </div>
 
       <div className="surface !p-4">
@@ -351,10 +364,9 @@ function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat
   )
 }
 
-function ArrearsMgmt({ flatCode }: { flatCode: string }) {
+function ArrearsMgmt({ flatCode, showAdd = false, onCloseAdd }: { flatCode: string; showAdd?: boolean; onCloseAdd?: () => void }) {
   const qc = useQueryClient()
   const { isAdmin } = useRoleCtx()
-  const [showAdd, setShowAdd] = useState(false)
   const [editRow, setEditRow] = useState<any>(null)
 
   const { data: flatIdData } = useQuery({
@@ -387,21 +399,13 @@ function ArrearsMgmt({ flatCode }: { flatCode: string }) {
     qc.invalidateQueries({ queryKey: ['dues'] })
   }
 
+  if (arrears.length === 0 && !showAdd && !editRow) return null
+
   return (
     <div className="flex flex-col gap-2 border-t hairline pt-3">
-      <div className="flex items-center justify-between">
-        <p className="text-[12px] font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-400)' }}>
-          Maintenance Arrears
-        </p>
-        {isAdmin && (
-          <Button size="sm" variant="outline" onClick={() => setShowAdd(true)}>
-            + Add
-          </Button>
-        )}
-      </div>
-      {arrears.length === 0 && (
-        <p className="text-[12px]" style={{ color: 'var(--ink-400)' }}>None</p>
-      )}
+      <p className="text-[11.5px] font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-400)' }}>
+        Maintenance Arrears
+      </p>
       {arrears.map((row: any) => (
         <div key={row.id} className="flex items-center justify-between text-[12.5px]">
           <span>{row.source_label}</span>
@@ -424,11 +428,11 @@ function ArrearsMgmt({ flatCode }: { flatCode: string }) {
         <ArrearsDialog
           flatId={flatIdData}
           row={editRow}
-          onClose={() => { setShowAdd(false); setEditRow(null) }}
+          onClose={() => { onCloseAdd?.(); setEditRow(null) }}
           onSaved={() => {
             qc.invalidateQueries({ queryKey: ['arrears-for-flat', flatCode] })
             qc.invalidateQueries({ queryKey: ['dues'] })
-            setShowAdd(false); setEditRow(null)
+            onCloseAdd?.(); setEditRow(null)
           }}
         />
       )}
