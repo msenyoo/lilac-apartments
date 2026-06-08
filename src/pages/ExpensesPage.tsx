@@ -2028,7 +2028,7 @@ function AddRecurringDialog({ open, onClose }: { open: boolean; onClose: () => v
     const { data } = await supabase.from('vendors').select('id,name').eq('is_active', true).order('name')
     return (data ?? []) as { id: string; name: string }[]
   }})
-  const { data: categories = [] } = useQuery({ queryKey: ['expense-categories'], queryFn: async () => {
+  const { data: categories = [] } = useQuery({ queryKey: ['expense-categories-simple'], queryFn: async () => {
     const { data } = await supabase.from('expense_categories').select('id,name').eq('is_active', true).order('sort_order')
     return (data ?? []) as { id: string; name: string }[]
   }})

@@ -10,7 +10,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialog, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import {
@@ -784,12 +784,12 @@ function CategoriesSettings() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
+            <Button
+              variant="destructive"
               onClick={() => deleteTarget && handleDelete(deleteTarget)}
-              className="bg-red-600 hover:bg-red-700"
             >
               Delete
-            </AlertDialogAction>
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
