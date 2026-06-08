@@ -891,6 +891,7 @@ function ReconcileTab() {
         .select('id,value_date,description,amount,txn_id,category')
         .eq('cr_dr', 'DR')
         .neq('row_type', 'VOIDED')
+        .neq('category', 'FD')
         .is('expense_id', null)
         .order('value_date', { ascending: false })
       return (data ?? []) as UnmatchedDR[]
