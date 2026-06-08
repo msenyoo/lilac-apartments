@@ -12,6 +12,7 @@ import ReportPage         from '@/pages/ReportPage'
 import FlatsPage          from '@/pages/FlatsPage'
 import SettingsPage       from '@/pages/SettingsPage'
 import ExpensesPage       from '@/pages/ExpensesPage'
+import FinancePage        from '@/pages/FinancePage'
 import AnnouncementsPage  from '@/pages/AnnouncementsPage'
 import ActivityPage       from '@/pages/ActivityPage'
 import UsersPage          from '@/pages/UsersPage'
@@ -53,6 +54,7 @@ export default function App() {
           <Route path="transactions"  element={<TransactionsPage />} />
           <Route path="dues"          element={<DuesPage />} />
           <Route path="corpus"        element={<CorpusPage />} />
+          <Route path="finance"       element={<FinancePage />} />
           <Route path="expenses"      element={<ExpensesPage />} />
           <Route path="reports"       element={<ReportPage />} />
           <Route path="flats"         element={<FlatsPage />} />
