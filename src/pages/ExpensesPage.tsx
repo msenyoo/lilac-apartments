@@ -354,7 +354,7 @@ function ExpenseDetailPanel({ expense: e, onClose }: { expense: Expense; onClose
             <Row label="Bank debit" value={
               <span className="text-right">
                 <span className="block">{e.transaction.value_date} · {formatINR(e.transaction.amount)}</span>
-                <span className="text-[11px]" style={{ color: 'var(--ink-400)' }}>{e.transaction.description.slice(0, 40)}</span>
+                <span className="block truncate text-[11px]" style={{ color: 'var(--ink-400)' }}>{e.transaction.description}</span>
               </span>
             } />
           )}
@@ -407,7 +407,7 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex justify-between gap-2">
       <span className="shrink-0" style={{ color: 'var(--ink-500)' }}>{label}</span>
-      <span className="text-right" style={{ color: 'var(--ink-800)' }}>{value}</span>
+      <span className="text-right min-w-0 overflow-hidden" style={{ color: 'var(--ink-800)' }}>{value}</span>
     </div>
   )
 }
