@@ -323,6 +323,8 @@ function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat
             }
           </button>
         )}
+
+        <ArrearsMgmt flatCode={flat.flat_code} />
       </div>
 
       <div className="surface !p-4">
@@ -344,10 +346,6 @@ function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat
             ))}
           </div>
         )}
-      </div>
-
-      <div className="surface !p-4">
-        <ArrearsMgmt flatCode={flat.flat_code} />
       </div>
     </div>
   )
@@ -390,7 +388,7 @@ function ArrearsMgmt({ flatCode }: { flatCode: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-2 pt-3">
+    <div className="flex flex-col gap-2 border-t hairline pt-3">
       <div className="flex items-center justify-between">
         <p className="text-[12px] font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-400)' }}>
           Maintenance Arrears
