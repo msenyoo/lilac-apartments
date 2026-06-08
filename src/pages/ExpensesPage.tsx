@@ -37,7 +37,7 @@ interface RecurringTemplate {
 }
 interface PettyCashTxn { id: string; txn_date: string; txn_type: string; amount: number; notes: string | null }
 interface Attachment { id: string; expense_id: string; file_name: string; file_url: string; file_size: number | null; uploaded_at: string }
-interface StaffMember { id: string; name: string; role: string; assigned_area: string | null; phone: string | null; left_date: string | null }
+interface StaffMember { id: string; name: string; role: string; assigned_area: string | null; phone: string | null; joined_date: string | null; left_date: string | null }
 interface Expense {
   id: string; expense_date: string; description: string
   payee_type: string; payee_name_raw: string | null
@@ -1440,8 +1440,15 @@ function VendorsTab() {
 // ── Staff tab ─────────────────────────────────────────────────
 
 function StaffTab() {
-  const { canWrite } = useRoleCtx()
+  const { canWrite, isAdmin } = useRoleCtx()
+  const qc = useQueryClient()
   const [addOpen, setAddOpen] = useState(false)
+  const [editStaff, setEditStaff] = useState<StaffMember | null>(null)
+  const [showFormer, setShowFormer] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<StaffMember | null>(null)
+  const [deleteBlocked, setDeleteBlocked] = useState(false)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [actionBusy, setActionBusy] = useState<string | null>(null)
 
   const { data: staffList = [], isLoading } = useQuery({
     queryKey: ['staff'],
@@ -1453,64 +1460,152 @@ function StaffTab() {
 
   const active   = staffList.filter(s => !s.left_date)
   const inactive = staffList.filter(s => s.left_date)
+  const displayed = showFormer ? staffList : active
+
+  async function handleMarkLeft(s: StaffMember) {
+    setActionBusy(s.id)
+    const today = new Date().toISOString().slice(0, 10)
+    const { error } = await supabase.from('staff').update({ left_date: today }).eq('id', s.id)
+    setActionBusy(null)
+    if (error) { toast.error(error.message); return }
+    qc.invalidateQueries({ queryKey: ['staff'] })
+  }
+
+  async function handleReactivate(s: StaffMember) {
+    setActionBusy(s.id)
+    const { error } = await supabase.from('staff').update({ left_date: null }).eq('id', s.id)
+    setActionBusy(null)
+    if (error) { toast.error(error.message); return }
+    qc.invalidateQueries({ queryKey: ['staff'] })
+  }
+
+  async function handleDeleteClick(s: StaffMember) {
+    const { count, error } = await supabase
+      .from('expense_line_items')
+      .select('id', { count: 'exact', head: true })
+      .ilike('payee_name_raw', s.name)
+    if (error) { toast.error(error.message); return }
+    if ((count ?? 0) > 0) {
+      setDeleteBlocked(true)
+      setDeleteTarget(s)
+      setDeleteConfirmOpen(true)
+      return
+    }
+    setDeleteBlocked(false)
+    setDeleteTarget(s)
+    setDeleteConfirmOpen(true)
+  }
+
+  async function handleDeleteConfirm() {
+    if (!deleteTarget || deleteBlocked) { setDeleteConfirmOpen(false); return }
+    const { error } = await supabase.from('staff').delete().eq('id', deleteTarget.id)
+    setDeleteConfirmOpen(false)
+    setDeleteTarget(null)
+    if (error) { toast.error(error.message); return }
+    qc.invalidateQueries({ queryKey: ['staff'] })
+  }
 
   if (isLoading) return <div className="surface h-32 animate-pulse" style={{ background: 'var(--ink-100)' }} />
 
   return (
     <div className="flex flex-col gap-3">
-      {canWrite && (
-        <div className="flex justify-end">
+      <div className="flex items-center justify-between">
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={showFormer}
+            onChange={e => setShowFormer(e.target.checked)}
+            className="rounded border-gray-300"
+          />
+          <span className="text-sm" style={{ color: 'var(--ink-500)' }}>Show former staff</span>
+        </label>
+        {canWrite && (
           <Button size="sm" onClick={() => setAddOpen(true)} className="flex items-center gap-1.5">
             <Plus size={14} /> Add Staff
           </Button>
-        </div>
-      )}
-
-      {staffList.length === 0 ? (
-        <div className="surface !p-10 text-center" style={{ color: 'var(--ink-400)' }}>
-          <Users size={28} className="mx-auto mb-2 opacity-40" />
-          <p className="text-sm">No staff added yet</p>
-        </div>
-      ) : (<>
-      <div className="surface !p-0 divide-rows">
-        <div className="px-4 py-2 rounded-t-xl" style={{ background: 'var(--ink-50)' }}>
-          <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-500)' }}>Active ({active.length})</p>
-        </div>
-        {active.map(s => (
-          <div key={s.id} className="flex items-center gap-3 px-4 py-3">
-            <div className="w-8 h-8 rounded-full bg-[var(--brand-100)] flex items-center justify-center shrink-0">
-              <Users size={14} className="text-violet-500" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium" style={{ color: 'var(--ink-800)' }}>{s.name}</p>
-              <p className="text-xs" style={{ color: 'var(--ink-400)' }}>{s.role}{s.assigned_area ? ` · ${s.assigned_area}` : ''}{s.phone ? ` · ${s.phone}` : ''}</p>
-            </div>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">Active</span>
-          </div>
-        ))}
+        )}
       </div>
 
-      {inactive.length > 0 && (
+      {displayed.length === 0 ? (
+        <div className="surface !p-10 text-center" style={{ color: 'var(--ink-400)' }}>
+          <Users size={28} className="mx-auto mb-2 opacity-40" />
+          <p className="text-sm">{showFormer ? 'No staff found' : 'No active staff'}</p>
+        </div>
+      ) : (
         <div className="surface !p-0 divide-rows">
-          <div className="px-4 py-2 rounded-t-xl" style={{ background: 'var(--ink-50)' }}>
-            <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-500)' }}>Former ({inactive.length})</p>
-          </div>
-          {inactive.map(s => (
-            <div key={s.id} className="flex items-center gap-3 px-4 py-3 opacity-60">
-              <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: 'var(--ink-100)' }}>
-                <Users size={14} style={{ color: 'var(--ink-400)' }} />
+          {displayed.map(s => (
+            <div key={s.id} className={`flex items-center gap-3 px-4 py-3 ${s.left_date ? 'opacity-60' : ''}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${s.left_date ? '' : 'bg-[var(--brand-100)]'}`} style={s.left_date ? { background: 'var(--ink-100)' } : {}}>
+                <Users size={14} className={s.left_date ? '' : 'text-violet-500'} style={s.left_date ? { color: 'var(--ink-400)' } : {}} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium" style={{ color: 'var(--ink-700)' }}>{s.name}</p>
-                <p className="text-xs" style={{ color: 'var(--ink-400)' }}>{s.role}{s.left_date ? ` · Left ${s.left_date}` : ''}</p>
+                <p className="text-sm font-medium" style={{ color: s.left_date ? 'var(--ink-700)' : 'var(--ink-800)' }}>{s.name}</p>
+                <p className="text-xs" style={{ color: 'var(--ink-400)' }}>
+                  {s.role}{s.assigned_area ? ` · ${s.assigned_area}` : ''}{s.phone ? ` · ${s.phone}` : ''}
+                  {s.left_date ? ` · Left ${s.left_date}` : ''}
+                </p>
+              </div>
+              {s.left_date
+                ? <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium shrink-0">Left</span>
+                : <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium shrink-0">Active</span>
+              }
+              <div className="flex items-center gap-1 shrink-0">
+                {canWrite && (
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setEditStaff(s)}>
+                    <Pencil size={13} />
+                  </Button>
+                )}
+                {isAdmin && (
+                  s.left_date
+                    ? (
+                      <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={actionBusy === s.id} onClick={() => handleReactivate(s)}>
+                        Reactivate
+                      </Button>
+                    ) : (
+                      <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={actionBusy === s.id} onClick={() => handleMarkLeft(s)}>
+                        Mark as left
+                      </Button>
+                    )
+                )}
+                {isAdmin && (
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-400 hover:text-red-600" onClick={() => handleDeleteClick(s)}>
+                    <Trash2 size={13} />
+                  </Button>
+                )}
               </div>
             </div>
           ))}
         </div>
       )}
-      </>)}
+
+      {showFormer && inactive.length === 0 && active.length > 0 && (
+        <p className="text-xs text-center" style={{ color: 'var(--ink-400)' }}>No former staff</p>
+      )}
 
       <AddStaffDialog open={addOpen} onClose={() => setAddOpen(false)} />
+      {editStaff && <EditStaffDialog staff={editStaff} onClose={() => setEditStaff(null)} />}
+
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{deleteBlocked ? 'Cannot delete staff member' : 'Delete staff member?'}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteBlocked
+                ? `${deleteTarget?.name} has linked expense records and cannot be deleted.`
+                : 'Delete staff member? This cannot be undone.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            {deleteBlocked
+              ? <AlertDialogCancel>OK</AlertDialogCancel>
+              : <>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleDeleteConfirm} className="bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
+                </>
+            }
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
@@ -1667,6 +1762,86 @@ function EditVendorDialog({ vendor, onClose }: { vendor: Vendor; onClose: () => 
 // â”€â”€ Add Staff dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const STAFF_ROLES = ['Security', 'Sweeper', 'Gardener', 'Plumber', 'Electrician', 'Lift Operator', 'Other']
+
+function EditStaffDialog({ staff, onClose }: { staff: StaffMember; onClose: () => void }) {
+  const qc = useQueryClient()
+  const [form, setForm] = useState({
+    name:  staff.name,
+    role:  staff.role,
+    area:  staff.assigned_area ?? '',
+    phone: staff.phone ?? '',
+    joined: staff.joined_date ?? '',
+  })
+  const [saving, setSaving] = useState(false)
+  const [err, setErr]       = useState('')
+
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setForm(f => ({ ...f, [k]: e.target.value }))
+
+  async function handleSave() {
+    if (!form.name.trim() || !form.role) return
+    setSaving(true); setErr('')
+    try {
+      const { error } = await supabase.from('staff').update({
+        name:          form.name.trim(),
+        role:          form.role,
+        assigned_area: form.area  || null,
+        phone:         form.phone || null,
+        joined_date:   form.joined || null,
+      }).eq('id', staff.id)
+      if (error) throw error
+      qc.invalidateQueries({ queryKey: ['staff'] })
+      onClose()
+    } catch (e: any) { setErr(e.message) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <Dialog open onOpenChange={v => { if (!v) onClose() }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader><DialogTitle>Edit Staff Member</DialogTitle></DialogHeader>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1">
+            <Label>Full name *</Label>
+            <Input value={form.name} onChange={set('name')} placeholder="e.g. Murugan" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1">
+              <Label>Role *</Label>
+              <Select value={form.role} onValueChange={r => setForm(f => ({ ...f, role: r }))}>
+                <SelectTrigger><SelectValue placeholder="Select role" /></SelectTrigger>
+                <SelectContent>
+                  {STAFF_ROLES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label>Assigned area</Label>
+              <Input value={form.area} onChange={set('area')} placeholder="Block-A, Common, All..." />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1">
+              <Label>Phone</Label>
+              <Input value={form.phone} onChange={set('phone')} placeholder="Mobile number" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label>Joined date</Label>
+              <Input type="date" value={form.joined} onChange={set('joined')} />
+            </div>
+          </div>
+          {err && <p className="text-sm text-red-500">{err}</p>}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSave} disabled={!form.name.trim() || !form.role || saving}>
+            {saving ? 'Saving...' : 'Save'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
 
 function AddStaffDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const qc = useQueryClient()
