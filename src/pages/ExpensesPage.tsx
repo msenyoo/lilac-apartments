@@ -1100,6 +1100,7 @@ function ReconcileTab() {
         .neq('row_type', 'VOIDED')
         .neq('category', 'FD')
         .is('expense_id', null)
+        .is('deposit_id', null)
         .order('value_date', { ascending: false })
       return (data ?? []) as UnmatchedDR[]
     },
