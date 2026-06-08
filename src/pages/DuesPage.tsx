@@ -437,7 +437,7 @@ function ArrearsMgmt({ flatCode, showAdd = false, onCloseAdd }: { flatCode: stri
       {arrears.length > 0 && (
         <>
           <p className="text-[11.5px] font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-400)' }}>
-            Arrears
+            Carried forward dues
           </p>
           {arrears.map((row: any) => renderRow(row, 'var(--bad)'))}
         </>
@@ -445,7 +445,7 @@ function ArrearsMgmt({ flatCode, showAdd = false, onCloseAdd }: { flatCode: stri
       {credits.length > 0 && (
         <>
           <p className="text-[11.5px] font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-400)' }}>
-            Advance Credits
+            Advance paid
           </p>
           {credits.map((row: any) => renderRow(row, 'var(--ok)'))}
         </>
@@ -504,7 +504,7 @@ function ArrearsDialog({ flatId, row, onClose, onSaved }: {
     <Dialog open onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{row ? 'Edit entry' : 'Add arrears / credit'}</DialogTitle>
+          <DialogTitle>{row ? 'Edit entry' : 'Add dues / advance'}</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-3 py-2">
           {!row && (
@@ -518,7 +518,7 @@ function ArrearsDialog({ flatId, row, onClose, onSaved }: {
                     ? { background: t === 'credit' ? 'var(--ok-bg)' : 'var(--bad-bg)', color: t === 'credit' ? 'var(--ok)' : 'var(--bad)' }
                     : { color: 'var(--ink-500)' }}
                 >
-                  {t === 'maintenance' ? 'Arrears' : 'Advance credit'}
+                  {t === 'maintenance' ? 'Carried forward dues' : 'Advance paid'}
                 </button>
               ))}
             </div>
