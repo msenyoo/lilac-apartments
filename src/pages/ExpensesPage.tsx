@@ -1154,6 +1154,21 @@ function ReconcileTab() {
   const amountMatch = selExp && selTxn && selExp.amount === selTxn.amount
   const canMatch    = !!selExp && !!selTxn
 
+  function isWithin7Days(expDate: string, txnDate: string) {
+    const [ey, em, ed] = expDate.split('-').map(Number)
+    const [ty, tm, td] = txnDate.split('-').map(Number)
+    return Math.abs(new Date(ey, em - 1, ed).getTime() - new Date(ty, tm - 1, td).getTime()) <= 7 * 24 * 60 * 60 * 1000
+  }
+
+  function getSuggestionTier(t: UnmatchedDR): 'exact' | 'close' | null {
+    if (!selExp) return null
+    if (t.amount === selExp.amount) return 'exact'
+    const pctDiff = Math.abs(t.amount - selExp.amount) / selExp.amount
+    const absDiff = Math.abs(t.amount - selExp.amount)
+    if ((pctDiff <= 0.05 || absDiff <= 500) && isWithin7Days(selExp.expense_date, t.value_date)) return 'close'
+    return null
+  }
+
   const matchMutation = useMutation({
     mutationFn: async () => {
       if (!selectedExpenseId || !selectedTxnId) return
@@ -1308,7 +1323,15 @@ function ReconcileTab() {
               <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-600)' }}>
                 Unmatched bank DRs ({bankDRs.length})
               </p>
-              <p className="text-xs mt-0.5" style={{ color: 'var(--ink-400)' }}>Select one to match with an expense</p>
+              <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: 'var(--ink-400)' }}>
+                Select one to match
+                {selExp && (
+                  <span className="ml-2 flex items-center gap-1">
+                    <span className="inline-block w-2 h-2 rounded-sm bg-green-400" />exact
+                    <span className="inline-block w-2 h-2 rounded-sm bg-amber-300 ml-1" />close
+                  </span>
+                )}
+              </p>
             </div>
             {bankDRs.length === 0 ? (
               <p className="px-4 py-8 text-sm text-center" style={{ color: 'var(--ink-400)' }}>No unmatched bank debits</p>
@@ -1318,9 +1341,14 @@ function ReconcileTab() {
                   <button
                     key={t.id}
                     onClick={() => setSelectedTxnId(id => id === t.id ? null : t.id)}
-                    className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-[var(--ink-50)] text-left transition-colors ${
-                      selectedTxnId === t.id ? 'bg-[var(--brand-50)] border-l-2 border-violet-500' : ''
-                    }`}
+                    className={(() => {
+                      const tier = getSuggestionTier(t)
+                      const base = 'w-full flex items-center gap-3 px-4 py-3 text-left transition-colors '
+                      if (selectedTxnId === t.id) return base + 'bg-[var(--brand-50)] border-l-2 border-violet-500'
+                      if (tier === 'exact') return base + 'bg-[var(--ok-bg)] border-l-2 border-green-500 hover:bg-green-50'
+                      if (tier === 'close') return base + 'bg-[var(--warn-bg)] border-l-2 border-amber-400 hover:bg-amber-50'
+                      return base + 'hover:bg-[var(--ink-50)]'
+                    })()}
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-baseline justify-between gap-2">
