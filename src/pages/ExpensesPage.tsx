@@ -1597,7 +1597,7 @@ function StaffTab() {
   )
 }
 
-// â”€â”€ Add Vendor dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€ Add Vendor dialog â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 function AddVendorDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const qc = useQueryClient()
@@ -1746,7 +1746,7 @@ function EditVendorDialog({ vendor, onClose }: { vendor: Vendor; onClose: () => 
   )
 }
 
-// â”€â”€ Add Staff dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€ Add Staff dialog â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 const STAFF_ROLES = ['Security', 'Sweeper', 'Gardener', 'Plumber', 'Electrician', 'Lift Operator', 'Other']
 
@@ -1919,12 +1919,15 @@ function AddStaffDialog({ open, onClose }: { open: boolean; onClose: () => void 
   )
 }
 
-// â”€â”€ Recurring templates tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€ Recurring templates tab â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 function RecurringTab() {
-  const { canWrite } = useRoleCtx()
+  const { canWrite, isAdmin } = useRoleCtx()
   const qc = useQueryClient()
   const [addOpen, setAddOpen] = useState(false)
+  const [showPaused, setShowPaused] = useState(false)
+  const [editTemplate, setEditTemplate] = useState<RecurringTemplate | null>(null)
+  const [deleteTemplate, setDeleteTemplate] = useState<RecurringTemplate | null>(null)
 
   const { data: templates = [], isLoading } = useQuery({
     queryKey: ['recurring-templates'],
@@ -1941,22 +1944,32 @@ function RecurringTab() {
     const { error } = await supabase.from('recurring_expense_templates').update({ active: !current }).eq('id', id)
     if (error) { toast.error(error.message); return }
     qc.invalidateQueries({ queryKey: ['recurring-templates'] })
-    toast.success(current ? 'Template deactivated' : 'Template activated')
   }
+
+  const visible = showPaused ? templates : templates.filter(t => t.active)
 
   if (isLoading) return <div className="surface h-40 animate-pulse" style={{ background: 'var(--ink-100)' }} />
 
   return (
     <div className="flex flex-col gap-3">
-      {canWrite && (
-        <div className="flex justify-end">
+      <div className="flex items-center justify-between">
+        <label className="flex items-center gap-2 cursor-pointer select-none text-sm" style={{ color: 'var(--ink-500)' }}>
+          <input
+            type="checkbox"
+            checked={showPaused}
+            onChange={e => setShowPaused(e.target.checked)}
+            className="rounded"
+          />
+          Show paused
+        </label>
+        {canWrite && (
           <Button size="sm" onClick={() => setAddOpen(true)} className="flex items-center gap-1.5">
             <Plus size={14} /> Add Template
           </Button>
-        </div>
-      )}
+        )}
+      </div>
 
-      {templates.length === 0 ? (
+      {visible.length === 0 ? (
         <div className="surface !p-12 flex flex-col items-center gap-3 text-center" style={{ color: 'var(--ink-400)' }}>
           <RefreshCcw size={28} className="opacity-40" />
           <div>
@@ -1966,8 +1979,8 @@ function RecurringTab() {
         </div>
       ) : (
         <div className="surface !p-0 divide-rows">
-          {templates.map(t => (
-            <div key={t.id} className={`flex items-center gap-3 px-4 py-3 ${!t.active ? 'opacity-50' : ''}`}>
+          {visible.map(t => (
+            <div key={t.id} className={`flex items-center gap-3 px-4 py-3 ${!t.active ? 'opacity-60' : ''}`}>
               <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: 'var(--brand-50)' }}>
                 <RefreshCcw size={14} className="text-violet-500" />
               </div>
@@ -1979,33 +1992,46 @@ function RecurringTab() {
                     t.frequency === 'Quarterly' ? 'bg-amber-100 text-amber-700' :
                     'bg-purple-100 text-purple-700'
                   }`}>{t.frequency}</span>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                    t.active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                  }`}>{t.active ? 'Active' : 'Paused'}</span>
                 </div>
                 <p className="text-xs" style={{ color: 'var(--ink-400)' }}>
                   {t.vendor?.name ?? 'No vendor'} {t.category ? '· ' + t.category.name : ''}
                   {t.description ? ' · ' + t.description : ''}
                 </p>
               </div>
-              <div className="flex items-center gap-3 shrink-0">
+              <div className="flex items-center gap-2 shrink-0">
                 <span className="text-sm font-semibold" style={{ color: 'var(--ink-800)' }}>{formatINR(t.amount)}</span>
-                {canWrite ? (
-                  <button
+                {isAdmin && (
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => toggleActive(t.id, t.active)}
-                    className={`text-xs px-2 py-0.5 rounded-full font-medium transition-colors ${
-                      t.active
-                        ? 'bg-green-100 text-green-700 hover:bg-red-100 hover:text-red-700'
-                        : 'hover:bg-green-100 hover:text-green-700'
-                    }`}
-                    style={!t.active ? { background: 'var(--ink-100)', color: 'var(--ink-500)' } : undefined}
+                    className="h-7 text-xs"
                   >
-                    {t.active ? 'Active' : 'Inactive'}
-                  </button>
-                ) : (
-                  <span
-                    className={`text-xs px-2 py-0.5 rounded-full font-medium ${t.active ? 'bg-green-100 text-green-700' : ''}`}
-                    style={!t.active ? { background: 'var(--ink-100)', color: 'var(--ink-500)' } : undefined}
+                    {t.active ? 'Pause' : 'Activate'}
+                  </Button>
+                )}
+                {canWrite && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setEditTemplate(t)}
+                    className="h-7 w-7 p-0"
                   >
-                    {t.active ? 'Active' : 'Inactive'}
-                  </span>
+                    <Pencil size={12} />
+                  </Button>
+                )}
+                {isAdmin && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setDeleteTemplate(t)}
+                    className="h-7 w-7 p-0 text-red-500 hover:text-red-600 hover:border-red-300"
+                  >
+                    <Trash2 size={12} />
+                  </Button>
                 )}
               </div>
             </div>
@@ -2014,6 +2040,8 @@ function RecurringTab() {
       )}
 
       <AddRecurringDialog open={addOpen} onClose={() => setAddOpen(false)} />
+      <EditRecurringDialog template={editTemplate} onClose={() => setEditTemplate(null)} />
+      <DeleteRecurringDialog template={deleteTemplate} onClose={() => setDeleteTemplate(null)} />
     </div>
   )
 }
@@ -2126,7 +2154,163 @@ function AddRecurringDialog({ open, onClose }: { open: boolean; onClose: () => v
   )
 }
 
-// â”€â”€ Petty cash tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function EditRecurringDialog({ template, onClose }: { template: RecurringTemplate | null; onClose: () => void }) {
+  const qc = useQueryClient()
+  const [form, setForm] = useState({ name: '', description: '', vendor_id: '', category_id: '', amount: '', payment_mode: 'Online', frequency: 'Monthly' })
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
+
+  const { data: vendors = [] } = useQuery({ queryKey: ['vendors', 'active'], queryFn: async () => {
+    const { data } = await supabase.from('vendors').select('id,name').eq('is_active', true).order('name')
+    return (data ?? []) as { id: string; name: string }[]
+  }})
+  const { data: categories = [] } = useQuery({ queryKey: ['expense-categories-simple'], queryFn: async () => {
+    const { data } = await supabase.from('expense_categories').select('id,name').eq('is_active', true).order('sort_order')
+    return (data ?? []) as { id: string; name: string }[]
+  }})
+
+  React.useEffect(() => {
+    if (template) {
+      setForm({
+        name: template.name,
+        description: template.description ?? '',
+        vendor_id: template.vendor?.id ?? '',
+        category_id: template.category?.id ?? '',
+        amount: String(template.amount),
+        payment_mode: template.payment_mode,
+        frequency: template.frequency,
+      })
+      setErr('')
+    }
+  }, [template])
+
+  const set = (k: keyof typeof form) => (v: string) => setForm(f => ({ ...f, [k]: v }))
+
+  async function handleSave() {
+    if (!template || !form.name.trim() || !form.amount) return
+    setSaving(true); setErr('')
+    try {
+      const { error } = await supabase.from('recurring_expense_templates').update({
+        name: form.name.trim(),
+        description: form.description || null,
+        vendor_id: form.vendor_id || null,
+        category_id: form.category_id || null,
+        amount: Number(form.amount),
+        payment_mode: form.payment_mode,
+        frequency: form.frequency,
+      }).eq('id', template.id)
+      if (error) throw error
+      qc.invalidateQueries({ queryKey: ['recurring-templates'] })
+      onClose()
+    } catch (e: any) { setErr(e.message); toast.error(e.message ?? 'Failed to update template') }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <Dialog open={!!template} onOpenChange={v => { if (!v) onClose() }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader><DialogTitle>Edit Recurring Template</DialogTitle></DialogHeader>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1">
+            <Label>Name *</Label>
+            <Input value={form.name} onChange={e => set('name')(e.target.value)} placeholder="e.g. Lift AMC" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label>Description</Label>
+            <Input value={form.description} onChange={e => set('description')(e.target.value)} placeholder="Optional details" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1">
+              <Label>Amount (Rs) *</Label>
+              <Input type="number" value={form.amount} onChange={e => set('amount')(e.target.value)} placeholder="0" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label>Frequency</Label>
+              <Select value={form.frequency} onValueChange={set('frequency')}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {['Monthly', 'Quarterly', 'Annual', 'One-time'].map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1">
+              <Label>Vendor</Label>
+              <Select value={form.vendor_id} onValueChange={set('vendor_id')}>
+                <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                <SelectContent>
+                  {vendors.map(v => <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label>Category</Label>
+              <Select value={form.category_id} onValueChange={set('category_id')}>
+                <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                <SelectContent>
+                  {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label>Payment mode</Label>
+            <Select value={form.payment_mode} onValueChange={set('payment_mode')}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {PAYMENT_MODES.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          {err && <p className="text-sm text-red-500">{err}</p>}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSave} disabled={!form.name.trim() || !form.amount || saving}>
+            {saving ? 'Saving...' : 'Save Changes'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function DeleteRecurringDialog({ template, onClose }: { template: RecurringTemplate | null; onClose: () => void }) {
+  const qc = useQueryClient()
+  const [deleting, setDeleting] = useState(false)
+
+  async function handleDelete() {
+    if (!template) return
+    setDeleting(true)
+    const { error } = await supabase.from('recurring_expense_templates').delete().eq('id', template.id)
+    setDeleting(false)
+    if (error) { toast.error(error.message); return }
+    qc.invalidateQueries({ queryKey: ['recurring-templates'] })
+    onClose()
+  }
+
+  return (
+    <AlertDialog open={!!template} onOpenChange={v => { if (!v) onClose() }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete template?</AlertDialogTitle>
+          <AlertDialogDescription>
+            "{template?.name}" will be permanently deleted. This cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+            {deleting ? 'Deleting...' : 'Delete'}
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
+
+// â"€â"€ Petty cash tab â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 const TXN_TYPE_STYLE: Record<string, string> = {
   Opening:       'bg-blue-100 text-blue-700',
@@ -2287,7 +2471,7 @@ function AddPettyCashDialog({ open, onClose, onSave }: {
   )
 }
 
-// â”€â”€ Attachments section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€ Attachments section â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
 function AttachmentsSection({ expenseId }: { expenseId: string }) {
   const { canWrite } = useRoleCtx()
