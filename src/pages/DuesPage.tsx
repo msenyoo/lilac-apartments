@@ -96,11 +96,18 @@ export default function DuesPage() {
         ? { color: '#dc2626', fontWeight: 700 }
         : { color: '#16a34a', fontWeight: 600 },
     },
-    { field: 'status', headerName: 'Status', width: 110, filter: true,
+    { headerName: 'Status', width: 110, filter: true,
+      valueGetter: (p: any) => {
+        const { total_outstanding, pending, status } = p.data
+        if (total_outstanding <= 0) return 'Clear'
+        if (pending <= 0) return 'Arrears'
+        return status
+      },
       cellRenderer: (p: any) => (
         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-          p.value === 'Clear' ? 'bg-green-100 text-green-700' :
-          p.value === 'Partial' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
+          p.value === 'Clear'   ? 'bg-green-100 text-green-700' :
+          p.value === 'Partial' ? 'bg-amber-100 text-amber-700' :
+                                  'bg-red-100 text-red-700'
         }`}>{p.value}</span>
       ),
     },
