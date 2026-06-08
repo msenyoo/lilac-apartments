@@ -28,7 +28,7 @@ import { toast } from 'sonner'
 // ── Types ─────────────────────────────────────────────────────
 
 interface ExpenseCategory { id: string; name: string; budget_type: string; is_utility: boolean }
-interface Vendor  { id: string; name: string; type: string | null; phone: string | null; pan_number: string | null; notes: string | null }
+interface Vendor  { id: string; name: string; type: string | null; phone: string | null; pan_number: string | null; notes: string | null; is_active: boolean }
 interface RecurringTemplate {
   id: string; name: string; description: string | null
   vendor: { id: string; name: string } | null
@@ -562,9 +562,9 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
   })
 
   const { data: vendors = [] } = useQuery({
-    queryKey: ['vendors'],
+    queryKey: ['vendors', 'active'],
     queryFn: async () => {
-      const { data } = await supabase.from('vendors').select('*').order('name')
+      const { data } = await supabase.from('vendors').select('*').eq('is_active', true).order('name')
       return (data ?? []) as Vendor[]
     },
   })
@@ -1308,10 +1308,14 @@ function ReconcileTab() {
 // ── Vendors tab ───────────────────────────────────────────────
 
 function VendorsTab() {
-  const { canWrite } = useRoleCtx()
-  const [addOpen, setAddOpen] = useState(false)
+  const { canWrite, isAdmin } = useRoleCtx()
+  const qc = useQueryClient()
+  const [addOpen, setAddOpen]         = useState(false)
+  const [showInactive, setShowInactive] = useState(false)
+  const [editVendor, setEditVendor]   = useState<Vendor | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Vendor | null>(null)
 
-  const { data: vendors = [], isLoading } = useQuery({
+  const { data: allVendors = [], isLoading } = useQuery({
     queryKey: ['vendors'],
     queryFn: async () => {
       const { data } = await supabase.from('vendors').select('*').order('name')
@@ -1319,36 +1323,89 @@ function VendorsTab() {
     },
   })
 
+  const vendors = showInactive ? allVendors : allVendors.filter(v => v.is_active)
+
+  async function toggleActive(v: Vendor) {
+    await supabase.from('vendors').update({ is_active: !v.is_active }).eq('id', v.id)
+    qc.invalidateQueries({ queryKey: ['vendors'] })
+    qc.invalidateQueries({ queryKey: ['vendors', 'active'] })
+  }
+
+  async function handleDelete(v: Vendor) {
+    const { count } = await supabase.from('expenses').select('id', { count: 'exact', head: true }).eq('vendor_id', v.id)
+    if ((count ?? 0) > 0) {
+      toast.error('Cannot delete: vendor has linked expenses')
+      setDeleteTarget(null)
+      return
+    }
+    await supabase.from('vendors').delete().eq('id', v.id)
+    qc.invalidateQueries({ queryKey: ['vendors'] })
+    qc.invalidateQueries({ queryKey: ['vendors', 'active'] })
+    setDeleteTarget(null)
+  }
+
   if (isLoading) return <div className="surface h-32 animate-pulse" style={{ background: 'var(--ink-100)' }} />
 
   return (
     <div className="flex flex-col gap-3">
-      {canWrite && (
-        <div className="flex justify-end">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={showInactive}
+            onChange={e => setShowInactive(e.target.checked)}
+            className="rounded border-gray-300"
+          />
+          <span className="text-sm" style={{ color: 'var(--ink-500)' }}>Show inactive</span>
+        </label>
+        {canWrite && (
           <Button size="sm" onClick={() => setAddOpen(true)} className="flex items-center gap-1.5">
             <Plus size={14} /> Add Vendor
           </Button>
-        </div>
-      )}
+        )}
+      </div>
 
       {vendors.length === 0 ? (
         <div className="surface !p-10 text-center" style={{ color: 'var(--ink-400)' }}>
           <Building size={28} className="mx-auto mb-2 opacity-40" />
-          <p className="text-sm">No vendors added yet</p>
+          <p className="text-sm">{showInactive ? 'No vendors found' : 'No active vendors'}</p>
         </div>
       ) : (
         <div className="surface !p-0 divide-rows">
           {vendors.map(v => (
             <div key={v.id} className="flex items-center gap-3 px-4 py-3">
-              <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: 'var(--ink-100)' }}>
-                <Building size={14} style={{ color: 'var(--ink-400)' }} />
+              <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: v.is_active ? 'var(--ink-100)' : 'var(--ink-50)' }}>
+                <Building size={14} style={{ color: v.is_active ? 'var(--ink-400)' : 'var(--ink-300)' }} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium" style={{ color: 'var(--ink-800)' }}>{v.name}</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium" style={{ color: v.is_active ? 'var(--ink-800)' : 'var(--ink-400)' }}>{v.name}</p>
+                  {v.is_active
+                    ? <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">Active</span>
+                    : <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: 'var(--ink-100)', color: 'var(--ink-500)' }}>Inactive</span>
+                  }
+                </div>
                 <p className="text-xs" style={{ color: 'var(--ink-400)' }}>
                   {v.type ?? 'Vendor'}{v.phone ? ` · ${v.phone}` : ''}{v.pan_number ? ` · PAN: ${v.pan_number}` : ''}
                 </p>
                 {v.notes && <p className="text-xs truncate" style={{ color: 'var(--ink-400)' }}>{v.notes}</p>}
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                {canWrite && (
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setEditVendor(v)}>
+                    <Pencil size={13} />
+                  </Button>
+                )}
+                {isAdmin && (
+                  <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => toggleActive(v)}>
+                    {v.is_active ? 'Deactivate' : 'Activate'}
+                  </Button>
+                )}
+                {isAdmin && (
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-500 hover:text-red-600" onClick={() => setDeleteTarget(v)}>
+                    <Trash2 size={13} />
+                  </Button>
+                )}
               </div>
             </div>
           ))}
@@ -1356,6 +1413,24 @@ function VendorsTab() {
       )}
 
       <AddVendorDialog open={addOpen} onClose={() => setAddOpen(false)} />
+      {editVendor && <EditVendorDialog vendor={editVendor} onClose={() => setEditVendor(null)} />}
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={open => { if (!open) setDeleteTarget(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete vendor?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Delete <strong>{deleteTarget?.name}</strong>? This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction className="bg-red-600 hover:bg-red-700" onClick={() => deleteTarget && handleDelete(deleteTarget)}>
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
@@ -1506,6 +1581,79 @@ function AddVendorDialog({ open, onClose }: { open: boolean; onClose: () => void
           <Button variant="outline" onClick={() => { reset(); onClose() }}>Cancel</Button>
           <Button onClick={handleSave} disabled={!name.trim() || saving}>
             {saving ? 'Saving...' : 'Add Vendor'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+const VENDOR_TYPES = ['Contractor', 'Supplier', 'Utility', 'Service', 'Other']
+
+function EditVendorDialog({ vendor, onClose }: { vendor: Vendor; onClose: () => void }) {
+  const qc = useQueryClient()
+  const [name, setName]   = useState(vendor.name)
+  const [type, setType]   = useState(vendor.type ?? '')
+  const [phone, setPhone] = useState(vendor.phone ?? '')
+  const [pan, setPan]     = useState(vendor.pan_number ?? '')
+  const [notes, setNotes] = useState(vendor.notes ?? '')
+  const [saving, setSaving] = useState(false)
+  const [err, setErr]       = useState('')
+
+  async function handleSave() {
+    if (!name.trim()) return
+    setSaving(true); setErr('')
+    try {
+      const { error } = await supabase.from('vendors').update({
+        name: name.trim(), type: type || null, phone: phone || null,
+        pan_number: pan || null, notes: notes || null,
+      }).eq('id', vendor.id)
+      if (error) throw error
+      qc.invalidateQueries({ queryKey: ['vendors'] })
+      qc.invalidateQueries({ queryKey: ['vendors', 'active'] })
+      onClose()
+    } catch (e: any) { setErr(e.message) }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <Dialog open onOpenChange={v => { if (!v) onClose() }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader><DialogTitle>Edit Vendor</DialogTitle></DialogHeader>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1">
+            <Label>Name *</Label>
+            <Input value={name} onChange={e => setName(e.target.value)} placeholder="Vendor / company name" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1">
+              <Label>Type</Label>
+              <Select value={type} onValueChange={setType}>
+                <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
+                <SelectContent>
+                  {VENDOR_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label>Phone</Label>
+              <Input value={phone} onChange={e => setPhone(e.target.value)} placeholder="Mobile number" />
+            </div>
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label>PAN number</Label>
+            <Input value={pan} onChange={e => setPan(e.target.value)} placeholder="For TDS tracking" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label>Notes</Label>
+            <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Optional remarks" />
+          </div>
+          {err && <p className="text-sm text-red-500">{err}</p>}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSave} disabled={!name.trim() || saving}>
+            {saving ? 'Saving...' : 'Save'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1711,8 +1859,8 @@ function AddRecurringDialog({ open, onClose }: { open: boolean; onClose: () => v
   const [saving, setSaving] = useState(false)
   const [err, setErr]       = useState('')
 
-  const { data: vendors = [] } = useQuery({ queryKey: ['vendors'], queryFn: async () => {
-    const { data } = await supabase.from('vendors').select('id,name').order('name')
+  const { data: vendors = [] } = useQuery({ queryKey: ['vendors', 'active'], queryFn: async () => {
+    const { data } = await supabase.from('vendors').select('id,name').eq('is_active', true).order('name')
     return (data ?? []) as { id: string; name: string }[]
   }})
   const { data: categories = [] } = useQuery({ queryKey: ['expense-categories'], queryFn: async () => {
