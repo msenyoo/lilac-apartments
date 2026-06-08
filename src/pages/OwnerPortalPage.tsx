@@ -151,6 +151,9 @@ export default function OwnerPortalPage() {
   const effectiveStatus = dues
     ? (dues.total_outstanding <= 0 ? 'Clear' : dues.status)
     : 'Due'
+  const effectivePaidCount = effectiveStatus === 'Clear' && monthlyRate > 0
+    ? Math.min(allMonths.length, Math.floor(((dues?.collected_fy ?? 0) + (dues?.advance_credits ?? 0)) / monthlyRate))
+    : paidCount
   const pendingMonths   = effectiveStatus !== 'Clear' ? allMonths.slice(paidCount) : []
 
   return (
@@ -190,7 +193,7 @@ export default function OwnerPortalPage() {
                 </div>
                 <div className="flex justify-between">
                   <span style={{ color: 'var(--ink-500)' }}>Months covered</span>
-                  <span className="font-semibold" style={{ color: 'var(--ink-800)' }}>{paidCount} of {allMonths.length}</span>
+                  <span className="font-semibold" style={{ color: 'var(--ink-800)' }}>{effectivePaidCount} of {allMonths.length}</span>
                 </div>
               </>
             ) : (
