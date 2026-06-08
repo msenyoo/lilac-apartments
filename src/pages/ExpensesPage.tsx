@@ -4,7 +4,7 @@ import { useRoleCtx } from '@/contexts/RoleContext'
 import { useForm, useFieldArray, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Plus, Trash2, Download, Receipt, Users, Building, X, GitMerge, CheckCircle2, Paperclip, RefreshCcw, Coins, Upload, Loader2, Trash, Pencil, Ban } from 'lucide-react'
+import { Plus, Trash2, Download, Receipt, Users, Building, X, GitMerge, CheckCircle2, Paperclip, RefreshCcw, Coins, Upload, Loader2, Trash, Pencil, Ban, Unlink } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
@@ -367,6 +367,7 @@ function ExpenseDetailPanel({
   const [voidReason, setVoidReason] = useState('')
   const [voiding, setVoiding] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
+  const [unreconciling, setUnreconciling] = useState(false)
 
   async function handleVoid() {
     if (!voidReason.trim()) return
@@ -389,6 +390,34 @@ function ExpenseDetailPanel({
       toast.error(err.message ?? 'Failed to void expense')
     } finally {
       setVoiding(false)
+    }
+  }
+
+  async function handleUnreconcile() {
+    if (!e.transaction_id) return
+    setUnreconciling(true)
+    try {
+      const txnId = e.transaction_id
+      const [{ error: e1 }, { error: e2 }] = await Promise.all([
+        supabase.from('expenses')
+          .update({ transaction_id: null, reconciled_at: null })
+          .eq('id', e.id),
+        supabase.from('transactions')
+          .update({ expense_id: null })
+          .eq('id', txnId),
+      ])
+      if (e1) throw e1
+      if (e2) throw e2
+      toast.success('Reconciliation removed')
+      qc.invalidateQueries({ queryKey: ['unreconciled-expenses'] })
+      qc.invalidateQueries({ queryKey: ['unmatched-bank-drs'] })
+      qc.invalidateQueries({ queryKey: ['expenses'] })
+      qc.invalidateQueries({ queryKey: ['unreconciled-count'] })
+      onClose()
+    } catch (err: any) {
+      toast.error(err.message ?? 'Failed to un-reconcile')
+    } finally {
+      setUnreconciling(false)
     }
   }
 
@@ -444,6 +473,17 @@ function ExpenseDetailPanel({
             {canWrite && (
               <Button size="sm" variant="outline" className="flex items-center gap-1.5" onClick={() => setEditOpen(true)}>
                 <Pencil size={13} /> Edit
+              </Button>
+            )}
+            {isAdmin && e.transaction_id && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="flex items-center gap-1.5 text-orange-600 border-orange-200 hover:bg-orange-50"
+                onClick={handleUnreconcile}
+                disabled={unreconciling}
+              >
+                <Unlink size={13} /> {unreconciling ? 'Removing…' : 'Un-reconcile'}
               </Button>
             )}
             {isAdmin && (
