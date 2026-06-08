@@ -2,13 +2,17 @@ import { useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
-import { Save, RefreshCw, Plus, Pencil, Zap } from 'lucide-react'
+import { Save, RefreshCw, Plus, Pencil, Zap, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -586,28 +590,59 @@ function AddRateChangeDialog({ open, onClose, flats, currentRates, onSuccess }: 
 
 interface ExpenseCategory {
   id: string; name: string; budget_type: string
-  is_utility: boolean; unit_label: string | null; sort_order: number
+  is_utility: boolean; unit_label: string | null; sort_order: number; is_active: boolean
 }
 
 function CategoriesSettings() {
   const { isAdmin } = useRoleCtx()
   const qc = useQueryClient()
-  const [editTarget, setEditTarget] = useState<ExpenseCategory | null>(null)
-  const [addOpen, setAddOpen]       = useState(false)
+  const [editTarget,    setEditTarget]    = useState<ExpenseCategory | null>(null)
+  const [addOpen,       setAddOpen]       = useState(false)
+  const [showInactive,  setShowInactive]  = useState(false)
+  const [deleteTarget,  setDeleteTarget]  = useState<ExpenseCategory | null>(null)
 
   const { data: categories = [], isLoading } = useQuery({
     queryKey: ['expense-categories-all'],
     queryFn: async () => {
       const { data } = await supabase
         .from('expense_categories')
-        .select('id, name, budget_type, is_utility, unit_label, sort_order')
+        .select('id, name, budget_type, is_utility, unit_label, sort_order, is_active')
         .order('sort_order')
       return (data ?? []) as ExpenseCategory[]
     },
   })
 
-  const maintenance = categories.filter(c => c.budget_type === 'Maintenance')
-  const corpus      = categories.filter(c => c.budget_type === 'Corpus')
+  function invalidateAll() {
+    qc.invalidateQueries({ queryKey: ['expense-categories-all'] })
+    qc.invalidateQueries({ queryKey: ['utility-categories'] })
+    qc.invalidateQueries({ queryKey: ['expense-categories'] })
+  }
+
+  async function toggleActive(cat: ExpenseCategory) {
+    const { error } = await supabase
+      .from('expense_categories')
+      .update({ is_active: !cat.is_active })
+      .eq('id', cat.id)
+    if (error) { toast.error(error.message); return }
+    invalidateAll()
+  }
+
+  async function handleDelete(cat: ExpenseCategory) {
+    const { count, error: countErr } = await supabase
+      .from('expenses')
+      .select('id', { count: 'exact', head: true })
+      .eq('category_id', cat.id)
+    if (countErr) { toast.error(countErr.message); return }
+    if ((count ?? 0) > 0) { toast.error('Cannot delete: category has linked expenses'); return }
+    const { error } = await supabase.from('expense_categories').delete().eq('id', cat.id)
+    if (error) { toast.error(error.message); return }
+    setDeleteTarget(null)
+    invalidateAll()
+  }
+
+  const visibleCategories = showInactive ? categories : categories.filter(c => c.is_active)
+  const maintenance = visibleCategories.filter(c => c.budget_type === 'Maintenance')
+  const corpus      = visibleCategories.filter(c => c.budget_type === 'Corpus')
 
   async function toggleUtility(cat: ExpenseCategory) {
     const { error } = await supabase
@@ -615,9 +650,7 @@ function CategoriesSettings() {
       .update({ is_utility: !cat.is_utility })
       .eq('id', cat.id)
     if (error) { toast.error(error.message); return }
-    qc.invalidateQueries({ queryKey: ['expense-categories-all'] })
-    qc.invalidateQueries({ queryKey: ['utility-categories'] })
-    qc.invalidateQueries({ queryKey: ['expense-categories'] })
+    invalidateAll()
     toast.success(cat.is_utility ? `${cat.name} unmarked as utility` : `${cat.name} marked as utility`)
   }
 
@@ -625,15 +658,27 @@ function CategoriesSettings() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <p className="text-[13px]" style={{ color: 'var(--ink-500)' }}>
           Categories marked as utility appear in the Utility report tab with per-block tracking.
         </p>
-        {isAdmin && (
-          <Button size="sm" onClick={() => setAddOpen(true)} className="flex items-center gap-1.5 shrink-0">
-            <Plus size={14} /> Add Category
-          </Button>
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => setShowInactive(v => !v)}
+            className="flex items-center gap-1.5 text-[12px] px-3 py-1.5 rounded-lg font-medium transition-colors"
+            style={showInactive
+              ? { background: 'var(--ink-200)', color: 'var(--ink-700)' }
+              : { background: 'var(--ink-100)', color: 'var(--ink-500)' }
+            }
+          >
+            Show inactive
+          </button>
+          {isAdmin && (
+            <Button size="sm" onClick={() => setAddOpen(true)} className="flex items-center gap-1.5">
+              <Plus size={14} /> Add Category
+            </Button>
+          )}
+        </div>
       </div>
 
       {(['Maintenance', 'Corpus'] as const).map(budgetType => {
@@ -644,10 +689,21 @@ function CategoriesSettings() {
               <p className="text-[11.5px] font-bold uppercase tracking-wide" style={{ color: 'var(--ink-400)' }}>{budgetType}</p>
             </div>
             <div className="divide-rows">
-              {rows.map(cat => (
+              {rows.length === 0 ? (
+                <p className="px-5 py-4 text-[13px]" style={{ color: 'var(--ink-400)' }}>No categories</p>
+              ) : rows.map(cat => (
                 <div key={cat.id} className="flex items-center gap-3 px-5 py-3">
                   <span className="text-[11.5px] w-5 shrink-0 text-right tnum" style={{ color: 'var(--ink-400)' }}>{cat.sort_order}</span>
-                  <span className="flex-1 text-[13.5px] font-medium">{cat.name}</span>
+                  <span className="flex-1 text-[13.5px] font-medium" style={!cat.is_active ? { color: 'var(--ink-400)' } : undefined}>{cat.name}</span>
+                  <span
+                    className="text-[11px] px-2 py-0.5 rounded-full font-semibold shrink-0"
+                    style={cat.is_active
+                      ? { background: 'var(--good-bg)', color: 'var(--good)' }
+                      : { background: 'var(--ink-100)', color: 'var(--ink-400)' }
+                    }
+                  >
+                    {cat.is_active ? 'Active' : 'Inactive'}
+                  </span>
                   {cat.is_utility && cat.unit_label && (
                     <span className="ds-badge ds-badge-warn shrink-0">{cat.unit_label}</span>
                   )}
@@ -680,6 +736,27 @@ function CategoriesSettings() {
                       <Pencil size={13} />
                     </button>
                   )}
+                  {isAdmin && (
+                    <button
+                      onClick={() => toggleActive(cat)}
+                      className="text-[11.5px] px-2 py-0.5 rounded-lg font-medium transition-colors shrink-0"
+                      style={cat.is_active
+                        ? { background: 'var(--ink-100)', color: 'var(--ink-500)' }
+                        : { background: 'var(--good-bg)', color: 'var(--good)' }
+                      }
+                    >
+                      {cat.is_active ? 'Deactivate' : 'Activate'}
+                    </button>
+                  )}
+                  {isAdmin && (
+                    <button
+                      onClick={() => setDeleteTarget(cat)}
+                      className="p-1 rounded-lg transition-colors hover:bg-red-50 shrink-0"
+                      style={{ color: 'var(--bad)' }}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -693,13 +770,29 @@ function CategoriesSettings() {
           open={addOpen || !!editTarget}
           initial={editTarget}
           onClose={() => { setAddOpen(false); setEditTarget(null) }}
-          onSuccess={() => {
-            qc.invalidateQueries({ queryKey: ['expense-categories-all'] })
-            qc.invalidateQueries({ queryKey: ['utility-categories'] })
-            qc.invalidateQueries({ queryKey: ['expense-categories'] })
-          }}
+          onSuccess={invalidateAll}
         />
       )}
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={v => { if (!v) setDeleteTarget(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete category?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Delete &ldquo;{deleteTarget?.name}&rdquo;? This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteTarget && handleDelete(deleteTarget)}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
