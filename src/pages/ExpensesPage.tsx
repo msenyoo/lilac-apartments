@@ -398,16 +398,19 @@ function ExpenseDetailPanel({
     setUnreconciling(true)
     try {
       const txnId = e.transaction_id
-      const [{ error: e1 }, { error: e2 }] = await Promise.all([
-        supabase.from('expenses')
-          .update({ transaction_id: null, reconciled_at: null })
-          .eq('id', e.id),
-        supabase.from('transactions')
-          .update({ expense_id: null })
-          .eq('id', txnId),
-      ])
+      const { error: e1 } = await supabase.from('expenses')
+        .update({ transaction_id: null, reconciled_at: null })
+        .eq('id', e.id)
       if (e1) throw e1
-      if (e2) throw e2
+      const { error: e2 } = await supabase.from('transactions')
+        .update({ expense_id: null })
+        .eq('id', txnId)
+      if (e2) {
+        await supabase.from('expenses')
+          .update({ transaction_id: txnId, reconciled_at: new Date().toISOString() })
+          .eq('id', e.id)
+        throw e2
+      }
       toast.success('Reconciliation removed')
       qc.invalidateQueries({ queryKey: ['unreconciled-expenses'] })
       qc.invalidateQueries({ queryKey: ['unmatched-bank-drs'] })
