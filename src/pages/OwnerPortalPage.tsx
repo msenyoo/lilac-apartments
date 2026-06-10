@@ -1,7 +1,8 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
-import { IndianRupee, Building2, CheckCircle2, AlertCircle, Clock, Receipt } from 'lucide-react'
+import { IndianRupee, Building2, CheckCircle2, AlertCircle, Clock, Receipt, FileText, Loader2 } from 'lucide-react'
 import { useRoleCtx } from '@/contexts/RoleContext'
 
 interface FlatRow { id: string; code: string; block: string; flat_type: string; bhk_type: string | null; maintenance_amt: number }
@@ -57,6 +58,36 @@ function currentFiscalYear(): number {
   return now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
 }
 
+function buildFiscalYears(): { year: number; label: string; start: string; end: string }[] {
+  const now = new Date()
+  const currentFyYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
+  const years = []
+  for (let y = 2022; y <= currentFyYear; y++) {
+    years.push({
+      year:  y,
+      label: `FY ${y}-${String(y + 1).slice(-2)}`,
+      start: `${y}-04-01`,
+      end:   `${y + 1}-03-31`,
+    })
+  }
+  return years.reverse()
+}
+
+const FISCAL_YEAR_LIST = buildFiscalYears()
+
+const MONTHS_IN_ORDER = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar']
+
+function triggerDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const a   = document.createElement('a')
+  a.href     = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
 // All months from April of startFy up to (and including) the current month
 function elapsedMonthsSince(startFy: number): string[] {
   const now = new Date()
@@ -98,6 +129,9 @@ function StatusPill({ status }: { status: string }) {
 
 export default function OwnerPortalPage() {
   const { flatId } = useRoleCtx()
+
+  const [statementFyYear, setStatementFyYear] = useState<number>(() => currentFiscalYear())
+  const [generatingStatement, setGeneratingStatement] = useState(false)
 
   const { data: myFlat } = useQuery<FlatRow | null>({
     queryKey: ['owner-flat', flatId],
@@ -266,6 +300,104 @@ export default function OwnerPortalPage() {
     },
   })
 
+  async function handleDownloadStatement() {
+    if (!myFlat) return
+    setGeneratingStatement(true)
+    try {
+      const fy = FISCAL_YEAR_LIST.find(f => f.year === statementFyYear)
+      if (!fy) return
+
+      const { data: fyPayments } = await supabase
+        .from('transactions')
+        .select('id,value_date,amount,fiscal_month,corpus,fiscal_year')
+        .eq('flat_code', (myFlat as any).code)
+        .eq('cr_dr', 'CR')
+        .eq('fiscal_year', fy.year)
+
+      const fyTxns = (fyPayments ?? []) as {
+        id: string; value_date: string; amount: number
+        fiscal_month: string | null; corpus: string; fiscal_year: number | null
+      }[]
+
+      const monthlyRate = (myFlat as any).maintenance_amt ?? 0
+
+      const now    = new Date()
+      const cutoff = fy.year === currentFiscalYear() ? now : new Date(`${fy.year + 1}-03-31`)
+
+      const maintenanceRows = MONTHS_IN_ORDER
+        .map(mon => {
+          const calYear = ['Jan', 'Feb', 'Mar'].includes(mon) ? fy.year + 1 : fy.year
+          const monthDate = new Date(`${calYear}-${String(new Date(`${mon} 1, ${calYear}`).getMonth() + 1).padStart(2, '0')}-01`)
+          if (monthDate > cutoff) return null
+
+          const shortLabel = `${mon}-${String(calYear).slice(-2)}`
+          const paid = fyTxns
+            .filter(t => t.corpus !== 'YES' && t.fiscal_month === mon)
+            .reduce((s, t) => s + t.amount, 0)
+
+          return {
+            month:   shortLabel,
+            due:     monthlyRate,
+            paid,
+            balance: Math.max(0, monthlyRate - paid),
+          }
+        })
+        .filter((r): r is NonNullable<typeof r> => r !== null)
+
+      const corpusPaid = fyTxns
+        .filter(t => t.corpus === 'YES')
+        .reduce((s, t) => s + t.amount, 0)
+
+      const corpusRows = (corpusList as any[]).map((c: any) => ({
+        planName: c.plan_name,
+        target:   c.corpus_target,
+        paid:     c.collected,
+        balance:  c.balance,
+      }))
+
+      const totalMaintPaid  = maintenanceRows.reduce((s, r) => s + r.paid, 0)
+      const totalCorpusPaid = corpusPaid
+
+      let ownerName = ''
+      const { data: resData } = await supabase
+        .from('residents')
+        .select('name')
+        .eq('flat_id', (myFlat as any).id)
+        .eq('type', 'Owner')
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle()
+      if (resData) ownerName = (resData as { name: string }).name
+
+      const generated = new Date().toLocaleDateString('en-IN', {
+        day: '2-digit', month: 'short', year: 'numeric',
+      })
+
+      const [{ pdf }, { OwnerStatementDoc }] = await Promise.all([
+        import('@react-pdf/renderer'),
+        import('@/components/reports/OwnerStatementPdf'),
+      ])
+
+      const blob = await pdf(
+        <OwnerStatementDoc data={{
+          flatCode:        (myFlat as any).code,
+          block:           (myFlat as any).block,
+          ownerName,
+          fyLabel:         fy.label,
+          maintenanceRows,
+          corpusRows,
+          totalMaintPaid,
+          totalCorpusPaid,
+          generated,
+        }} />
+      ).toBlob()
+
+      triggerDownload(blob, `Statement_${(myFlat as any).code}_${fy.label.replace(/\s/g, '_')}.pdf`)
+    } finally {
+      setGeneratingStatement(false)
+    }
+  }
+
   const upi  = settings?.collection_upi  ?? ''
   const bank = settings?.collection_bank ?? ''
   const currentMonth = new Date().toLocaleString('en-IN', { month: 'short' })
@@ -285,6 +417,35 @@ export default function OwnerPortalPage() {
 
   return (
     <div className="flex flex-col gap-5 fade-in max-w-2xl">
+      {/* Page header: title + download controls */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-[22px] font-extrabold" style={{ color: 'var(--ink-900)' }}>My Flat</h1>
+          <p className="text-[13px]" style={{ color: 'var(--ink-400)' }}>Your maintenance &amp; corpus summary</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <select
+            value={statementFyYear}
+            onChange={e => setStatementFyYear(Number(e.target.value))}
+            className="ds-field text-sm"
+          >
+            {FISCAL_YEAR_LIST.map(f => (
+              <option key={f.year} value={f.year}>{f.label}</option>
+            ))}
+          </select>
+          <button
+            onClick={handleDownloadStatement}
+            disabled={!myFlat || generatingStatement}
+            className="btn-primary flex items-center gap-2 py-1.5 px-3 text-sm disabled:opacity-40"
+          >
+            {generatingStatement
+              ? <><Loader2 size={14} className="animate-spin" /> Generating…</>
+              : <><FileText size={14} /> Download Statement</>
+            }
+          </button>
+        </div>
+      </div>
+
       {/* Flat identity */}
       <div className="surface !p-5">
         <div className="flex items-center gap-3 mb-1">
