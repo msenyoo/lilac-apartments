@@ -560,31 +560,32 @@ function PlanGrid({ planFlats, installments, flatInstallments, corpus }: {
     return row
   })
 
-  const instColDefs: ColDef<any>[] = installments.map(inst => ({
-    field: `inst_${inst.installment_no}`,
-    headerName: inst.label,
-    width: 110,
-    type: 'numericColumn',
-    valueFormatter: (p: any) => p.value > 0 ? formatINR(p.value) : '—',
-  }))
-
-  const colDefs = useMemo((): ColDef<any>[] => [
-    { field: 'flat_code',   headerName: 'Flat',      width: 90 },
-    { field: 'target',      headerName: 'Target',    width: 110, type: 'numericColumn', valueFormatter: (p: any) => formatINR(p.value) },
-    { field: 'pre_payment', headerName: 'Pre-paid',  width: 110, type: 'numericColumn', valueFormatter: (p: any) => p.value > 0 ? formatINR(p.value) : '—' },
-    { field: 'carry_fwd',   headerName: 'Carry-fwd', width: 110, type: 'numericColumn', valueFormatter: (p: any) => p.value > 0 ? formatINR(p.value) : '—',
-      cellStyle: (p: any) => p.value > 0 ? { color: '#7c3aed', fontWeight: 600 } : null,
-    },
-    ...instColDefs,
-    { field: 'collected',  headerName: 'Collected', width: 110, type: 'numericColumn',
-      valueFormatter: (p: any) => formatINR(p.value),
-      cellStyle: (p: any) => ({ color: p.value > 0 ? '#16a34a' : '#94a3b8', fontWeight: 600 }),
-    },
-    { field: 'remaining',  headerName: 'Remaining', width: 110, type: 'numericColumn',
-      valueFormatter: (p: any) => p.value > 0 ? formatINR(p.value) : '✓ Done',
-      cellStyle: (p: any) => ({ color: p.value > 0 ? '#d97706' : '#16a34a' }),
-    },
-  ], [instColDefs])
+  const colDefs = useMemo((): ColDef<any>[] => {
+    const instCols: ColDef<any>[] = installments.map((inst: any) => ({
+      field: `inst_${inst.installment_no}`,
+      headerName: inst.label,
+      width: 110,
+      type: 'numericColumn',
+      valueFormatter: (p: any) => p.value > 0 ? formatINR(p.value) : '—',
+    }))
+    return [
+      { field: 'flat_code',   headerName: 'Flat',      width: 90 },
+      { field: 'target',      headerName: 'Target',    width: 110, type: 'numericColumn', valueFormatter: (p: any) => formatINR(p.value) },
+      { field: 'pre_payment', headerName: 'Pre-paid',  width: 110, type: 'numericColumn', valueFormatter: (p: any) => p.value > 0 ? formatINR(p.value) : '—' },
+      { field: 'carry_fwd',   headerName: 'Carry-fwd', width: 110, type: 'numericColumn', valueFormatter: (p: any) => p.value > 0 ? formatINR(p.value) : '—',
+        cellStyle: (p: any) => p.value > 0 ? { color: '#7c3aed', fontWeight: 600 } : null,
+      },
+      ...instCols,
+      { field: 'collected',  headerName: 'Collected', width: 110, type: 'numericColumn',
+        valueFormatter: (p: any) => formatINR(p.value),
+        cellStyle: (p: any) => ({ color: p.value > 0 ? '#16a34a' : '#94a3b8', fontWeight: 600 }),
+      },
+      { field: 'remaining',  headerName: 'Remaining', width: 110, type: 'numericColumn',
+        valueFormatter: (p: any) => p.value > 0 ? formatINR(p.value) : '✓ Done',
+        cellStyle: (p: any) => ({ color: p.value > 0 ? '#d97706' : '#16a34a' }),
+      },
+    ]
+  }, [installments])
 
   function handleExport() {
     const ws = XLSX.utils.json_to_sheet(rows.map(r => {
@@ -1393,7 +1394,7 @@ function ActivatePlanDialog({ open, plan, onClose, onSuccess }: {
         setChecking(false)
         setShowConfirm(true)
       })
-  }, [open, plan])
+  }, [open, plan.id])
 
   async function doActivate() {
     setLoading(true)
