@@ -559,8 +559,13 @@ function ReviewItem({ item, flats, onSaved }: { item: ReviewEntry; flats: any[];
                 value={category}
                 onChange={e => {
                   setCategory(e.target.value)
-                  if (e.target.value === 'Corpus') setCorpus('YES')
-                  else { setCorpus('NO'); setPlanId(null) }
+                  if (e.target.value === 'Corpus') {
+                    setCorpus('YES')
+                    if (activePlans.length === 1) setPlanId(activePlans[0].id)
+                  } else {
+                    setCorpus('NO')
+                    setPlanId(null)
+                  }
                 }}
                 className="w-full ds-field bg-white"
               >
@@ -660,8 +665,13 @@ function EditModal({ txn, flats, onClose, onSaved, onSplit, onVoided }: {
 
   function handleCategoryChange(val: string) {
     setCategory(val)
-    if (val === 'Corpus') { setCorpus('YES') }
-    else { setCorpus('NO'); setPlanId(null) }
+    if (val === 'Corpus') {
+      setCorpus('YES')
+      if (activePlans.length === 1) setPlanId(activePlans[0].id)
+    } else {
+      setCorpus('NO')
+      setPlanId(null)
+    }
   }
 
   function handleCopy() {
