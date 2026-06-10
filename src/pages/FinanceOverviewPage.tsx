@@ -133,6 +133,24 @@ export default function FinanceOverviewPage() {
     },
   })
 
+  const { data: corpusSpentByPlan = [] } = useQuery<{ corpus_plan_id: string; total: number }[]>({
+    queryKey: ['fo-corpus-spent-by-plan'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('expenses')
+        .select('corpus_plan_id, amount')
+        .not('corpus_plan_id', 'is', null)
+        .is('voided_at', null)
+      if (error) throw error
+      const byPlan = new Map<string, number>()
+      for (const e of data ?? []) {
+        const id = e.corpus_plan_id as string
+        byPlan.set(id, (byPlan.get(id) ?? 0) + (e.amount ?? 0))
+      }
+      return Array.from(byPlan.entries()).map(([corpus_plan_id, total]) => ({ corpus_plan_id, total }))
+    },
+  })
+
   const { data: deposits = [] } = useQuery<DepositRow[]>({
     queryKey: ['fo-deposits'],
     queryFn: async () => {
@@ -186,6 +204,10 @@ export default function FinanceOverviewPage() {
     p.collected += row.collected ?? 0
     p.target    += row.effective_target ?? 0
     p.balance   += row.balance ?? 0
+  }
+  for (const { corpus_plan_id, total } of corpusSpentByPlan) {
+    const p = corpusByPlan.get(corpus_plan_id)
+    if (p) p.spent = total
   }
   const corpusPlans     = Array.from(corpusByPlan.entries()).map(([id, p]) => ({ id, ...p }))
   const activePlans     = corpusPlans.filter(p => p.status === 'active')
@@ -255,7 +277,7 @@ export default function FinanceOverviewPage() {
           <p className="text-[28px] font-extrabold tnum leading-tight" style={{ color: '#5b21b6' }}>{formatINR(fdTotal)}</p>
           <p className="text-[11.5px] mt-1" style={{ color: '#8b5cf6' }}>
             {deposits.length} active FD{deposits.length !== 1 ? 's' : ''}
-            {nextFD ? ` · next maturity ${new Date(nextFD.maturity_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}` : ''}
+            {nextFD ? ` · next maturity ${parseLocalDate(nextFD.maturity_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}` : ''}
           </p>
         </button>
 
@@ -426,7 +448,7 @@ export default function FinanceOverviewPage() {
             <CalendarClock size={17} style={{ color: 'var(--warn)' }} className="shrink-0" />
             <p className="flex-1 text-[13px] font-semibold" style={{ color: 'var(--warn)' }}>
               {fdMaturingSoon.length} FD{fdMaturingSoon.length > 1 ? 's' : ''} maturing in the next 30 days
-              {fdMaturingSoon.length === 1 && nextFD ? ` — ${new Date(nextFD.maturity_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}` : ''}
+              {fdMaturingSoon.length === 1 && nextFD ? ` — ${parseLocalDate(nextFD.maturity_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}` : ''}
             </p>
             <Button size="sm" variant="outline" className="text-[12px] shrink-0" style={{ borderColor: 'var(--warn-bd)', color: 'var(--warn)' }} onClick={() => navigate('/finance')}>
               View <ArrowRight size={12} className="ml-1" />
