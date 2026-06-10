@@ -19,6 +19,7 @@ import UsersPage          from '@/pages/UsersPage'
 import HelpPage           from '@/pages/HelpPage'
 import ProfilePage        from '@/pages/ProfilePage'
 import MyFlatPage         from '@/pages/MyFlatPage'
+import FinanceOverviewPage from '@/pages/FinanceOverviewPage'
 import { RoleProvider } from '@/contexts/RoleContext'
 import { Toaster } from '@/components/ui/sonner'
 
@@ -55,6 +56,7 @@ export default function App() {
           <Route path="dues"          element={<DuesPage />} />
           <Route path="corpus"        element={<CorpusPage />} />
           <Route path="finance"       element={<FinancePage />} />
+          <Route path="finance-overview" element={<FinanceOverviewPage />} />
           <Route path="expenses"      element={<ExpensesPage />} />
           <Route path="reports"       element={<ReportPage />} />
           <Route path="flats"         element={<FlatsPage />} />
