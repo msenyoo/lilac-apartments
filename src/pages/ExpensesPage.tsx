@@ -464,11 +464,13 @@ function ExpenseDetailPanel({
 
   async function handleApprove(expenseId: string) {
     setApprovalBusy(true)
+    const { data: { user } } = await supabase.auth.getUser()
     const { error } = await supabase
       .from('expenses')
       .update({
         approval_status: 'approved',
         approved_at: new Date().toISOString(),
+        approved_by: user?.id ?? null,
       })
       .eq('id', expenseId)
     setApprovalBusy(false)
