@@ -30,6 +30,28 @@ interface CorpusRow {
 interface ArrearRow { id: string; arrears_type: string; source_label: string; amount: number }
 interface TxnRow { id: string; value_date: string; description: string; amount: number; category: string | null; fiscal_label: string | null; corpus: string }
 
+interface CorpusExpenseRow {
+  amount: number
+  expense_date: string
+  category: { name: string } | null
+  corpus_plan: { name: string } | null
+}
+
+interface CorpusExpenseGroup {
+  categoryName: string
+  totalSpent: number
+  firstDate: string
+  lastDate: string
+  count: number
+}
+
+interface CorpusPlanExpenses {
+  planId: string
+  planName: string
+  groups: CorpusExpenseGroup[]
+  totalSpent: number
+}
+
 function currentFiscalYear(): number {
   const now = new Date()
   return now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
@@ -46,6 +68,17 @@ function elapsedMonthsSince(startFy: number): string[] {
     if (++m === 12) { m = 0; y++ }
   }
   return result
+}
+
+interface HealthCardProps { label: string; value: string; sub?: string }
+function HealthCard({ label, value, sub }: HealthCardProps) {
+  return (
+    <div className="flex flex-col gap-0.5 min-w-0">
+      <p className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-400)' }}>{label}</p>
+      <p className="text-[14px] font-bold truncate" style={{ color: 'var(--ink-800)' }}>{value}</p>
+      {sub && <p className="text-[11.5px]" style={{ color: 'var(--ink-400)' }}>{sub}</p>}
+    </div>
+  )
 }
 
 function StatusPill({ status }: { status: string }) {
@@ -141,6 +174,98 @@ export default function OwnerPortalPage() {
     },
   })
 
+  const { data: healthMaintenance } = useQuery<{ cleared: number; total: number }>({
+    queryKey: ['health-maintenance'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('v_dues_tracker')
+        .select('status')
+      const rows = (data ?? []) as { status: string }[]
+      return {
+        cleared: rows.filter(r => r.status === 'Clear').length,
+        total:   rows.length,
+      }
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const { data: healthCorpus } = useQuery<{ collected: number; target: number }>({
+    queryKey: ['health-corpus'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('v_corpus_tracker')
+        .select('collected,effective_target')
+      const rows = (data ?? []) as { collected: number; effective_target: number }[]
+      return {
+        collected: rows.reduce((s, r) => s + (r.collected ?? 0), 0),
+        target:    rows.reduce((s, r) => s + (r.effective_target ?? 0), 0),
+      }
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+
+  interface LastExpenseRow { expense_date: string; amount: number; category: { name: string } | null }
+  const { data: lastExpense } = useQuery<LastExpenseRow | null>({
+    queryKey: ['health-last-expense'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('expenses')
+        .select('expense_date,amount,category:category_id(name)')
+        .is('voided_at', null)
+        .order('expense_date', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      return data as LastExpenseRow | null
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const activePlanIds = corpusList.map((c: any) => c.plan_id)
+
+  const { data: corpusExpenses = [] } = useQuery<CorpusPlanExpenses[]>({
+    queryKey: ['corpus-expenses-by-plan', activePlanIds],
+    enabled: activePlanIds.length > 0,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('expenses')
+        .select('amount,expense_date,category:category_id(name),corpus_plan:corpus_plan_id(name)')
+        .in('corpus_plan_id', activePlanIds)
+        .is('voided_at', null)
+        .order('expense_date', { ascending: true })
+
+      const rows = (data ?? []) as unknown as CorpusExpenseRow[]
+
+      const planMap = new Map<string, CorpusPlanExpenses>()
+      for (const c of corpusList) {
+        planMap.set((c as any).plan_id, {
+          planId:     (c as any).plan_id,
+          planName:   (c as any).plan_name,
+          groups:     [],
+          totalSpent: 0,
+        })
+      }
+
+      for (const row of rows) {
+        const planName = (row.corpus_plan as any)?.name ?? ''
+        const planEntry = [...planMap.values()].find(p => p.planName === planName)
+        if (!planEntry) continue
+
+        const catName = (row.category as any)?.name ?? 'Other'
+        let group = planEntry.groups.find(g => g.categoryName === catName)
+        if (!group) {
+          group = { categoryName: catName, totalSpent: 0, firstDate: row.expense_date, lastDate: row.expense_date, count: 0 }
+          planEntry.groups.push(group)
+        }
+        group.totalSpent  += row.amount
+        group.count       += 1
+        group.lastDate     = row.expense_date
+        planEntry.totalSpent += row.amount
+      }
+
+      return [...planMap.values()].filter(p => p.totalSpent > 0)
+    },
+  })
+
   const upi  = settings?.collection_upi  ?? ''
   const bank = settings?.collection_bank ?? ''
   const currentMonth = new Date().toLocaleString('en-IN', { month: 'short' })
@@ -174,6 +299,40 @@ export default function OwnerPortalPage() {
               {myFlat?.bhk_type ?? ''}
               {myFlat?.maintenance_amt ? `${myFlat.bhk_type ? ' · ' : ''}₹${myFlat.maintenance_amt.toLocaleString('en-IN')}/month` : ''}
             </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Society financial health strip */}
+      <div className="surface !p-4">
+        <p className="text-[11px] font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--ink-400)' }}>
+          Society overview
+        </p>
+        <div className="grid grid-cols-3 gap-3 divide-x" style={{ borderColor: 'var(--ink-100)' }}>
+          <HealthCard
+            label="Maintenance cleared"
+            value={healthMaintenance ? `${healthMaintenance.cleared} of ${healthMaintenance.total} flats` : '—'}
+          />
+          <div className="pl-3">
+            <HealthCard
+              label="Corpus collected"
+              value={
+                healthCorpus && healthCorpus.target > 0
+                  ? `${Math.round((healthCorpus.collected / healthCorpus.target) * 100)}% of ${formatINR(healthCorpus.target)}`
+                  : '—'
+              }
+            />
+          </div>
+          <div className="pl-3">
+            <HealthCard
+              label="Last expense"
+              value={lastExpense ? formatINR(lastExpense.amount) : '—'}
+              sub={
+                lastExpense
+                  ? `${(lastExpense.category as any)?.name ?? 'Expense'} · ${new Date(lastExpense.expense_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`
+                  : undefined
+              }
+            />
           </div>
         </div>
       </div>
@@ -307,6 +466,40 @@ export default function OwnerPortalPage() {
           </div>
         )
       })}
+
+      {/* How your corpus is used */}
+      {corpusExpenses.length > 0 && (
+        <div className="surface !p-5 flex flex-col gap-4">
+          <div className="flex items-center gap-2">
+            <Receipt size={16} style={{ color: 'var(--brand-600)' }} />
+            <p className="font-semibold text-[14px]">How your corpus is used</p>
+          </div>
+          {corpusExpenses.map(plan => (
+            <div key={plan.planId} className="flex flex-col gap-2">
+              <p className="text-[12px] font-semibold uppercase tracking-wide" style={{ color: 'var(--ink-400)' }}>
+                {plan.planName} · {formatINR(plan.totalSpent)} spent
+              </p>
+              <div className="flex flex-col gap-1">
+                {plan.groups.map(g => (
+                  <div key={g.categoryName} className="flex items-start justify-between gap-2 py-1.5 border-b last:border-0" style={{ borderColor: 'var(--ink-100)' }}>
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                      <p className="text-[13px] font-medium truncate" style={{ color: 'var(--ink-800)' }}>{g.categoryName}</p>
+                      <p className="text-[11px]" style={{ color: 'var(--ink-400)' }}>
+                        {new Date(g.firstDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
+                        {g.firstDate !== g.lastDate && ` – ${new Date(g.lastDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}`}
+                        {` · ${g.count} payment${g.count !== 1 ? 's' : ''}`}
+                      </p>
+                    </div>
+                    <span className="font-semibold text-[13px] shrink-0" style={{ color: 'var(--ink-700)' }}>
+                      {formatINR(g.totalSpent)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Previous corpus arrears from closed plans */}
       {corpusArrears.map(row => (
