@@ -22,7 +22,7 @@ import { toast } from 'sonner'
 const FY_OPTIONS = ['2022','2023','2024','2025','2026','2027','2028']
 function fyLabel(y: string) { return `FY ${y}-${String(parseInt(y) + 1).slice(-2)}` }
 
-type SettingsTab = 'general' | 'rates' | 'categories' | 'imports'
+type SettingsTab = 'general' | 'rates' | 'categories' | 'imports' | 'balances'
 
 export default function SettingsPage() {
   const { isAdmin } = useRoleCtx()
@@ -33,6 +33,7 @@ export default function SettingsPage() {
     { key: 'rates',      label: 'Maintenance Rates' },
     { key: 'categories', label: 'Expense Categories', adminOnly: true },
     { key: 'imports',    label: 'Import History',     adminOnly: true },
+    { key: 'balances',   label: 'Opening Balances',   adminOnly: true },
   ]
 
   const visibleTabs = TABS.filter(t => !t.adminOnly || isAdmin)
@@ -65,6 +66,7 @@ export default function SettingsPage() {
       {tab === 'rates'       && <RateHistorySettings />}
       {tab === 'categories'  && isAdmin && <CategoriesSettings />}
       {tab === 'imports'     && isAdmin && <UploadHistorySection />}
+      {tab === 'balances'    && isAdmin && <OpeningBalancesTab />}
     </div>
   )
 }
@@ -905,6 +907,100 @@ function AddEditCategoryDialog({ open, initial, onClose, onSuccess }: {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+// ── Opening Balances tab ──────────────────────────────────────
+
+const OB_FY_OPTIONS = ['2022', '2023', '2024', '2025', '2026', '2027', '2028']
+
+function OpeningBalancesTab() {
+  const qc = useQueryClient()
+
+  const { data: settings, isLoading } = useQuery({
+    queryKey: ['app-settings'],
+    queryFn: async () => {
+      const { data } = await supabase.from('app_settings').select('*')
+      return Object.fromEntries((data ?? []).map((s: any) => [s.key, s.value]))
+    },
+  })
+
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const [saving, setSaving] = useState(false)
+
+  function getValue(year: string): string {
+    if (drafts[year] !== undefined) return drafts[year]
+    return settings?.[`opening_balance_${year}`] ?? ''
+  }
+
+  async function handleSave() {
+    setSaving(true)
+    const rows = OB_FY_OPTIONS
+      .filter(y => drafts[y] !== undefined && drafts[y] !== '')
+      .map(y => ({
+        key: `opening_balance_${y}`,
+        value: String(parseInt(drafts[y] ?? '0', 10) || 0),
+        updated_at: new Date().toISOString(),
+      }))
+    if (rows.length === 0) { setSaving(false); return }
+    const { error } = await supabase.from('app_settings').upsert(rows)
+    setSaving(false)
+    if (error) { toast.error(error.message); return }
+    qc.invalidateQueries({ queryKey: ['app-settings'] })
+    setDrafts({})
+    toast.success('Opening balances saved')
+  }
+
+  if (isLoading) return (
+    <div className="h-40 animate-pulse rounded-[var(--ds-radius)]" style={{ background: 'var(--ink-100)' }} />
+  )
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="surface !p-5 flex flex-col gap-4">
+        <div>
+          <p className="font-semibold text-[14px]">Bank opening balances per FY</p>
+          <p className="text-[12px] mt-0.5" style={{ color: 'var(--ink-400)' }}>
+            Opening balance = actual bank balance on 1 April of that FY.
+            Used in the Balance Sheet and R&amp;P Statement reports.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-3 max-w-sm">
+          {OB_FY_OPTIONS.map(year => (
+            <div key={year} className="flex items-center gap-3">
+              <label className="ds-lbl w-24 shrink-0">
+                FY {year}-{String(parseInt(year) + 1).slice(-2)}
+              </label>
+              <div className="relative flex-1">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium" style={{ color: 'var(--ink-400)' }}>
+                  ₹
+                </span>
+                <Input
+                  type="number"
+                  min={0}
+                  value={getValue(year)}
+                  onChange={e => setDrafts(d => ({ ...d, [year]: e.target.value }))}
+                  className="pl-7 text-sm"
+                  placeholder="0"
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex">
+          <Button
+            onClick={handleSave}
+            disabled={saving || Object.keys(drafts).length === 0}
+            className="flex items-center gap-2"
+          >
+            {saving ? <RefreshCw size={15} className="animate-spin" /> : <Save size={15} />}
+            Save balances
+          </Button>
+        </div>
+      </div>
+    </div>
   )
 }
 
