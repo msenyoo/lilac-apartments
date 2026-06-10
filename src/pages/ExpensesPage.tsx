@@ -55,6 +55,10 @@ interface Expense {
   corpus_plan: { name: string } | null
   transaction: { id: string; value_date: string; description: string; amount: number } | null
   line_items: ExpenseLineItem[]
+  approval_status: 'pending' | 'approved' | 'rejected'
+  approved_by: string | null
+  approved_at: string | null
+  rejection_reason: string | null
 }
 interface ExpenseLineItem {
   id: string; payee_type: string; payee_name_raw: string | null
@@ -178,16 +182,18 @@ export default function ExpensesPage() {
 function DayBook() {
   const [detailId, setDetailId] = useState<string | null>(null)
   const [showVoided, setShowVoided] = useState(false)
+  const [showPending, setShowPending] = useState(false)
 
   const { data: expenses = [], isLoading } = useQuery({
-    queryKey: ['expenses', showVoided],
+    queryKey: ['expenses', showVoided, showPending],
     queryFn: async () => {
       let q = supabase
         .from('expenses')
         .select(`
           id,expense_date,description,payee_type,payee_name_raw,amount,payment_mode,
           reference_no,cheque_number,voucher_no,transaction_id,reconciled_at,
-          reconciliation_notes,notes,created_at,voided_at,voided_by,void_reason,corpus_plan_id,
+          reconciliation_notes,notes,created_at,voided_at,voided_by,void_reason,
+          approval_status,approved_by,approved_at,rejection_reason,corpus_plan_id,
           category:category_id(id,name,budget_type,is_utility),
           vendor:vendor_id(id,name,type,phone),
           staff_member:staff_id(id,name,role,assigned_area,phone,left_date),
@@ -197,6 +203,7 @@ function DayBook() {
         `)
         .order('expense_date', { ascending: false })
       if (!showVoided) q = q.is('voided_at', null)
+      if (showPending) q = q.eq('approval_status', 'pending')
       const { data, error } = await q
       if (error) throw error
       return (data ?? []) as unknown as Expense[]
@@ -236,6 +243,7 @@ function DayBook() {
   const totalThisFY  = activeExpenses.filter(e => e.expense_date >= fyStart && e.expense_date <= fyEnd).reduce((s, e) => s + e.amount, 0)
   const unreconciled = activeExpenses.filter(e => expenseStatus(e) === 'Unreconciled').length
   const totalAll     = activeExpenses.reduce((s, e) => s + e.amount, 0)
+  const pendingApproval = activeExpenses.filter(e => e.approval_status === 'pending').length
 
   if (isLoading) return <div className="surface h-48 animate-pulse" style={{ background: 'var(--ink-100)' }} />
 
@@ -263,15 +271,31 @@ function DayBook() {
 
       {/* Toolbar */}
       <div className="flex items-center justify-between">
-        <label className="flex items-center gap-2 text-sm cursor-pointer select-none" style={{ color: 'var(--ink-500)' }}>
-          <input
-            type="checkbox"
-            checked={showVoided}
-            onChange={e => { setShowVoided(e.target.checked); setDetailId(null) }}
-            className="rounded"
-          />
-          Show voided
-        </label>
+        <div className="flex items-center gap-4">
+          <label className="flex items-center gap-2 text-sm cursor-pointer select-none" style={{ color: 'var(--ink-500)' }}>
+            <input
+              type="checkbox"
+              checked={showVoided}
+              onChange={e => { setShowVoided(e.target.checked); setDetailId(null) }}
+              className="rounded"
+            />
+            Show voided
+          </label>
+          <label className="flex items-center gap-2 text-sm cursor-pointer select-none" style={{ color: 'var(--ink-500)' }}>
+            <input
+              type="checkbox"
+              checked={showPending}
+              onChange={e => { setShowPending(e.target.checked); setDetailId(null) }}
+              className="rounded"
+            />
+            Show pending
+            {pendingApproval > 0 && !showPending && (
+              <span className="ml-1 text-[11px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                {pendingApproval}
+              </span>
+            )}
+          </label>
+        </div>
         <button onClick={handleExport} disabled={!expenses.length}
           className="flex items-center gap-1.5 text-sm text-brand-700 hover:text-brand-900 disabled:opacity-40">
           <Download size={14} /> Export
@@ -327,6 +351,16 @@ function DayBook() {
                         {status}
                       </span>
                     )}
+                    {e.approval_status === 'pending' && (
+                      <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-amber-100 text-amber-700">
+                        Pending
+                      </span>
+                    )}
+                    {e.approval_status === 'rejected' && (
+                      <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-red-100 text-red-600">
+                        Rejected
+                      </span>
+                    )}
                     <span className={`text-sm font-semibold ${isVoided ? 'line-through text-muted-foreground' : ''}`} style={isVoided ? undefined : { color: 'var(--ink-800)' }}>{formatINR(e.amount)}</span>
                   </div>
                 </button>
@@ -369,6 +403,9 @@ function ExpenseDetailPanel({
   const [voiding, setVoiding] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [unreconciling, setUnreconciling] = useState(false)
+  const [approvalBusy, setApprovalBusy] = useState(false)
+  const [rejectTarget, setRejectTarget] = useState<string | null>(null)
+  const [rejectReason, setRejectReason] = useState('')
 
   async function handleVoid() {
     if (!voidReason.trim()) return
@@ -425,6 +462,39 @@ function ExpenseDetailPanel({
     }
   }
 
+  async function handleApprove(expenseId: string) {
+    setApprovalBusy(true)
+    const { error } = await supabase
+      .from('expenses')
+      .update({
+        approval_status: 'approved',
+        approved_at: new Date().toISOString(),
+      })
+      .eq('id', expenseId)
+    setApprovalBusy(false)
+    if (error) { toast.error(error.message); return }
+    toast.success('Expense approved')
+    qc.invalidateQueries({ queryKey: ['expenses'] })
+  }
+
+  async function handleReject(expenseId: string, reason: string) {
+    if (!reason.trim()) { toast.error('Rejection reason is required'); return }
+    setApprovalBusy(true)
+    const { error } = await supabase
+      .from('expenses')
+      .update({
+        approval_status: 'rejected',
+        rejection_reason: reason.trim(),
+      })
+      .eq('id', expenseId)
+    setApprovalBusy(false)
+    if (error) { toast.error(error.message); return }
+    toast.success('Expense rejected')
+    setRejectTarget(null)
+    setRejectReason('')
+    qc.invalidateQueries({ queryKey: ['expenses'] })
+  }
+
   return (
     <>
       {/* Mobile backdrop */}
@@ -471,6 +541,36 @@ function ExpenseDetailPanel({
             <Row label="Voided on" value={new Date(e.voided_at).toLocaleDateString('en-IN')} />
           )}
         </div>
+
+        {isAdmin && e.approval_status === 'pending' && (
+          <div className="flex flex-col gap-2 pt-2 border-t hairline">
+            <p className="text-xs font-semibold" style={{ color: 'var(--ink-500)' }}>Approval required</p>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                className="flex-1 bg-green-600 hover:bg-green-700"
+                onClick={() => handleApprove(e.id)}
+                disabled={approvalBusy}
+              >
+                Approve
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="flex-1 border-red-300 text-red-600 hover:bg-red-50"
+                onClick={() => setRejectTarget(e.id)}
+                disabled={approvalBusy}
+              >
+                Reject
+              </Button>
+            </div>
+          </div>
+        )}
+        {e.approval_status === 'rejected' && e.rejection_reason && (
+          <div className="text-xs p-2 rounded-lg bg-red-50 text-red-700 border border-red-200">
+            <strong>Rejected:</strong> {e.rejection_reason}
+          </div>
+        )}
 
         {!isVoided && (
           <div className="flex gap-2 pt-1">
@@ -576,6 +676,32 @@ function ExpenseDetailPanel({
           editExpense={e}
         />
       )}
+
+      {/* Reject dialog */}
+      <Dialog open={!!rejectTarget} onOpenChange={open => { if (!open) { setRejectTarget(null); setRejectReason('') } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Reject expense</DialogTitle></DialogHeader>
+          <div className="flex flex-col gap-3">
+            <p className="text-sm" style={{ color: 'var(--ink-500)' }}>Provide a reason for rejection. This will be visible to the submitter.</p>
+            <Textarea
+              value={rejectReason}
+              onChange={ev => setRejectReason(ev.target.value)}
+              placeholder="e.g. Missing receipt, duplicate entry..."
+              rows={3}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setRejectTarget(null); setRejectReason('') }}>Cancel</Button>
+            <Button
+              className="bg-red-600 hover:bg-red-700"
+              disabled={!rejectReason.trim() || approvalBusy}
+              onClick={() => rejectTarget && handleReject(rejectTarget, rejectReason)}
+            >
+              Reject
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }
