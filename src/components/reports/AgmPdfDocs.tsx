@@ -369,6 +369,89 @@ export function RPStatementDoc({
   )
 }
 
+// ── Balance Sheet ─────────────────────────────────────────────
+
+export function BalanceSheetDoc({
+  fyLabel, asAtDate,
+  bankBalance, fdTotal, corpusCollected, totalAssets,
+  pendingDues, corpusBalance, totalLiabilities, netPosition,
+  generated,
+}: {
+  fyLabel: string
+  asAtDate: string
+  bankBalance: number
+  fdTotal: number
+  corpusCollected: number
+  totalAssets: number
+  pendingDues: number
+  corpusBalance: number
+  totalLiabilities: number
+  netPosition: number
+  generated: string
+}) {
+  return (
+    <Document>
+      <Page size="A4" style={S.page}>
+        <View style={S.header}>
+          <Text style={S.title}>Balance Sheet — {fyLabel}</Text>
+          <Text style={S.subtitle}>The Lilac Apartment Association · Rajakil Pakkam, Chennai</Text>
+          <Text style={[S.subtitle, { marginTop: 2 }]}>As at {asAtDate}</Text>
+        </View>
+
+        <View style={S.twoCol}>
+          <View style={S.half}>
+            <Text style={S.sectionHead}>ASSETS</Text>
+            <View style={S.table}>
+              {[
+                { label: 'Bank balance',            amount: bankBalance },
+                { label: 'Fixed deposits (active)', amount: fdTotal },
+                { label: 'Corpus fund collected',   amount: corpusCollected },
+              ].map((r, i) => (
+                <View key={r.label} style={[S.row, i % 2 === 1 ? S.rowAlt : {}]}>
+                  <Text style={S.col}>{r.label}</Text>
+                  <Text style={S.colR}>{formatINR(r.amount)}</Text>
+                </View>
+              ))}
+              <View style={S.rowTotal}>
+                <Text style={[S.col, S.bold]}>Total Assets</Text>
+                <Text style={[S.colR, S.bold]}>{formatINR(totalAssets)}</Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={S.half}>
+            <Text style={S.sectionHead}>LIABILITIES</Text>
+            <View style={S.table}>
+              {[
+                { label: 'Pending maintenance dues', amount: pendingDues },
+                { label: 'Corpus yet to collect',    amount: corpusBalance },
+              ].map((r, i) => (
+                <View key={r.label} style={[S.row, i % 2 === 1 ? S.rowAlt : {}]}>
+                  <Text style={r.amount > 0 ? S.col : [S.col, { color: '#94a3b8' }]}>{r.label}</Text>
+                  <Text style={S.colR}>{r.amount > 0 ? formatINR(r.amount) : '-'}</Text>
+                </View>
+              ))}
+              <View style={S.rowTotal}>
+                <Text style={[S.col, S.bold]}>Total Liabilities</Text>
+                <Text style={[S.colR, S.bold]}>{formatINR(totalLiabilities)}</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        <View style={[S.rowTotal, { marginTop: 16, paddingTop: 8, borderTop: '1.5pt solid #7c3aed' }]}>
+          <Text style={[S.col, S.bold, { fontSize: 11 }]}>Net Position (Assets − Liabilities)</Text>
+          <Text style={[S.colR, S.bold, { fontSize: 11, color: netPosition >= 0 ? '#16a34a' : '#dc2626' }]}>
+            {netPosition >= 0 ? '' : '(Deficit) '}{formatINR(Math.abs(netPosition))}
+          </Text>
+        </View>
+
+        <PageFooter generated={generated} />
+      </Page>
+    </Document>
+  )
+}
+
 export function CorpusFundDoc({ plans, generated }: {
   plans: CorpusPlanSummary[]
   generated: string

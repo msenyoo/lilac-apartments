@@ -1754,7 +1754,231 @@ function RPStatementTab() {
 }
 
 function BalanceSheetTab() {
-  return null
+  const fy = getCurrentFy()
+  const [selectedFyYear, setSelectedFyYear] = useState(fy.year)
+  const selectedFy = getFyRange(selectedFyYear)
+  const [generating, setGenerating] = useState(false)
+
+  const { data: openingBalanceSetting } = useQuery({
+    queryKey: ['opening-balance', selectedFyYear],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', `opening_balance_${selectedFyYear}`)
+        .maybeSingle()
+      return parseInt(data?.value ?? '0', 10) || 0
+    },
+  })
+
+  const { data: totalCR } = useQuery({
+    queryKey: ['bs-total-cr', selectedFyYear],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('transactions')
+        .select('amount')
+        .eq('cr_dr', 'CR')
+        .gte('value_date', selectedFy.start)
+        .lte('value_date', selectedFy.end)
+      return (data ?? []).reduce((s: number, r: any) => s + (r.amount ?? 0), 0)
+    },
+  })
+
+  const { data: totalDR } = useQuery({
+    queryKey: ['bs-total-dr', selectedFyYear],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('transactions')
+        .select('amount')
+        .eq('cr_dr', 'DR')
+        .gte('value_date', selectedFy.start)
+        .lte('value_date', selectedFy.end)
+      return (data ?? []).reduce((s: number, r: any) => s + (r.amount ?? 0), 0)
+    },
+  })
+
+  const { data: activeFDs } = useQuery({
+    queryKey: ['bs-active-fds'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('deposits')
+        .select('principal')
+        .eq('status', 'active')
+      return (data ?? []).reduce((s: number, r: any) => s + (r.principal ?? 0), 0)
+    },
+  })
+
+  const { data: corpusCollected } = useQuery({
+    queryKey: ['bs-corpus-collected'],
+    queryFn: async () => {
+      const { data } = await supabase.from('v_corpus_tracker').select('collected')
+      return (data ?? []).reduce((s: number, r: any) => s + (r.collected ?? 0), 0)
+    },
+  })
+
+  const { data: pendingDues } = useQuery({
+    queryKey: ['bs-pending-dues', selectedFyYear],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('v_dues_tracker')
+        .select('pending')
+        .eq('fiscal_year', selectedFyYear)
+        .neq('status', 'Clear')
+      return (data ?? []).reduce((s: number, r: any) => s + (r.pending ?? 0), 0)
+    },
+  })
+
+  const { data: corpusBalance } = useQuery({
+    queryKey: ['bs-corpus-balance'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('v_corpus_tracker')
+        .select('balance')
+        .gt('balance', 0)
+      return (data ?? []).reduce((s: number, r: any) => s + (r.balance ?? 0), 0)
+    },
+  })
+
+  const openBal     = openingBalanceSetting ?? 0
+  const bankBalance = openBal + (totalCR ?? 0) - (totalDR ?? 0)
+  const fdTotal     = activeFDs ?? 0
+  const corpColl    = corpusCollected ?? 0
+  const totalAssets = bankBalance + fdTotal + corpColl
+
+  const pendDues    = pendingDues ?? 0
+  const corpBal     = corpusBalance ?? 0
+  const totalLiab   = pendDues + corpBal
+
+  const netPosition = totalAssets - totalLiab
+
+  async function handlePdf() {
+    setGenerating(true)
+    try {
+      const [{ pdf }, { BalanceSheetDoc }] = await Promise.all([
+        import('@react-pdf/renderer'),
+        import('@/components/reports/AgmPdfDocs'),
+      ])
+      const generated = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+      const blob = await pdf(
+        <BalanceSheetDoc
+          fyLabel={selectedFy.label}
+          asAtDate={`31 March ${selectedFyYear + 1}`}
+          bankBalance={bankBalance}
+          fdTotal={fdTotal}
+          corpusCollected={corpColl}
+          totalAssets={totalAssets}
+          pendingDues={pendDues}
+          corpusBalance={corpBal}
+          totalLiabilities={totalLiab}
+          netPosition={netPosition}
+          generated={generated}
+        />
+      ).toBlob()
+      triggerDownload(blob, `Balance_Sheet_${selectedFy.label.replace(/\s/g, '_')}.pdf`)
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  const isLoading = openingBalanceSetting === undefined || totalCR === undefined
+
+  return (
+    <div className="flex flex-col gap-5 max-w-2xl">
+      <div className="flex items-center gap-3 flex-wrap">
+        <label className="text-sm font-medium" style={{ color: 'var(--ink-600)' }}>As at 31 March</label>
+        <select
+          value={selectedFyYear}
+          onChange={e => setSelectedFyYear(Number(e.target.value))}
+          className="ds-field"
+        >
+          {FISCAL_YEARS.map(f => <option key={f.year} value={f.year}>{f.year + 1} ({f.label})</option>)}
+        </select>
+        <div className="ml-auto">
+          <button
+            onClick={handlePdf}
+            disabled={generating || isLoading}
+            className="btn-primary flex items-center gap-2 py-2 px-4 text-sm disabled:opacity-50"
+          >
+            {generating
+              ? <><Loader2 size={14} className="animate-spin" /> Generating PDF…</>
+              : <><FileText size={14} /> Download PDF</>
+            }
+          </button>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="h-48 animate-pulse rounded-[var(--ds-radius)]" style={{ background: 'var(--ink-100)' }} />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="surface !p-0 overflow-hidden">
+            <div className="px-5 py-3 border-b hairline" style={{ background: 'var(--info-bg)' }}>
+              <h3 className="font-semibold text-sm text-blue-800">ASSETS</h3>
+              <p className="text-xs text-blue-600">as at 31 March {selectedFyYear + 1}</p>
+            </div>
+            {[
+              { label: 'Bank balance',           amount: bankBalance, note: `Opening ₹${openBal.toLocaleString('en-IN')} + CRs − DRs` },
+              { label: 'Fixed deposits (active)', amount: fdTotal,    note: 'Sum of active FD principals' },
+              { label: 'Corpus fund collected',   amount: corpColl,   note: 'All plans combined' },
+            ].map(({ label, amount, note }) => (
+              <div key={label} className="flex justify-between items-start px-5 py-3 border-b hairline text-sm">
+                <div>
+                  <p style={{ color: 'var(--ink-700)' }}>{label}</p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--ink-400)' }}>{note}</p>
+                </div>
+                <span className="font-semibold ml-4 shrink-0" style={{ color: 'var(--ink-800)' }}>{formatINR(amount)}</span>
+              </div>
+            ))}
+            <div className="flex justify-between items-center px-5 py-3 font-bold text-sm border-t-2 hairline text-blue-700" style={{ background: 'var(--info-bg)' }}>
+              <span>Total Assets</span>
+              <span>{formatINR(totalAssets)}</span>
+            </div>
+          </div>
+
+          <div className="surface !p-0 overflow-hidden">
+            <div className="px-5 py-3 border-b hairline" style={{ background: 'var(--bad-bg)' }}>
+              <h3 className="font-semibold text-sm text-rose-800">LIABILITIES</h3>
+              <p className="text-xs text-rose-600">as at 31 March {selectedFyYear + 1}</p>
+            </div>
+            {[
+              { label: 'Pending maintenance dues', amount: pendDues, note: 'Flats with outstanding dues' },
+              { label: 'Corpus yet to collect',    amount: corpBal,  note: 'Target minus collected (all plans)' },
+            ].map(({ label, amount, note }) => (
+              <div key={label} className="flex justify-between items-start px-5 py-3 border-b hairline text-sm">
+                <div>
+                  <p style={{ color: 'var(--ink-700)' }}>{label}</p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--ink-400)' }}>{note}</p>
+                </div>
+                <span className="font-semibold ml-4 shrink-0" style={{ color: 'var(--ink-800)' }}>{formatINR(amount)}</span>
+              </div>
+            ))}
+            <div className="flex justify-between items-center px-5 py-3 font-bold text-sm border-t-2 hairline text-rose-700" style={{ background: 'var(--bad-bg)' }}>
+              <span>Total Liabilities</span>
+              <span>{formatINR(totalLiab)}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!isLoading && (
+        <div className={`surface !p-5 flex justify-between items-center text-lg font-bold border-2 rounded-[var(--ds-radius)] ${netPosition >= 0 ? 'border-green-300' : 'border-red-300'}`}
+          style={{ background: netPosition >= 0 ? 'var(--ok-bg)' : 'var(--bad-bg)' }}>
+          <div>
+            <p>Net Position</p>
+            <p className="text-xs font-normal mt-0.5" style={{ color: 'var(--ink-500)' }}>Total Assets − Total Liabilities</p>
+          </div>
+          <span className={netPosition >= 0 ? 'text-green-700' : 'text-red-600'}>
+            {netPosition >= 0 ? '' : '−'}{formatINR(Math.abs(netPosition))}
+          </span>
+        </div>
+      )}
+
+      <p className="text-xs text-center" style={{ color: 'var(--ink-400)' }}>
+        Note: Bank balance = opening balance (set in Settings) + all bank CRs − all bank DRs for {selectedFy.label}.
+        Corpus collected is shown as an asset (ring-fenced fund).
+      </p>
+    </div>
+  )
 }
 
 function buildShareText(month: string, summary: any, flats: any[], expenses: any[], corpusCollected: number, corpusTarget: number) {
