@@ -993,7 +993,7 @@ function FlatStatementTab() {
 
 // ── EXPENDITURE REPORTS TAB ──────────────────────────────────
 
-type ExpSubTab = 'category' | 'vendor' | 'trend'
+type ExpSubTab = 'category' | 'vendor' | 'trend' | 'tds'
 
 function ExpenditureReportsTab() {
   const fy = getCurrentFy()
@@ -1078,6 +1078,48 @@ function ExpenditureReportsTab() {
     },
   })
 
+  const { data: tdsRows, isLoading: loadingTds } = useQuery({
+    queryKey: ['tds-register', selectedFyYear],
+    queryFn: async () => {
+      const [{ data: lineItems }, { data: vendors }] = await Promise.all([
+        supabase
+          .from('expense_line_items')
+          .select('amount, vendor_id, payee_name_raw, category_id')
+          .gte('created_at', selectedFy.start + 'T00:00:00')
+          .lte('created_at', selectedFy.end + 'T23:59:59'),
+        supabase.from('vendors').select('id, name, pan_number'),
+      ])
+      const vendorMap = new Map(
+        (vendors ?? []).map((v: any) => [v.id, { name: v.name as string, pan: v.pan_number as string | null }])
+      )
+      const grouped = new Map<string, { name: string; pan: string | null; total: number }>()
+      for (const item of lineItems ?? []) {
+        const vi  = (item as any).vendor_id
+        const key = vi ?? ((item as any).payee_name_raw ?? 'Cash / Misc')
+        if (!grouped.has(key)) {
+          const info = vi
+            ? (vendorMap.get(vi) ?? { name: (item as any).payee_name_raw ?? 'Unknown', pan: null })
+            : { name: (item as any).payee_name_raw ?? 'Cash / Misc', pan: null }
+          grouped.set(key, { name: info.name, pan: info.pan, total: 0 })
+        }
+        grouped.get(key)!.total += (item as any).amount ?? 0
+      }
+      const TDS_THRESHOLD = 30000
+      const TDS_RATE = 0.10
+      return Array.from(grouped.values())
+        .filter(r => r.total > 0)
+        .map(r => ({
+          name:          r.name,
+          pan:           r.pan ?? '—',
+          total:         r.total,
+          overThreshold: Math.max(0, r.total - TDS_THRESHOLD),
+          tdsDue:        r.total > TDS_THRESHOLD ? Math.round((r.total - TDS_THRESHOLD) * TDS_RATE) : 0,
+          status:        r.total > TDS_THRESHOLD ? 'Due' : 'Below threshold',
+        }))
+        .sort((a, b) => b.total - a.total)
+    },
+  })
+
   function handleExcelCategory() {
     if (!catExpenses?.length) return
     const wb = XLSX.utils.book_new()
@@ -1118,6 +1160,7 @@ function ExpenditureReportsTab() {
             { key: 'category', label: 'By category' },
             { key: 'vendor',   label: 'By vendor' },
             { key: 'trend',    label: 'Monthly trend' },
+            { key: 'tds',      label: 'TDS Register' },
           ] as { key: ExpSubTab; label: string }[]).map(({ key, label }) => (
             <button key={key} onClick={() => setSubTab(key)}
               className={`px-3 py-1 rounded-md font-medium transition-colors
@@ -1296,6 +1339,96 @@ function ExpenditureReportsTab() {
             </ResponsiveContainer>
             <div className="mt-3 text-xs text-right" style={{ color: 'var(--ink-400)' }}>
               Total: {formatINR((monthlyTrend ?? []).reduce((s, r) => s + r.amount, 0))}
+            </div>
+          </div>
+        )
+      )}
+
+      {/* TDS Register */}
+      {subTab === 'tds' && (
+        loadingTds ? (
+          <div className="h-40 animate-pulse rounded-[var(--ds-radius)]" style={{ background: 'var(--ink-100)' }} />
+        ) : !tdsRows?.length ? (
+          <div className="surface !p-10 text-center text-[13px]" style={{ color: 'var(--ink-400)' }}>
+            No expense line items found for {selectedFy.label}
+          </div>
+        ) : (
+          <div className="surface !p-0 overflow-hidden">
+            <div className="px-4 py-3 border-b hairline flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-sm">TDS Compliance Register — {selectedFy.label}</h3>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--ink-500)' }}>
+                  Threshold: ₹30,000 per vendor · TDS rate: 10% on amount above threshold
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  const wb = XLSX.utils.book_new()
+                  const rows: any[][] = [
+                    [`TDS Compliance Register — ${selectedFy.label}`],
+                    [`The Lilac Apartment Association · Generated ${new Date().toLocaleDateString('en-IN')}`],
+                    [],
+                    ['Vendor / Payee', 'PAN', 'Total Paid (₹)', 'TDS Threshold (₹)', 'Amount Over Threshold (₹)', 'TDS @ 10% Due (₹)', 'Status'],
+                    ...(tdsRows ?? []).map(r => [
+                      r.name, r.pan, r.total, 30000, r.overThreshold, r.tdsDue, r.status,
+                    ]),
+                    [],
+                    ['TOTAL', '', (tdsRows ?? []).reduce((s, r) => s + r.total, 0), '', (tdsRows ?? []).reduce((s, r) => s + r.overThreshold, 0), (tdsRows ?? []).reduce((s, r) => s + r.tdsDue, 0), ''],
+                  ]
+                  const ws = XLSX.utils.aoa_to_sheet(rows)
+                  ws['!cols'] = [24, 14, 14, 14, 18, 14, 16].map(w => ({ wch: w }))
+                  XLSX.utils.book_append_sheet(wb, ws, 'TDS Register')
+                  XLSX.writeFile(wb, `TDS_Register_${selectedFy.label.replace(/\s/g, '_')}.xlsx`)
+                }}
+                className="flex items-center gap-1.5 text-sm hover:opacity-80"
+                style={{ color: 'var(--brand-700)' }}
+              >
+                <Download size={14} /> Export Excel
+              </button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="border-b hairline" style={{ background: 'var(--ink-50)' }}>
+                  <tr>
+                    <th className="text-left px-4 py-2.5 font-semibold" style={{ color: 'var(--ink-600)' }}>Vendor / Payee</th>
+                    <th className="text-left px-4 py-2.5 font-semibold" style={{ color: 'var(--ink-600)' }}>PAN</th>
+                    <th className="text-right px-4 py-2.5 font-semibold" style={{ color: 'var(--ink-600)' }}>Total Paid</th>
+                    <th className="text-right px-4 py-2.5 font-semibold" style={{ color: 'var(--ink-600)' }}>Over Threshold</th>
+                    <th className="text-right px-4 py-2.5 font-semibold" style={{ color: 'var(--ink-600)' }}>TDS @ 10%</th>
+                    <th className="text-left px-4 py-2.5 font-semibold" style={{ color: 'var(--ink-600)' }}>Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-rows">
+                  {(tdsRows ?? []).map((r, i) => (
+                    <tr key={r.name + i} className={i % 2 === 1 ? 'bg-slate-50/50' : ''}>
+                      <td className="px-4 py-2.5 font-medium">{r.name}</td>
+                      <td className="px-4 py-2.5 font-mono text-xs" style={{ color: r.pan === '—' ? 'var(--ink-300)' : 'var(--ink-700)' }}>{r.pan}</td>
+                      <td className="px-4 py-2.5 text-right font-semibold">{formatINR(r.total)}</td>
+                      <td className="px-4 py-2.5 text-right" style={{ color: r.overThreshold > 0 ? 'var(--ink-800)' : 'var(--ink-300)' }}>
+                        {r.overThreshold > 0 ? formatINR(r.overThreshold) : '—'}
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-semibold" style={{ color: r.tdsDue > 0 ? '#d97706' : 'var(--ink-300)' }}>
+                        {r.tdsDue > 0 ? formatINR(r.tdsDue) : '—'}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        {r.status === 'Due'
+                          ? <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">TDS Due</span>
+                          : <span className="text-xs" style={{ color: 'var(--ink-300)' }}>Below threshold</span>
+                        }
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="border-t-2 hairline" style={{ background: 'var(--ink-50)' }}>
+                  <tr>
+                    <td className="px-4 py-3 font-bold" colSpan={2}>Total</td>
+                    <td className="px-4 py-3 text-right font-bold">{formatINR((tdsRows ?? []).reduce((s, r) => s + r.total, 0))}</td>
+                    <td className="px-4 py-3 text-right font-bold">{formatINR((tdsRows ?? []).reduce((s, r) => s + r.overThreshold, 0))}</td>
+                    <td className="px-4 py-3 text-right font-bold text-amber-600">{formatINR((tdsRows ?? []).reduce((s, r) => s + r.tdsDue, 0))}</td>
+                    <td />
+                  </tr>
+                </tfoot>
+              </table>
             </div>
           </div>
         )
