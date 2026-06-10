@@ -277,6 +277,98 @@ export function ReceiptsPaymentsDoc({ receipts, payments, fyLabel, generated }: 
   )
 }
 
+// ── R&P Statement (enhanced: opening balance + FD interest) ───
+
+interface RPPaymentRow { category: string; amount: number }
+
+export function RPStatementDoc({
+  fyLabel, openingBalance, maintenanceCR, corpusCR, fdInterest, payments, generated,
+}: {
+  fyLabel: string
+  openingBalance: number
+  maintenanceCR: number
+  corpusCR: number
+  fdInterest: number
+  payments: RPPaymentRow[]
+  generated: string
+}) {
+  const totalReceipts = openingBalance + maintenanceCR + corpusCR + fdInterest
+  const totalPayments = payments.reduce((s, r) => s + r.amount, 0)
+  const closingBal    = totalReceipts - totalPayments
+
+  const receiptLines = [
+    { label: 'Opening balance (b/f)', amount: openingBalance },
+    { label: 'Maintenance collected', amount: maintenanceCR },
+    { label: 'Corpus collected',      amount: corpusCR },
+    { label: 'FD interest received',  amount: fdInterest },
+  ].filter(r => r.amount > 0)
+
+  const paymentLines: RPPaymentRow[] = closingBal > 0
+    ? [...payments, { category: 'Closing Balance (c/f)', amount: closingBal }]
+    : payments
+
+  return (
+    <Document>
+      <Page size="A4" style={S.page}>
+        <View style={S.header}>
+          <Text style={S.title}>Receipts &amp; Payments Statement — {fyLabel}</Text>
+          <Text style={S.subtitle}>The Lilac Apartment Association · Rajakil Pakkam, Chennai</Text>
+          <Text style={[S.subtitle, { marginTop: 2 }]}>
+            Cash basis · Financial year 1 April to 31 March
+          </Text>
+        </View>
+
+        <View style={S.twoCol}>
+          <View style={S.half}>
+            <Text style={S.sectionHead}>RECEIPTS (Dr)</Text>
+            <View style={S.table}>
+              {receiptLines.map((r, i) => (
+                <View key={r.label} style={[S.row, i % 2 === 1 ? S.rowAlt : {}]}>
+                  <Text style={S.col}>{r.label}</Text>
+                  <Text style={S.colR}>{formatINR(r.amount)}</Text>
+                </View>
+              ))}
+              <View style={S.rowTotal}>
+                <Text style={[S.col, S.bold]}>Total Receipts</Text>
+                <Text style={[S.colR, S.bold]}>{formatINR(totalReceipts)}</Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={S.half}>
+            <Text style={S.sectionHead}>PAYMENTS (Cr)</Text>
+            <View style={S.table}>
+              {paymentLines.map((r, i) => (
+                <View key={r.category} style={[S.row, i % 2 === 1 ? S.rowAlt : {}]}>
+                  <Text style={S.col}>{r.category}</Text>
+                  <Text style={S.colR}>{formatINR(r.amount)}</Text>
+                </View>
+              ))}
+              <View style={S.rowTotal}>
+                <Text style={[S.col, S.bold]}>Total Payments + Balance</Text>
+                <Text style={[S.colR, S.bold]}>{formatINR(totalReceipts)}</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {closingBal < 0 && (
+          <View style={[S.rowTotal, { marginTop: 12 }]}>
+            <Text style={[S.col, S.bold, { fontSize: 10, color: '#dc2626' }]}>
+              Deficit for the year
+            </Text>
+            <Text style={[S.colR, S.bold, { fontSize: 10, color: '#dc2626' }]}>
+              {formatINR(Math.abs(closingBal))}
+            </Text>
+          </View>
+        )}
+
+        <PageFooter generated={generated} />
+      </Page>
+    </Document>
+  )
+}
+
 export function CorpusFundDoc({ plans, generated }: {
   plans: CorpusPlanSummary[]
   generated: string

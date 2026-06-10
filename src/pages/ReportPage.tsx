@@ -78,7 +78,7 @@ const BLOCK_COLORS: Record<string, string> = {
   'Common':  '#64748b',
 }
 
-type ReportTab = 'monthly' | 'flat' | 'aging' | 'agm' | 'utility' | 'expenditure'
+type ReportTab = 'monthly' | 'flat' | 'aging' | 'agm' | 'utility' | 'expenditure' | 'rp' | 'balance-sheet'
 
 export default function ReportPage() {
   const [tab, setTab] = useState<ReportTab>('monthly')
@@ -176,8 +176,10 @@ export default function ReportPage() {
           { key: 'flat',        label: 'Flat statement' },
           { key: 'aging',       label: 'Dues aging' },
           { key: 'agm',         label: 'AGM reports' },
-          { key: 'utility',     label: 'Utilities' },
-          { key: 'expenditure', label: 'Expenditure' },
+          { key: 'utility',       label: 'Utilities' },
+          { key: 'expenditure',   label: 'Expenditure' },
+          { key: 'rp',            label: 'R&P Statement' },
+          { key: 'balance-sheet', label: 'Balance Sheet' },
         ] as { key: ReportTab; label: string }[]).map(({ key, label }) => (
           <button key={key} onClick={() => setTab(key)}
             className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors
@@ -192,7 +194,9 @@ export default function ReportPage() {
       {tab === 'aging'       && <DuesAgingTab />}
       {tab === 'agm'         && <AGMReportsTab />}
       {tab === 'utility'     && <UtilityTab />}
-      {tab === 'expenditure' && <ExpenditureReportsTab />}
+      {tab === 'expenditure'   && <ExpenditureReportsTab />}
+      {tab === 'rp'            && <RPStatementTab />}
+      {tab === 'balance-sheet' && <BalanceSheetTab />}
       {tab === 'monthly' && (
         <div className="flex flex-col gap-4 max-w-3xl">
           <div className="flex items-center justify-between flex-wrap gap-3">
@@ -1520,6 +1524,237 @@ function UtilityReport({ catId, catName, unitLabel: unitLabelProp, fyYear }: {
       </div>
     </div>
   )
+}
+
+// ── R&P STATEMENT TAB ─────────────────────────────────────────
+
+function RPStatementTab() {
+  const fy = getCurrentFy()
+  const [selectedFyYear, setSelectedFyYear] = useState(fy.year)
+  const selectedFy = getFyRange(selectedFyYear)
+  const [generating, setGenerating] = useState(false)
+  const [openingBalanceOverride, setOpeningBalanceOverride] = useState<string>('')
+
+  const { data: openingBalanceSetting } = useQuery({
+    queryKey: ['opening-balance', selectedFyYear],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', `opening_balance_${selectedFyYear}`)
+        .maybeSingle()
+      return data?.value ?? '0'
+    },
+  })
+
+  const openingBalance = openingBalanceOverride !== ''
+    ? (parseInt(openingBalanceOverride, 10) || 0)
+    : (parseInt(openingBalanceSetting ?? '0', 10) || 0)
+
+  const { data: maintenanceCR } = useQuery({
+    queryKey: ['rp-maintenance-cr', selectedFyYear],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('transactions')
+        .select('amount')
+        .eq('cr_dr', 'CR')
+        .eq('corpus', 'NO')
+        .gte('value_date', selectedFy.start)
+        .lte('value_date', selectedFy.end)
+      return (data ?? []).reduce((s: number, r: any) => s + (r.amount ?? 0), 0)
+    },
+  })
+
+  const { data: corpusCR } = useQuery({
+    queryKey: ['rp-corpus-cr', selectedFyYear],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('transactions')
+        .select('amount')
+        .eq('cr_dr', 'CR')
+        .eq('corpus', 'YES')
+        .gte('value_date', selectedFy.start)
+        .lte('value_date', selectedFy.end)
+      return (data ?? []).reduce((s: number, r: any) => s + (r.amount ?? 0), 0)
+    },
+  })
+
+  const { data: fdInterest } = useQuery({
+    queryKey: ['rp-fd-interest', selectedFyYear],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('deposits')
+        .select('principal, maturity_amount')
+        .eq('status', 'matured')
+        .gte('matured_date', selectedFy.start)
+        .lte('matured_date', selectedFy.end)
+      return (data ?? []).reduce((s: number, r: any) => {
+        const interest = (r.maturity_amount ?? r.principal) - r.principal
+        return s + (interest > 0 ? interest : 0)
+      }, 0)
+    },
+  })
+
+  const { data: paymentRows } = useQuery({
+    queryKey: ['rp-payments', selectedFyYear],
+    queryFn: async () => {
+      const [{ data: exps }, { data: cats }] = await Promise.all([
+        supabase.from('expenses')
+          .select('amount, category_id')
+          .gte('expense_date', selectedFy.start)
+          .lte('expense_date', selectedFy.end)
+          .is('voided_at', null),
+        supabase.from('expense_categories').select('id, name'),
+      ])
+      const catMap = new Map((cats ?? []).map((c: any) => [c.id, c.name as string]))
+      const grouped = new Map<string, number>()
+      for (const e of exps ?? []) {
+        const cat = catMap.get((e as any).category_id) ?? 'Uncategorised'
+        grouped.set(cat, (grouped.get(cat) ?? 0) + ((e as any).amount ?? 0))
+      }
+      return Array.from(grouped.entries())
+        .map(([category, amount]) => ({ category, amount }))
+        .sort((a, b) => b.amount - a.amount)
+    },
+  })
+
+  const mCR         = maintenanceCR ?? 0
+  const cCR         = corpusCR ?? 0
+  const fdInt       = fdInterest ?? 0
+  const totalReceipts = openingBalance + mCR + cCR + fdInt
+  const totalPayments = (paymentRows ?? []).reduce((s, r) => s + r.amount, 0)
+  const closingBalance = totalReceipts - totalPayments
+
+  async function handlePdf() {
+    setGenerating(true)
+    try {
+      const [{ pdf }, { RPStatementDoc }] = await Promise.all([
+        import('@react-pdf/renderer'),
+        import('@/components/reports/AgmPdfDocs'),
+      ])
+      const generated = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+      const blob = await pdf(
+        <RPStatementDoc
+          fyLabel={selectedFy.label}
+          openingBalance={openingBalance}
+          maintenanceCR={mCR}
+          corpusCR={cCR}
+          fdInterest={fdInt}
+          payments={paymentRows ?? []}
+          generated={generated}
+        />
+      ).toBlob()
+      triggerDownload(blob, `RP_Statement_${selectedFy.label.replace(/\s/g, '_')}.pdf`)
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-5 max-w-3xl">
+      <div className="flex items-center gap-3 flex-wrap">
+        <label className="text-sm font-medium" style={{ color: 'var(--ink-600)' }}>Financial Year</label>
+        <select
+          value={selectedFyYear}
+          onChange={e => { setSelectedFyYear(Number(e.target.value)); setOpeningBalanceOverride('') }}
+          className="ds-field"
+        >
+          {FISCAL_YEARS.map(f => <option key={f.year} value={f.year}>{f.label}</option>)}
+        </select>
+        <div className="ml-auto">
+          <button
+            onClick={handlePdf}
+            disabled={generating}
+            className="btn-primary flex items-center gap-2 py-2 px-4 text-sm disabled:opacity-50"
+          >
+            {generating
+              ? <><Loader2 size={14} className="animate-spin" /> Generating PDF…</>
+              : <><FileText size={14} /> Download PDF</>
+            }
+          </button>
+        </div>
+      </div>
+
+      <div className="surface !p-4 flex items-center gap-3">
+        <label className="text-sm font-medium shrink-0" style={{ color: 'var(--ink-600)' }}>
+          Opening balance (1 Apr {selectedFyYear})
+        </label>
+        <div className="relative max-w-xs">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: 'var(--ink-400)' }}>₹</span>
+          <input
+            type="number"
+            min={0}
+            value={openingBalanceOverride !== '' ? openingBalanceOverride : (openingBalanceSetting ?? '0')}
+            onChange={e => setOpeningBalanceOverride(e.target.value)}
+            className="ds-field pl-7 max-w-[180px]"
+          />
+        </div>
+        <p className="text-xs" style={{ color: 'var(--ink-400)' }}>
+          Pre-filled from Settings → Opening Balances. Edit here for one-off override (not saved).
+        </p>
+      </div>
+
+      <div className="surface !p-0 overflow-hidden">
+        <div className="px-5 py-3 border-b hairline" style={{ background: 'var(--ink-50)' }}>
+          <h3 className="font-semibold text-sm" style={{ color: 'var(--ink-700)' }}>RECEIPTS</h3>
+        </div>
+        {[
+          { label: 'Opening balance (brought forward)', amount: openingBalance },
+          { label: 'Maintenance collected',             amount: mCR },
+          { label: 'Corpus collected',                  amount: cCR },
+          { label: 'FD interest received',              amount: fdInt },
+        ].map(({ label, amount }) => (
+          <div key={label} className="flex justify-between items-center px-5 py-3 border-b hairline text-sm">
+            <span style={{ color: 'var(--ink-600)' }}>{label}</span>
+            <span className="font-semibold" style={{ color: 'var(--ink-800)' }}>{formatINR(amount)}</span>
+          </div>
+        ))}
+        <div className="flex justify-between items-center px-5 py-3 text-sm font-bold border-t-2 hairline" style={{ background: 'var(--ok-bg)' }}>
+          <span>Total Receipts</span>
+          <span className="text-green-700">{formatINR(totalReceipts)}</span>
+        </div>
+      </div>
+
+      <div className="surface !p-0 overflow-hidden">
+        <div className="px-5 py-3 border-b hairline" style={{ background: 'var(--ink-50)' }}>
+          <h3 className="font-semibold text-sm" style={{ color: 'var(--ink-700)' }}>PAYMENTS</h3>
+        </div>
+        {(paymentRows ?? []).length === 0 ? (
+          <div className="px-5 py-6 text-center text-sm" style={{ color: 'var(--ink-400)' }}>
+            No expenses recorded for {selectedFy.label}
+          </div>
+        ) : (
+          (paymentRows ?? []).map(({ category, amount }) => (
+            <div key={category} className="flex justify-between items-center px-5 py-3 border-b hairline text-sm">
+              <span style={{ color: 'var(--ink-600)' }}>{category}</span>
+              <span className="font-semibold" style={{ color: 'var(--ink-800)' }}>{formatINR(amount)}</span>
+            </div>
+          ))
+        )}
+        <div className="flex justify-between items-center px-5 py-3 text-sm font-bold border-t-2 hairline" style={{ background: 'var(--bad-bg)' }}>
+          <span>Total Payments</span>
+          <span className="text-rose-700">{formatINR(totalPayments)}</span>
+        </div>
+      </div>
+
+      <div className={`surface !p-4 flex justify-between items-center text-base font-bold border-2 ${closingBalance >= 0 ? 'border-green-200' : 'border-red-200'}`}
+        style={{ background: closingBalance >= 0 ? 'var(--ok-bg)' : 'var(--bad-bg)' }}>
+        <span>Closing Balance (31 Mar {selectedFyYear + 1})</span>
+        <span className={closingBalance >= 0 ? 'text-green-700' : 'text-red-600'}>
+          {formatINR(Math.abs(closingBalance))}
+          {closingBalance < 0 && ' (deficit)'}
+        </span>
+      </div>
+
+      <p className="text-xs text-center" style={{ color: 'var(--ink-400)' }}>
+        Cash-basis statement · All monetary transactions for {selectedFy.label}
+      </p>
+    </div>
+  )
+}
+
+function BalanceSheetTab() {
+  return null
 }
 
 function buildShareText(month: string, summary: any, flats: any[], expenses: any[], corpusCollected: number, corpusTarget: number) {
