@@ -22,11 +22,36 @@ const STATUS_BADGE: Record<string, string> = {
   cancelled: 'bg-red-100 text-red-500',
 }
 
+function fyRange(p: CorpusPlan) {
+  return `FY ${p.start_fiscal_year}-${String((p.start_fiscal_year ?? 0) + 1).slice(-2)} – FY ${p.end_fiscal_year}-${String((p.end_fiscal_year ?? 0) + 1).slice(-2)}`
+}
+
+function ParallelPlanWarning({ plans, onDismiss }: { plans: CorpusPlan[]; onDismiss: () => void }) {
+  const names = plans.map(p => `${p.name} (${fyRange(p)})`).join(' vs ')
+  return (
+    <div className="flex items-start gap-3 rounded-xl px-4 py-3 border border-amber-300 bg-amber-50">
+      <span className="mt-0.5 text-amber-600 shrink-0">⚠</span>
+      <p className="flex-1 text-sm text-amber-800">
+        <span className="font-semibold">{plans.length} active plans detected.</span>{' '}
+        Corpus payments without a plan tag will be attributed by fiscal year range.
+        Overlap risk: {names}.
+      </p>
+      <button
+        onClick={onDismiss}
+        className="shrink-0 p-0.5 rounded hover:bg-amber-100 text-amber-500"
+        aria-label="Dismiss warning"
+      >
+        <X size={15} />
+      </button>
+    </div>
+  )
+}
+
 export default function CorpusPage() {
   const { isAdmin } = useRoleCtx()
   const qc = useQueryClient()
   const [selectedPlanId, setSelectedPlanId] = useState<string>('__all__')
-  const [tab, setTab] = useState<'collection' | 'plan' | 'expenditure'>('collection')
+  const [tab, setTab] = useState<'collection' | 'plan' | 'expenditure' | 'calendar'>('collection')
   const [showCreateWizard, setShowCreateWizard] = useState(false)
   const [showActivate, setShowActivate] = useState(false)
   const [showClose, setShowClose] = useState(false)
@@ -49,6 +74,9 @@ export default function CorpusPage() {
 
   const activePlans  = plans.filter(p => p.status === 'active' || p.status === 'draft')
   const historyPlans = plans.filter(p => p.status === 'completed' || p.status === 'cancelled')
+
+  const trulyActivePlans = plans.filter(p => p.status === 'active')
+  const [overlapDismissed, setOverlapDismissed] = useState(false)
 
   // All entries from v_corpus_tracker (only active/draft plans per view WHERE clause)
   const { data: allCorpus = [], isLoading } = useQuery({
@@ -113,11 +141,45 @@ export default function CorpusPage() {
   const { data: expenditures = [] } = useQuery({
     queryKey: ['corpus-expenditure', selectedPlanId],
     queryFn: async () => {
-      let q = supabase.from('transactions').select('*')
-        .eq('cr_dr', 'DR').eq('corpus', 'YES').neq('row_type', 'VOIDED')
-        .order('value_date', { ascending: false })
+      let q = supabase.from('expenses')
+        .select('id,expense_date,description,amount,voucher_no,payee_name_raw,category:category_id(name)')
+        .is('voided_at', null)
+        .order('expense_date', { ascending: false })
+      if (selectedPlanId !== '__all__') {
+        q = q.eq('corpus_plan_id', selectedPlanId)
+      } else {
+        q = q.not('corpus_plan_id', 'is', null)
+      }
       return (await q).data ?? []
     },
+  })
+
+  const { data: allInstallments = [] } = useQuery({
+    queryKey: ['corpus-all-installments', trulyActivePlans.map(p => p.id).join(',')],
+    queryFn: async () => {
+      if (trulyActivePlans.length === 0) return []
+      const { data } = await supabase
+        .from('corpus_plan_installments')
+        .select('*')
+        .in('plan_id', trulyActivePlans.map(p => p.id))
+        .order('plan_id')
+        .order('installment_no')
+      return data ?? []
+    },
+    enabled: trulyActivePlans.length > 0,
+  })
+
+  const { data: allFlatInstallments = [] } = useQuery({
+    queryKey: ['corpus-all-flat-installments', trulyActivePlans.map(p => p.id).join(',')],
+    queryFn: async () => {
+      if (trulyActivePlans.length === 0) return []
+      const { data } = await supabase
+        .from('corpus_plan_flat_installments')
+        .select('*, flat:flat_id(code)')
+        .in('plan_id', trulyActivePlans.map(p => p.id))
+      return data ?? []
+    },
+    enabled: trulyActivePlans.length > 0,
   })
 
   // Aggregates — per-plan when one selected, or consolidated
@@ -163,18 +225,33 @@ export default function CorpusPage() {
       </div>
 
 
+      {trulyActivePlans.length >= 2 && !overlapDismissed && (
+        <ParallelPlanWarning plans={trulyActivePlans} onDismiss={() => setOverlapDismissed(true)} />
+      )}
+
       {/* Consolidated view banner when showing all */}
       {selectedPlanId === '__all__' && activePlans.length > 1 && (
         <ConsolidatedBanner plans={activePlans} allCorpus={allCorpus} />
       )}
 
       {/* KPI strip */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <SummaryCard label="Target"       value={formatINR(totalTarget)}                      color="text-slate-800" bg="bg-white" />
-        <SummaryCard label="Collected"    value={formatINR(totalCollected)}                   color="text-green-700" bg="bg-green-50" />
-        <SummaryCard label="Balance"      value={formatINR(Math.max(0, totalTarget - totalCollected))} color="text-amber-600" bg="bg-amber-50" />
-        <SummaryCard label="Spent so far" value={formatINR(totalSpent)}                       color="text-red-600"   bg="bg-red-50" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <SummaryCard label="Target"            value={formatINR(totalTarget)}                                    color="text-slate-800" bg="bg-white" />
+        <SummaryCard label="Collected"         value={formatINR(totalCollected)}                                 color="text-green-700" bg="bg-green-50" />
+        <SummaryCard label="Spent so far"      value={formatINR(totalSpent)}                                     color="text-red-600"   bg="bg-red-50" />
+        <SummaryCard label="Available cash"    value={formatINR(Math.max(0, totalCollected - totalSpent))}       color="text-blue-700"  bg="bg-blue-50" />
+        <SummaryCard label="Still to collect"  value={formatINR(Math.max(0, totalTarget - totalCollected))}      color="text-amber-600" bg="bg-amber-50" />
       </div>
+      {totalCollected > totalTarget && totalTarget > 0 && (
+        <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-green-50 border border-green-200 text-sm">
+          <span className="text-green-600 font-semibold">
+            Surplus: {formatINR(totalCollected - totalTarget)}
+          </span>
+          <span style={{ color: 'var(--ink-500)' }}>
+            — collected exceeds the plan target. This is informational.
+          </span>
+        </div>
+      )}
 
       {/* Progress bar */}
       <div className="surface !p-4">
@@ -197,6 +274,7 @@ export default function CorpusPage() {
           { key: 'collection',  label: 'By Flat' },
           { key: 'plan',        label: 'Installment Plan', disabled: selectedPlanId === '__all__' },
           { key: 'expenditure', label: 'Expenditure' },
+          { key: 'calendar',    label: 'Collection Calendar' },
         ] as { key: typeof tab; label: string; disabled?: boolean }[]).map(({ key, label, disabled }) => (
           <button key={key} onClick={() => !disabled && setTab(key)} disabled={disabled}
             className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
@@ -221,6 +299,14 @@ export default function CorpusPage() {
       {tab === 'collection'  && <CollectionGrid corpus={corpus} isLoading={isLoading} multiPlan={selectedPlanId === '__all__'} />}
       {tab === 'plan'        && <PlanGrid planFlats={planFlats} installments={installments} flatInstallments={flatInstallments} corpus={corpus} />}
       {tab === 'expenditure' && <ExpenditureView expenditures={expenditures} plan={selectedPlan} />}
+      {tab === 'calendar' && (
+        <CollectionCalendar
+          activePlans={trulyActivePlans}
+          allCorpus={allCorpus}
+          allInstallments={allInstallments}
+          allFlatInstallments={allFlatInstallments}
+        />
+      )}
 
       {/* History section */}
       {historyPlans.length > 0 && (
@@ -250,10 +336,10 @@ export default function CorpusPage() {
           onSuccess={invalidatePlans}
         />
       )}
-      {showActivate && selectedPlanId !== '__all__' && (
+      {showActivate && selectedPlanId !== '__all__' && selectedPlan && (
         <ActivatePlanDialog
           open={showActivate}
-          planId={selectedPlanId}
+          plan={selectedPlan}
           onClose={() => setShowActivate(false)}
           onSuccess={invalidatePlans}
         />
@@ -308,19 +394,36 @@ function ConsolidatedBanner({ plans, allCorpus }: { plans: CorpusPlan[]; allCorp
     const entries = allCorpus.filter(e => e.plan_id === p.id)
     const target    = entries.reduce((s, e) => s + e.effective_target, 0)
     const collected = entries.reduce((s, e) => s + e.collected, 0)
-    return { plan: p, target, collected, balance: Math.max(0, target - collected) }
+    const rawBalance = target - collected
+    return {
+      plan: p,
+      target,
+      collected,
+      balance:  Math.max(0, rawBalance),
+      surplus:  rawBalance < 0 ? Math.abs(rawBalance) : 0,
+    }
   })
 
   return (
     <div className="surface !p-4" style={{ background: 'var(--brand-50)' }}>
       <p className="text-xs font-semibold text-violet-700 uppercase tracking-wide mb-3">Consolidated corpus pool</p>
       <div className="divide-rows">
-        {planSummaries.map(({ plan, target, collected, balance }) => (
+        {planSummaries.map(({ plan, target, collected, balance, surplus }) => (
           <div key={plan.id} className="flex items-center gap-3 py-2 text-sm">
             <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_BADGE[plan.status]}`}>{plan.status}</span>
             <span className="font-medium flex-1" style={{ color: 'var(--ink-800)' }}>{plan.name}</span>
             <span style={{ color: 'var(--ink-500)' }}>{formatINR(collected)} / {formatINR(target)}</span>
-            <span className={`font-semibold ${balance > 0 ? 'text-amber-600' : 'text-green-600'}`}>{balance > 0 ? formatINR(balance) : '✓'}</span>
+            <span className={`font-semibold ${balance > 0 ? 'text-amber-600' : surplus > 0 ? '' : 'text-green-600'}`}>
+              {balance > 0
+                ? formatINR(balance)
+                : surplus > 0
+                ? (
+                  <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+                    Surplus: {formatINR(surplus)}
+                  </span>
+                )
+                : '✓'}
+            </span>
           </div>
         ))}
       </div>
@@ -659,8 +762,13 @@ function ExpenditureView({ expenditures, plan }: { expenditures: any[]; plan: Co
             {expenditures.map((e: any) => (
               <div key={e.id} className="flex justify-between items-start px-4 py-3 text-sm">
                 <div>
-                  <p className="font-medium" style={{ color: 'var(--ink-800)' }}>{e.category}</p>
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--ink-400)' }}>{e.value_date} · {e.description?.slice(0, 60)}</p>
+                  <p className="font-medium" style={{ color: 'var(--ink-800)' }}>
+                    {e.category?.name ?? '—'}
+                    {e.voucher_no && <span className="ml-2 text-xs font-normal" style={{ color: 'var(--ink-400)' }}>{e.voucher_no}</span>}
+                  </p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--ink-400)' }}>
+                    {e.expense_date} · {e.payee_name_raw ?? ''}{e.description ? ' · ' + e.description.slice(0, 50) : ''}
+                  </p>
                 </div>
                 <p className="font-semibold text-red-600 shrink-0 ml-3">{formatINR(e.amount)}</p>
               </div>
@@ -668,6 +776,152 @@ function ExpenditureView({ expenditures, plan }: { expenditures: any[]; plan: Co
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// ── Collection Calendar ───────────────────────────────────────
+
+interface CalendarColumn {
+  key: string
+  planId: string
+  planName: string
+  installmentNo: number
+  label: string
+  dueDate: string | null
+  defaultAmount: number
+}
+
+function CollectionCalendar({
+  activePlans,
+  allCorpus,
+  allInstallments,
+  allFlatInstallments,
+}: {
+  activePlans: CorpusPlan[]
+  allCorpus: CorpusEntry[]
+  allInstallments: any[]
+  allFlatInstallments: any[]
+}) {
+  const today = new Date().toISOString().slice(0, 10)
+
+  const columns: CalendarColumn[] = allInstallments.map(inst => {
+    const plan = activePlans.find(p => p.id === inst.plan_id)
+    return {
+      key: `${inst.plan_id}_inst_${inst.installment_no}`,
+      planId: inst.plan_id,
+      planName: plan?.name ?? inst.plan_id,
+      installmentNo: inst.installment_no,
+      label: inst.label,
+      dueDate: inst.due_date ?? null,
+      defaultAmount: inst.default_amount,
+    }
+  })
+
+  const flatInstMap = new Map<string, Map<string, Map<number, number>>>()
+  for (const fi of allFlatInstallments) {
+    const code = fi.flat?.code ?? ''
+    if (!flatInstMap.has(code)) flatInstMap.set(code, new Map())
+    const planMap = flatInstMap.get(code)!
+    if (!planMap.has(fi.plan_id)) planMap.set(fi.plan_id, new Map())
+    planMap.get(fi.plan_id)!.set(fi.installment_no, fi.amount)
+  }
+
+  const flatCodes = Array.from(new Set(allCorpus.map(e => e.flat_code))).sort()
+
+  const collectedMap = new Map<string, number>()
+  for (const e of allCorpus) {
+    collectedMap.set(`${e.flat_code}__${e.plan_id}`, e.collected)
+  }
+
+  function cellStatus(flatCode: string, col: CalendarColumn): 'paid' | 'partial' | 'overdue' | 'future' {
+    const planInsts = allInstallments
+      .filter(i => i.plan_id === col.planId)
+      .sort((a: any, b: any) => a.installment_no - b.installment_no)
+    const instIndex = planInsts.findIndex((i: any) => i.installment_no === col.installmentNo)
+    const cumulativeTarget = planInsts.slice(0, instIndex + 1).reduce((sum: number, i: any) => {
+      const amt = flatInstMap.get(flatCode)?.get(col.planId)?.get(i.installment_no) ?? i.default_amount
+      return sum + amt
+    }, 0)
+    const collected = collectedMap.get(`${flatCode}__${col.planId}`) ?? 0
+    if (collected >= cumulativeTarget) return 'paid'
+    if (collected > 0 && col.dueDate && col.dueDate < today) return 'partial'
+    if (col.dueDate && col.dueDate < today) return 'overdue'
+    return 'future'
+  }
+
+  const CELL_STYLE: Record<string, string> = {
+    paid:    'bg-green-100 text-green-700',
+    partial: 'bg-amber-100 text-amber-700',
+    overdue: 'bg-red-100 text-red-600',
+    future:  'bg-slate-100 text-slate-400',
+  }
+  const CELL_LABEL: Record<string, string> = {
+    paid: '✓', partial: '~', overdue: '!', future: '—',
+  }
+
+  if (activePlans.length === 0) {
+    return <p className="surface !p-6 text-sm text-center" style={{ color: 'var(--ink-400)' }}>No active plans to display.</p>
+  }
+  if (columns.length === 0) {
+    return <p className="surface !p-6 text-sm text-center" style={{ color: 'var(--ink-400)' }}>No installments defined on active plans.</p>
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-4 flex-wrap text-xs">
+        <span className="font-medium text-slate-500">Legend:</span>
+        {(['paid', 'partial', 'overdue', 'future'] as const).map(s => (
+          <span key={s} className={`px-2 py-0.5 rounded-full font-medium ${CELL_STYLE[s]}`}>
+            {s === 'paid' ? 'Paid' : s === 'partial' ? 'Partial' : s === 'overdue' ? 'Overdue' : 'Not due'}
+          </span>
+        ))}
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs border-collapse">
+          <thead>
+            <tr>
+              <th className="sticky left-0 bg-white px-3 py-2 text-left font-semibold text-slate-600 border-b hairline w-24">Flat</th>
+              {activePlans.map(plan => {
+                const planCols = columns.filter(c => c.planId === plan.id)
+                if (planCols.length === 0) return null
+                return (
+                  <th key={plan.id} colSpan={planCols.length} className="px-2 py-2 text-center font-semibold border-b hairline border-l hairline" style={{ color: 'var(--brand-700)', background: 'var(--brand-50)' }}>
+                    {plan.name}
+                  </th>
+                )
+              })}
+            </tr>
+            <tr>
+              <th className="sticky left-0 bg-white px-3 py-1.5 border-b hairline" />
+              {columns.map(col => (
+                <th key={col.key} className="px-2 py-1.5 text-center font-medium text-slate-500 border-b hairline border-l hairline whitespace-nowrap">
+                  <div>{col.label}</div>
+                  {col.dueDate && <div className="text-[10px] font-normal text-slate-400">{col.dueDate}</div>}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {flatCodes.map(flatCode => (
+              <tr key={flatCode} className="hover:bg-slate-50">
+                <td className="sticky left-0 bg-white px-3 py-1.5 font-medium text-slate-700 border-b hairline w-24">{flatCode}</td>
+                {columns.map(col => {
+                  const status = cellStatus(flatCode, col)
+                  return (
+                    <td key={col.key} className={`px-2 py-1.5 text-center border-b hairline border-l hairline font-semibold ${CELL_STYLE[status]}`} title={`${flatCode} · ${col.planName} · ${col.label} · ${status}`}>
+                      {CELL_LABEL[status]}
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-[11px]" style={{ color: 'var(--ink-400)' }}>
+        Paid/Partial status based on cumulative collection vs cumulative installment targets.
+      </p>
     </div>
   )
 }
@@ -1112,17 +1366,41 @@ function CreatePlanWizard({ open, onClose, onSuccess }: {
 
 // ── Activate Plan Dialog ──────────────────────────────────────
 
-function ActivatePlanDialog({ open, planId, onClose, onSuccess }: {
+function ActivatePlanDialog({ open, plan, onClose, onSuccess }: {
   open: boolean
-  planId: string
+  plan: CorpusPlan
   onClose: () => void
   onSuccess: () => void
 }) {
-  const [loading, setLoading] = useState(false)
+  const [checking, setChecking]       = useState(false)
+  const [overlapping, setOverlapping] = useState<{ id: string; name: string; start_fiscal_year: number; end_fiscal_year: number }[]>([])
+  const [showConfirm, setShowConfirm] = useState(false)
+  const [loading, setLoading]         = useState(false)
 
-  async function confirm() {
+  useEffect(() => {
+    if (!open) return
+    setOverlapping([])
+    setShowConfirm(false)
+    setChecking(true)
+    supabase
+      .rpc('get_overlapping_active_plans', {
+        p_start: plan.start_fiscal_year ?? 0,
+        p_end:   plan.end_fiscal_year   ?? 9999,
+      })
+      .then(({ data, error }) => {
+        if (error) toast.error('Overlap check failed: ' + error.message)
+        setOverlapping((data ?? []) as { id: string; name: string; start_fiscal_year: number; end_fiscal_year: number }[])
+        setChecking(false)
+        setShowConfirm(true)
+      })
+  }, [open, plan])
+
+  async function doActivate() {
     setLoading(true)
-    const { error } = await supabase.from('corpus_plans').update({ status: 'active' }).eq('id', planId)
+    const { error } = await supabase
+      .from('corpus_plans')
+      .update({ status: 'active' })
+      .eq('id', plan.id)
     setLoading(false)
     if (error) { toast.error(error.message); return }
     toast.success('Plan activated')
@@ -1130,20 +1408,50 @@ function ActivatePlanDialog({ open, planId, onClose, onSuccess }: {
     onClose()
   }
 
+  const hasOverlap = overlapping.length > 0
+
   return (
     <AlertDialog open={open} onOpenChange={v => !v && onClose()}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Activate Corpus Plan?</AlertDialogTitle>
-          <AlertDialogDescription>
-            This will make the plan live and allow collection tracking.
+          <AlertDialogDescription asChild>
+            <div>
+              {checking ? (
+                <span className="block text-sm">Checking for plan conflicts…</span>
+              ) : hasOverlap ? (
+                <>
+                  <span className="block mb-2 text-amber-700 font-medium">
+                    ⚠ {overlapping.length} active plan{overlapping.length > 1 ? 's' : ''} overlap{overlapping.length === 1 ? 's' : ''} this plan&apos;s FY range:
+                  </span>
+                  <div className="flex flex-col gap-1 mb-2">
+                    {overlapping.map(p => (
+                      <span key={p.id} className="text-sm text-slate-700">
+                        • {p.name} (FY {p.start_fiscal_year}-{String(p.start_fiscal_year + 1).slice(-2)} – FY {p.end_fiscal_year}-{String(p.end_fiscal_year + 1).slice(-2)})
+                      </span>
+                    ))}
+                  </div>
+                  <span className="block text-sm text-slate-600">
+                    Untagged corpus payments may be split across plans by fiscal year range. Proceed anyway?
+                  </span>
+                </>
+              ) : (
+                <span>This will make the plan live and allow collection tracking. No active plan conflicts found.</span>
+              )}
+            </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel onClick={onClose}>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={confirm} disabled={loading}>
-            {loading ? 'Activating…' : 'Activate'}
-          </AlertDialogAction>
+          <AlertDialogCancel onClick={onClose} disabled={loading}>Cancel</AlertDialogCancel>
+          {showConfirm && (
+            <AlertDialogAction
+              onClick={doActivate}
+              disabled={loading || checking}
+              className={hasOverlap ? 'bg-amber-600 hover:bg-amber-700' : ''}
+            >
+              {loading ? 'Activating…' : hasOverlap ? 'Activate anyway' : 'Activate'}
+            </AlertDialogAction>
+          )}
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
