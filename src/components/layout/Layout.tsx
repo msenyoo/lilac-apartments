@@ -25,6 +25,7 @@ const NAV = [
   { to: '/transactions',  icon: Banknote,        label: 'Transactions',      badge: 'review' },
   { to: '/corpus',        icon: Building2,       label: 'Corpus' },
   { to: '/finance',       icon: PiggyBank,       label: 'Finance' },
+  { to: '/finance-overview', icon: LayoutDashboard, label: 'Finance Overview', adminOrCommitteeOnly: true },
   { to: '/expenses',      icon: Receipt,         label: 'Expenses' },
   { to: '/announcements', icon: Megaphone,       label: 'Announcements' },
   { to: '/flats',         icon: Users,           label: 'Flats & residents' },
@@ -44,7 +45,7 @@ const OWNER_NAV = [
 ]
 
 // Pages owners are not allowed to visit
-const OWNER_BLOCKED = ['/transactions', '/dues', '/corpus', '/finance', '/expenses', '/flats', '/reports', '/activity', '/users']
+const OWNER_BLOCKED = ['/transactions', '/dues', '/corpus', '/finance', '/finance-overview', '/expenses', '/flats', '/reports', '/activity', '/users']
 
 const BOTTOM_NAV = [
   { to: '/dashboard',     icon: LayoutDashboard, label: 'Home' },
@@ -120,7 +121,11 @@ export default function Layout() {
     : isOwner
       ? OWNER_NAV
       : (() => {
-          const items = NAV.filter(n => !n.adminOnly || role === 'admin')
+          const items = NAV.filter(n => {
+            if ((n as any).adminOnly && role !== 'admin') return false
+            if ((n as any).adminOrCommitteeOnly && role !== 'admin' && role !== 'committee') return false
+            return true
+          })
           if (!hasFlatAssigned) return items
           return [items[0], { to: '/my-flat', icon: Home, label: 'My Flat' }, ...items.slice(1)]
         })()
