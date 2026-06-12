@@ -3224,4 +3224,48 @@ function PendingItemDialog({ item, onClose }: { item?: PendingItem; onClose: () 
   )
 }
 function BundleDialog(_props: { items: PendingItem[]; onClose: () => void; onBundled: () => void }) { return null }
-function DeletePendingDialog(_props: { id: string; onClose: () => void }) { return null }
+function DeletePendingDialog({ id, onClose }: { id: string; onClose: () => void }) {
+  const qc = useQueryClient()
+  const [reason, setReason] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  async function handleDelete() {
+    setSubmitting(true)
+    const { error } = await supabase
+      .from('pending_line_items')
+      .update({
+        voided_at:   new Date().toISOString(),
+        voided_by:   (await supabase.auth.getUser()).data.user?.id,
+        void_reason: reason || 'Deleted by admin',
+      })
+      .eq('id', id)
+    setSubmitting(false)
+    if (error) { toast.error(error.message); return }
+    toast.success('Pending item deleted')
+    qc.invalidateQueries({ queryKey: ['pending-line-items'] })
+    onClose()
+  }
+
+  return (
+    <AlertDialog open onOpenChange={(o) => { if (!o) onClose() }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete pending item?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This will hide the item from the list. The audit log keeps a record.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <div>
+          <Label className="text-xs">Reason (optional)</Label>
+          <Input value={reason} onChange={e => setReason(e.target.value)} placeholder="e.g. duplicate entry" />
+        </div>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={submitting}>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={handleDelete} disabled={submitting}>
+            {submitting ? 'Deleting…' : 'Delete'}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
