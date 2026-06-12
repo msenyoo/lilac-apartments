@@ -3010,7 +3010,6 @@ function PendingItemsTab() {
   )
 }
 
-// Stubs — implemented in later tasks
 const pendingItemSchema = z.object({
   paid_date:      z.string().min(1, 'Required'),
   description:    z.string().min(1, 'Required'),
@@ -3109,7 +3108,8 @@ function PendingItemDialog({ item, onClose }: { item?: PendingItem; onClose: () 
       if (error) { toast.error(error.message); return }
       toast.success('Pending item updated')
     } else {
-      const { error } = await supabase.from('pending_line_items').insert(payload)
+      const { data: { user } } = await supabase.auth.getUser()
+      const { error } = await supabase.from('pending_line_items').insert({ ...payload, created_by: user?.id ?? null })
       if (error) { toast.error(error.message); return }
       toast.success('Pending item added')
     }
@@ -3233,7 +3233,6 @@ type BundleHeaderForm = z.infer<typeof bundleHeaderSchema>
 
 function BundleDialog({ items, onClose, onBundled }: { items: PendingItem[]; onClose: () => void; onBundled: () => void }) {
   const qc = useQueryClient()
-  const navigate = useNavigate()
 
   const corpusPlanIds = Array.from(new Set(items.map(i => i.corpus_plan_id ?? '__none__')))
   const mixedCorpus = corpusPlanIds.length > 1
@@ -3266,9 +3265,7 @@ function BundleDialog({ items, onClose, onBundled }: { items: PendingItem[]; onC
     })
     if (error) { toast.error(error.message); return }
     const result = data as { expense_id: string; voucher_no: string }
-    toast.success(`Created ${result.voucher_no}`, {
-      action: { label: 'View', onClick: () => navigate(`/expenses?voucher=${result.voucher_no}`) },
-    })
+    toast.success(`Created ${result.voucher_no} — see Day Book`)
     qc.invalidateQueries({ queryKey: ['pending-line-items'] })
     qc.invalidateQueries({ queryKey: ['expenses'] })
     onBundled()

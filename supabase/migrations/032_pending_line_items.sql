@@ -138,7 +138,7 @@ BEGIN
   )
   RETURNING id, voucher_no INTO v_expense_id, v_voucher_no;
 
-  -- Copy pending rows → expense_line_items
+  -- Copy pending rows → expense_line_items (re-assert not-voided to close TOCTOU race)
   INSERT INTO public.expense_line_items (
     expense_id, payee_type, staff_id, vendor_id, payee_name_raw,
     description, category_id, cost_center, amount,
@@ -148,10 +148,15 @@ BEGIN
          description, category_id, cost_center, amount,
          payment_mode, reference_no
   FROM   public.pending_line_items
-  WHERE  id = ANY(p_ids);
+  WHERE  id = ANY(p_ids) AND voided_at IS NULL;
 
-  -- Hard-delete the originals
-  DELETE FROM public.pending_line_items WHERE id = ANY(p_ids);
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  IF v_count <> cardinality(p_ids) THEN
+    RAISE EXCEPTION 'one or more items voided concurrently';
+  END IF;
+
+  -- Hard-delete the originals (same guard)
+  DELETE FROM public.pending_line_items WHERE id = ANY(p_ids) AND voided_at IS NULL;
 
   RETURN jsonb_build_object('expense_id', v_expense_id, 'voucher_no', v_voucher_no);
 END;
