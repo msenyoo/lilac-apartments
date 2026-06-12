@@ -3223,7 +3223,121 @@ function PendingItemDialog({ item, onClose }: { item?: PendingItem; onClose: () 
     </Dialog>
   )
 }
-function BundleDialog(_props: { items: PendingItem[]; onClose: () => void; onBundled: () => void }) { return null }
+const bundleHeaderSchema = z.object({
+  expense_date:   z.string().min(1, 'Required'),
+  description:    z.string().min(1, 'Required'),
+  payment_mode:   z.enum(['Cash','Online','Bank Transfer','Cheque']),
+  payee_name_raw: z.string().optional(),
+})
+type BundleHeaderForm = z.infer<typeof bundleHeaderSchema>
+
+function BundleDialog({ items, onClose, onBundled }: { items: PendingItem[]; onClose: () => void; onBundled: () => void }) {
+  const qc = useQueryClient()
+  const navigate = useNavigate()
+
+  const corpusPlanIds = Array.from(new Set(items.map(i => i.corpus_plan_id ?? '__none__')))
+  const mixedCorpus = corpusPlanIds.length > 1
+
+  const maxDate = items.reduce((m, i) => i.paid_date > m ? i.paid_date : m, items[0]?.paid_date ?? new Date().toISOString().slice(0,10))
+  const modeFreq = items.reduce<Record<string, number>>((acc, i) => { acc[i.payment_mode] = (acc[i.payment_mode] ?? 0) + 1; return acc }, {})
+  const commonMode = (Object.entries(modeFreq).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'Cash') as BundleHeaderForm['payment_mode']
+  const dateRange = (() => {
+    const dates = items.map(i => i.paid_date).sort()
+    const fmt = (d: string) => `${new Date(d).getDate()} ${new Date(d).toLocaleString('en', { month: 'short' })}`
+    return dates[0] === dates[dates.length - 1] ? fmt(dates[0]) : `${fmt(dates[0])} → ${fmt(dates[dates.length - 1])}`
+  })()
+  const total = items.reduce((s, i) => s + i.amount, 0)
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<BundleHeaderForm>({
+    resolver: zodResolver(bundleHeaderSchema) as any,
+    defaultValues: {
+      expense_date:   maxDate,
+      description:    `Bundled — ${items.length} items, ${dateRange}`,
+      payment_mode:   commonMode,
+      payee_name_raw: 'Bundled',
+    },
+  })
+
+  async function onSubmit(form: BundleHeaderForm) {
+    const { data, error } = await supabase.rpc('bundle_pending_items', {
+      p_ids: items.map(i => i.id),
+      p_header: form,
+    })
+    if (error) { toast.error(error.message); return }
+    const result = data as { expense_id: string; voucher_no: string }
+    toast.success(`Created ${result.voucher_no}`, {
+      action: { label: 'View', onClick: () => navigate(`/expenses?voucher=${result.voucher_no}`) },
+    })
+    qc.invalidateQueries({ queryKey: ['pending-line-items'] })
+    qc.invalidateQueries({ queryKey: ['expenses'] })
+    onBundled()
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose() }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Bundle {items.length} items → 1 expense</DialogTitle>
+        </DialogHeader>
+
+        {mixedCorpus ? (
+          <div className="surface !p-4 flex items-start gap-2 bg-red-50">
+            <AlertTriangle size={16} className="text-red-600 mt-0.5 shrink-0" />
+            <div className="text-sm text-red-900">
+              <p className="font-medium">Cannot mix maintenance and corpus items in one bundle.</p>
+              <p className="text-xs mt-1">All selected items must share the same corpus plan (or all be maintenance).</p>
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-3">
+            <div className="surface !p-3 text-sm">
+              {items.length} items · <span className="font-semibold">{formatINR(total)}</span> · {dateRange}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Expense date</Label>
+                <Input type="date" {...register('expense_date')} />
+                {errors.expense_date && <p className="text-xs text-red-600 mt-1">{errors.expense_date.message}</p>}
+              </div>
+              <div>
+                <Label>Bundle payment mode</Label>
+                <select {...register('payment_mode')} className="w-full h-9 px-2 border rounded text-sm">
+                  {['Cash','Online','Bank Transfer','Cheque'].map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <Label>Description</Label>
+              <Input {...register('description')} />
+              {errors.description && <p className="text-xs text-red-600 mt-1">{errors.description.message}</p>}
+            </div>
+
+            <div>
+              <Label>Payee label on bundled expense</Label>
+              <Input {...register('payee_name_raw')} />
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? 'Creating…' : 'Create bundled expense'}
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
+
+        {mixedCorpus && (
+          <DialogFooter>
+            <Button onClick={onClose}>Close</Button>
+          </DialogFooter>
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
 function DeletePendingDialog({ id, onClose }: { id: string; onClose: () => void }) {
   const qc = useQueryClient()
   const [reason, setReason] = useState('')
