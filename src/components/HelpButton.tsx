@@ -56,9 +56,11 @@ const HELP: Record<string, HelpPage> = {
     bullets: [
       'The Day Book tab lists all expenses in chronological order with payee, amount, mode, and category.',
       'Click "Add Expense" to record a new payment — fill in the payee, date, amount, and payment mode, then add line items for the cost breakdown.',
+      'The Pending Items tab captures individual small payments (cash, UPI, online) as they happen. Select several and click Bundle to merge them into one Day Book expense.',
+      'Items in one bundle must all be either maintenance or all belong to the same corpus plan.',
       'Vendor and Staff tabs let you manage the master lists used when recording expenses.',
     ],
-    howTo: 'Click "Add Expense", fill the header fields (payee, date, amount, mode), then add at least one line item with a category and amount. Save to post it to the day book.',
+    howTo: 'For single payments: click "Add Expense", fill the header (payee, date, amount, mode), and add at least one line item with a category and amount. For lots of small payments: capture each in Pending Items as you pay it, then bundle them later — the bundled expense enters the normal approval and reconciliation flow.',
   },
   '/reports': {
     title: 'Reports',
