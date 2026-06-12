@@ -275,3 +275,25 @@ export interface Deposit {
   notes: string | null
   created_at: string
 }
+
+export interface PendingLineItem {
+  id: string
+  paid_date: string
+  description: string
+  amount: number
+  payment_mode: 'Cash' | 'Online' | 'Bank Transfer' | 'Cheque'
+  reference_no: string | null
+  payee_type: 'Staff' | 'Vendor' | 'Utility' | 'Municipal' | 'Other'
+  staff_id: string | null
+  vendor_id: string | null
+  payee_name_raw: string | null
+  category_id: string | null
+  cost_center: string
+  corpus_plan_id: string | null
+  notes: string | null
+  created_at: string
+  created_by: string | null
+  voided_at: string | null
+  voided_by: string | null
+  void_reason: string | null
+}
