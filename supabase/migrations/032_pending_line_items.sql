@@ -92,6 +92,11 @@ BEGIN
     RAISE EXCEPTION 'forbidden';
   END IF;
 
+  -- Input guard
+  IF p_ids IS NULL OR cardinality(p_ids) = 0 THEN
+    RAISE EXCEPTION 'p_ids must contain at least one item';
+  END IF;
+
   -- Parse header
   v_header_date  := (p_header->>'expense_date')::date;
   v_header_desc  := p_header->>'description';
@@ -112,11 +117,11 @@ BEGIN
   FROM   public.pending_line_items
   WHERE  id = ANY(p_ids) AND voided_at IS NULL;
 
-  IF v_count = 0 OR v_count <> array_length(p_ids, 1) THEN
+  IF v_count <> cardinality(p_ids) THEN
     RAISE EXCEPTION 'one or more items not found or voided';
   END IF;
 
-  IF array_length(v_corpus_plan_ids, 1) > 1 THEN
+  IF cardinality(v_corpus_plan_ids) > 1 THEN
     RAISE EXCEPTION 'cannot mix maintenance and corpus items, or different corpus plans';
   END IF;
 
