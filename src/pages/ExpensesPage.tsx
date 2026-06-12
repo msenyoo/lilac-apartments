@@ -3011,6 +3011,217 @@ function PendingItemsTab() {
 }
 
 // Stubs — implemented in later tasks
-function PendingItemDialog(_props: { item?: PendingItem; onClose: () => void }) { return null }
+const pendingItemSchema = z.object({
+  paid_date:      z.string().min(1, 'Required'),
+  description:    z.string().min(1, 'Required'),
+  amount:         z.coerce.number().int().positive('Must be > 0'),
+  payment_mode:   z.enum(['Cash','Online','Bank Transfer','Cheque']),
+  reference_no:   z.string().optional(),
+  payee_type:     z.enum(['Staff','Vendor','Utility','Municipal','Other']),
+  staff_id:       z.string().optional(),
+  vendor_id:      z.string().optional(),
+  payee_name_raw: z.string().optional(),
+  category_id:    z.string().min(1, 'Required'),
+  cost_center:    z.string().min(1, 'Required'),
+  corpus_plan_id: z.string().optional(),
+  notes:          z.string().optional(),
+})
+type PendingItemForm = z.infer<typeof pendingItemSchema>
+
+function PendingItemDialog({ item, onClose }: { item?: PendingItem; onClose: () => void }) {
+  const qc = useQueryClient()
+  const isEdit = !!item
+
+  const { data: categories = [] } = useQuery({
+    queryKey: ['expense-categories'],
+    queryFn: async () => {
+      const { data } = await supabase.from('expense_categories').select('*').order('sort_order')
+      return (data ?? []) as ExpenseCategory[]
+    },
+  })
+  const { data: corpusPlans = [] } = useQuery({
+    queryKey: ['corpus-plans-active'],
+    queryFn: async () => {
+      const { data } = await supabase.from('corpus_plans').select('id, name, status').in('status', ['active', 'draft'])
+      return (data ?? []) as { id: string; name: string; status: string }[]
+    },
+  })
+  const { data: staff = [] } = useQuery({
+    queryKey: ['staff-active'],
+    queryFn: async () => {
+      const { data } = await supabase.from('staff').select('*').is('left_date', null)
+      return (data ?? []) as StaffMember[]
+    },
+  })
+  const { data: vendors = [] } = useQuery({
+    queryKey: ['vendors-active'],
+    queryFn: async () => {
+      const { data } = await supabase.from('vendors').select('*').eq('is_active', true)
+      return (data ?? []) as Vendor[]
+    },
+  })
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { register, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm<PendingItemForm>({
+    resolver: zodResolver(pendingItemSchema) as any,
+    defaultValues: item ? {
+      paid_date:      item.paid_date,
+      description:    item.description,
+      amount:         item.amount,
+      payment_mode:   item.payment_mode,
+      reference_no:   item.reference_no ?? '',
+      payee_type:     item.payee_type as PendingItemForm['payee_type'],
+      staff_id:       item.staff_id ?? '',
+      vendor_id:      item.vendor_id ?? '',
+      payee_name_raw: item.payee_name_raw ?? '',
+      category_id:    item.category_id ?? '',
+      cost_center:    item.cost_center,
+      corpus_plan_id: item.corpus_plan_id ?? '',
+      notes:          item.notes ?? '',
+    } : {
+      paid_date:    new Date().toISOString().slice(0, 10),
+      payment_mode: 'Cash',
+      payee_type:   'Other',
+      cost_center:  'Common',
+    },
+  })
+
+  const payeeType = watch('payee_type')
+
+  async function onSubmit(form: PendingItemForm) {
+    const payload = {
+      paid_date:      form.paid_date,
+      description:    form.description,
+      amount:         form.amount,
+      payment_mode:   form.payment_mode,
+      reference_no:   form.reference_no || null,
+      payee_type:     form.payee_type,
+      staff_id:       form.payee_type === 'Staff'  && form.staff_id  ? form.staff_id  : null,
+      vendor_id:      form.payee_type === 'Vendor' && form.vendor_id ? form.vendor_id : null,
+      payee_name_raw: form.payee_name_raw || null,
+      category_id:    form.category_id,
+      cost_center:    form.cost_center,
+      corpus_plan_id: form.corpus_plan_id || null,
+      notes:          form.notes || null,
+    }
+    if (isEdit && item) {
+      const { error } = await supabase.from('pending_line_items').update(payload).eq('id', item.id)
+      if (error) { toast.error(error.message); return }
+      toast.success('Pending item updated')
+    } else {
+      const { error } = await supabase.from('pending_line_items').insert(payload)
+      if (error) { toast.error(error.message); return }
+      toast.success('Pending item added')
+    }
+    qc.invalidateQueries({ queryKey: ['pending-line-items'] })
+    onClose()
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose() }}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? 'Edit pending item' : 'Add pending item'}</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Date</Label>
+              <Input type="date" {...register('paid_date')} />
+              {errors.paid_date && <p className="text-xs text-red-600 mt-1">{errors.paid_date.message}</p>}
+            </div>
+            <div>
+              <Label>Amount (₹)</Label>
+              <Input type="number" min="1" {...register('amount')} />
+              {errors.amount && <p className="text-xs text-red-600 mt-1">{errors.amount.message}</p>}
+            </div>
+          </div>
+
+          <div>
+            <Label>Description</Label>
+            <Input {...register('description')} placeholder="e.g. Bleaching powder, plumber call-out" />
+            {errors.description && <p className="text-xs text-red-600 mt-1">{errors.description.message}</p>}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Category</Label>
+              <select {...register('category_id')} className="w-full h-9 px-2 border rounded text-sm">
+                <option value="">Select…</option>
+                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+              {errors.category_id && <p className="text-xs text-red-600 mt-1">{errors.category_id.message}</p>}
+            </div>
+            <div>
+              <Label>Cost centre</Label>
+              <select {...register('cost_center')} className="w-full h-9 px-2 border rounded text-sm">
+                {['Block-A','Block-B','Block-C','Block-D','Block-E','Common','Municipal','All'].map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Payment mode</Label>
+              <select {...register('payment_mode')} className="w-full h-9 px-2 border rounded text-sm">
+                {['Cash','Online','Bank Transfer','Cheque'].map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
+            <div>
+              <Label>Reference / UPI ref</Label>
+              <Input {...register('reference_no')} placeholder="Optional" />
+            </div>
+          </div>
+
+          <div>
+            <Label>Paid to</Label>
+            <div className="grid grid-cols-3 gap-2 mb-2">
+              <select {...register('payee_type')} className="h-9 px-2 border rounded text-sm">
+                {['Other','Staff','Vendor','Utility','Municipal'].map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+              {payeeType === 'Staff' && (
+                <select {...register('staff_id')} className="h-9 px-2 border rounded text-sm col-span-2">
+                  <option value="">Select staff…</option>
+                  {staff.map(s => <option key={s.id} value={s.id}>{s.name} ({s.role})</option>)}
+                </select>
+              )}
+              {payeeType === 'Vendor' && (
+                <select {...register('vendor_id')} className="h-9 px-2 border rounded text-sm col-span-2">
+                  <option value="">Select vendor…</option>
+                  {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                </select>
+              )}
+              {payeeType !== 'Staff' && payeeType !== 'Vendor' && (
+                <Input {...register('payee_name_raw')} placeholder="Name (free text)" className="col-span-2" />
+              )}
+            </div>
+          </div>
+
+          <div>
+            <Label>Corpus plan (optional)</Label>
+            <select {...register('corpus_plan_id')} className="w-full h-9 px-2 border rounded text-sm">
+              <option value="">— None (Maintenance) —</option>
+              {corpusPlans.map(p => <option key={p.id} value={p.id}>{p.name} ({p.status})</option>)}
+            </select>
+          </div>
+
+          <div>
+            <Label>Notes</Label>
+            <Textarea {...register('notes')} rows={2} />
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? 'Saving…' : (isEdit ? 'Update' : 'Add item')}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
 function BundleDialog(_props: { items: PendingItem[]; onClose: () => void; onBundled: () => void }) { return null }
 function DeletePendingDialog(_props: { id: string; onClose: () => void }) { return null }
