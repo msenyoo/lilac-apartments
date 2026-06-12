@@ -5,7 +5,7 @@ import { useRoleCtx } from '@/contexts/RoleContext'
 import { useForm, useFieldArray, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Plus, Trash2, Download, Receipt, Users, Building, X, GitMerge, CheckCircle2, Paperclip, RefreshCcw, Coins, Upload, Loader2, Trash, Pencil, Ban, Unlink, AlertTriangle, PiggyBank } from 'lucide-react'
+import { Plus, Trash2, Download, Receipt, Users, Building, X, GitMerge, CheckCircle2, Paperclip, RefreshCcw, Coins, Upload, Loader2, Trash, Pencil, Ban, Unlink, AlertTriangle, PiggyBank, ListChecks } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
@@ -65,7 +65,29 @@ interface ExpenseLineItem {
   description: string; cost_center: string; amount: number
   utility_units: number | null; utility_rate: number | null
   period_from: string | null; period_to: string | null
+  payment_mode: string | null
+  reference_no: string | null
   category: ExpenseCategory | null
+}
+interface PendingItem {
+  id: string
+  paid_date: string
+  description: string
+  amount: number
+  payment_mode: 'Cash' | 'Online' | 'Bank Transfer' | 'Cheque'
+  reference_no: string | null
+  payee_type: string
+  staff_id: string | null
+  vendor_id: string | null
+  payee_name_raw: string | null
+  category_id: string | null
+  cost_center: string
+  corpus_plan_id: string | null
+  notes: string | null
+  voided_at: string | null
+  category: ExpenseCategory | null
+  staff_member: StaffMember | null
+  vendor: Vendor | null
 }
 
 // ── Zod schema ────────────────────────────────────────────────
@@ -127,7 +149,7 @@ const STATUS_INLINE: Record<string, React.CSSProperties> = {
 
 export default function ExpensesPage() {
   const { canWrite } = useRoleCtx()
-  const [tab, setTab] = useState<'daybook' | 'reconcile' | 'vendors' | 'staff' | 'recurring' | 'petty'>('daybook')
+  const [tab, setTab] = useState<'daybook' | 'pending' | 'reconcile' | 'vendors' | 'staff' | 'recurring' | 'petty'>('daybook')
   const [addOpen, setAddOpen] = useState(false)
 
   return (
@@ -148,8 +170,9 @@ export default function ExpensesPage() {
       {/* Tabs */}
       <div className="flex gap-1 rounded-xl p-1 overflow-x-auto" style={{ background: 'var(--ink-100)' }}>
         {([
-          { key: 'daybook',   label: 'Day Book',   icon: Receipt },
-          { key: 'reconcile', label: 'Reconcile',  icon: GitMerge },
+          { key: 'daybook',   label: 'Day Book',     icon: Receipt },
+          { key: 'pending',   label: 'Pending Items', icon: ListChecks },
+          { key: 'reconcile', label: 'Reconcile',    icon: GitMerge },
           { key: 'vendors',   label: 'Vendors',    icon: Building },
           { key: 'staff',     label: 'Staff',      icon: Users },
           { key: 'recurring', label: 'Recurring',  icon: RefreshCcw },
@@ -166,6 +189,7 @@ export default function ExpensesPage() {
       </div>
 
       {tab === 'daybook'   && <DayBook />}
+      {tab === 'pending'   && <PendingItemsTab />}
       {tab === 'reconcile' && <ReconcileTab />}
       {tab === 'vendors'   && <VendorsTab />}
       {tab === 'staff'     && <StaffTab />}
@@ -2838,3 +2862,155 @@ function AttachmentsSection({ expenseId }: { expenseId: string }) {
     </div>
   )
 }
+
+// ── Pending Items tab ─────────────────────────────────────────
+
+function PendingItemsTab() {
+  const { canWrite } = useRoleCtx()
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [addOpen, setAddOpen] = useState(false)
+  const [editItem, setEditItem] = useState<PendingItem | null>(null)
+  const [bundleOpen, setBundleOpen] = useState(false)
+  const [deleteId, setDeleteId] = useState<string | null>(null)
+
+  const { data: items = [], isLoading } = useQuery({
+    queryKey: ['pending-line-items'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('pending_line_items')
+        .select(`
+          *,
+          category:category_id(id, name, budget_type, is_utility),
+          staff_member:staff_id(id, name, role, assigned_area, phone, joined_date, left_date),
+          vendor:vendor_id(id, name, type, phone, pan_number, notes, is_active)
+        `)
+        .is('voided_at', null)
+        .order('paid_date', { ascending: false })
+      if (error) throw error
+      return (data ?? []) as PendingItem[]
+    },
+  })
+
+  const total = items.reduce((s, i) => s + i.amount, 0)
+  const selectedItems = items.filter(i => selectedIds.has(i.id))
+  const selectedTotal = selectedItems.reduce((s, i) => s + i.amount, 0)
+
+  function toggleOne(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+  function toggleAll() {
+    setSelectedIds(prev => prev.size === items.length ? new Set() : new Set(items.map(i => i.id)))
+  }
+
+  if (isLoading) return <div className="surface h-40 animate-pulse" style={{ background: 'var(--ink-100)' }} />
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="text-sm" style={{ color: 'var(--ink-600)' }}>
+          <span className="font-semibold" style={{ color: 'var(--ink-800)' }}>{formatINR(total)}</span> unbundled · {items.length} items
+        </div>
+        <div className="flex gap-2">
+          {canWrite && (
+            <Button size="sm" onClick={() => setAddOpen(true)} className="flex items-center gap-1.5">
+              <Plus size={14} /> Quick Add
+            </Button>
+          )}
+          {canWrite && selectedIds.size > 0 && (
+            <Button size="sm" onClick={() => setBundleOpen(true)} className="flex items-center gap-1.5">
+              Bundle ({selectedIds.size}) · {formatINR(selectedTotal)}
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {items.length === 0 ? (
+        <div className="surface !p-12 flex flex-col items-center gap-3 text-center" style={{ color: 'var(--ink-400)' }}>
+          <ListChecks size={28} className="opacity-40" />
+          <div>
+            <p className="text-sm font-medium" style={{ color: 'var(--ink-700)' }}>No pending items</p>
+            <p className="text-xs mt-1">Capture small payments here and bundle them into one expense later.</p>
+          </div>
+        </div>
+      ) : (
+        <div className="surface !p-0 divide-rows">
+          <div className="flex items-center gap-3 px-4 py-2 text-xs uppercase" style={{ color: 'var(--ink-400)', borderBottom: '1px solid var(--ink-100)' }}>
+            <input
+              type="checkbox"
+              checked={selectedIds.size === items.length && items.length > 0}
+              onChange={toggleAll}
+              className="w-4 h-4"
+            />
+            <span className="flex-1">Item</span>
+            <span>Amount</span>
+          </div>
+          {items.map(i => (
+            <div key={i.id} className="flex items-center gap-3 px-4 py-3">
+              <input
+                type="checkbox"
+                checked={selectedIds.has(i.id)}
+                onChange={() => toggleOne(i.id)}
+                className="w-4 h-4"
+              />
+              <div className="shrink-0 w-10 text-center">
+                <p className="text-xs font-bold leading-tight" style={{ color: 'var(--ink-800)' }}>
+                  {new Date(i.paid_date).getDate().toString().padStart(2, '0')}
+                </p>
+                <p className="text-[10px] uppercase" style={{ color: 'var(--ink-400)' }}>
+                  {new Date(i.paid_date).toLocaleString('en', { month: 'short' })}
+                </p>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate" style={{ color: 'var(--ink-800)' }}>{i.description}</p>
+                <p className="text-xs truncate" style={{ color: 'var(--ink-500)' }}>
+                  {i.category?.name ?? 'Uncategorised'} · {i.cost_center} · {i.payment_mode}
+                  {(i.payee_name_raw || i.staff_member?.name || i.vendor?.name) && (
+                    <> · {i.payee_name_raw || i.staff_member?.name || i.vendor?.name}</>
+                  )}
+                </p>
+              </div>
+              <span className="text-sm font-semibold shrink-0" style={{ color: 'var(--ink-800)' }}>
+                {formatINR(i.amount)}
+              </span>
+              {canWrite && (
+                <div className="flex gap-1 shrink-0">
+                  <button onClick={() => setEditItem(i)} className="p-1 hover:bg-[var(--ink-100)] rounded">
+                    <Pencil size={14} style={{ color: 'var(--ink-500)' }} />
+                  </button>
+                  <button onClick={() => setDeleteId(i.id)} className="p-1 hover:bg-[var(--ink-100)] rounded">
+                    <Trash size={14} style={{ color: 'var(--ink-500)' }} />
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {addOpen && <PendingItemDialog onClose={() => setAddOpen(false)} />}
+      {editItem && <PendingItemDialog item={editItem} onClose={() => setEditItem(null)} />}
+      {bundleOpen && (
+        <BundleDialog
+          items={selectedItems}
+          onClose={() => setBundleOpen(false)}
+          onBundled={() => { setBundleOpen(false); setSelectedIds(new Set()) }}
+        />
+      )}
+      {deleteId && (
+        <DeletePendingDialog
+          id={deleteId}
+          onClose={() => setDeleteId(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+// Stubs — implemented in later tasks
+function PendingItemDialog(_props: { item?: PendingItem; onClose: () => void }) { return null }
+function BundleDialog(_props: { items: PendingItem[]; onClose: () => void; onBundled: () => void }) { return null }
+function DeletePendingDialog(_props: { id: string; onClose: () => void }) { return null }
