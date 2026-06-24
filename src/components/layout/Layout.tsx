@@ -21,6 +21,7 @@ const ROLE_LABEL: Record<string, string> = {
 
 const NAV = [
   { to: '/dashboard',        icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/finance-overview', icon: LayoutDashboard, label: 'Finance Overview', adminOrCommitteeOnly: true },
   { to: '/dues',             icon: IndianRupee,     label: 'Dues',              badge: 'dues' },
   { to: '/transactions',     icon: Banknote,        label: 'Transactions',      badge: 'review' },
   { to: '/expenses',         icon: Receipt,         label: 'Expenses' },
@@ -44,7 +45,7 @@ const OWNER_NAV = [
 ]
 
 // Pages owners are not allowed to visit
-const OWNER_BLOCKED = ['/transactions', '/dues', '/corpus', '/finance', '/expenses', '/flats', '/reports', '/activity', '/users']
+const OWNER_BLOCKED = ['/transactions', '/dues', '/corpus', '/finance', '/finance-overview', '/expenses', '/flats', '/reports', '/activity', '/users']
 
 const BOTTOM_NAV = [
   { to: '/dashboard',     icon: LayoutDashboard, label: 'Home' },
