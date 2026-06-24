@@ -63,10 +63,10 @@ interface DepositRow {
 
 export default function FinanceOverviewPage() {
   const navigate = useNavigate()
-  const { fyStart, fyEnd, fyLabel } = getCurrentFY()
+  const { fyLabel } = getCurrentFY()
 
   const { data: maintCollected = 0 } = useQuery({
-    queryKey: ['fo-maint-collected', fyStart, fyEnd],
+    queryKey: ['fo-maint-collected-lifetime'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('transactions')
@@ -74,26 +74,22 @@ export default function FinanceOverviewPage() {
         .eq('cr_dr', 'CR')
         .eq('corpus', 'NO')
         .neq('row_type', 'VOIDED')
-        .gte('value_date', fyStart)
-        .lte('value_date', fyEnd)
       if (error) throw error
       return (data ?? []).reduce((s: number, r: { amount: number | null }) => s + (r.amount ?? 0), 0)
     },
   })
 
   const { data: maintSpent = 0 } = useQuery({
-    queryKey: ['fo-maint-spent', fyStart, fyEnd],
+    queryKey: ['fo-maint-spent-lifetime'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('expenses')
-        .select('amount, category:category_id(budget_type)')
-        .is('voided_at', null)
-        .gte('expense_date', fyStart)
-        .lte('expense_date', fyEnd)
+        .from('transactions')
+        .select('amount')
+        .eq('cr_dr', 'DR')
+        .eq('corpus', 'NO')
+        .neq('row_type', 'VOIDED')
       if (error) throw error
-      return (data ?? [])
-        .filter((e: unknown) => (e as { category: { budget_type: string } | null })?.category?.budget_type === 'Maintenance')
-        .reduce((s: number, e: unknown) => s + ((e as { amount: number | null })?.amount ?? 0), 0)
+      return (data ?? []).reduce((s: number, r: { amount: number | null }) => s + (r.amount ?? 0), 0)
     },
   })
 
@@ -324,16 +320,16 @@ export default function FinanceOverviewPage() {
             <IndianRupee size={18} style={{ color: 'var(--brand-600)' }} />
             <p className="text-[14px] font-bold" style={{ color: 'var(--brand-700)' }}>Maintenance Fund</p>
             <Badge variant="outline" className="ml-auto text-[11px]" style={{ background: 'var(--brand-100)', color: 'var(--brand-700)', borderColor: 'var(--brand-300)' }}>
-              {fyLabel}
+              Lifetime
             </Badge>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-xl p-3" style={{ background: 'var(--brand-100)' }}>
-              <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--brand-600)' }}>Collected</p>
+              <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--brand-600)' }}>Bank CRs</p>
               <p className="text-[20px] font-bold tnum" style={{ color: 'var(--brand-800)' }}>{formatINR(maintCollected)}</p>
             </div>
             <div className="rounded-xl p-3" style={{ background: 'var(--brand-100)' }}>
-              <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--brand-600)' }}>Spent</p>
+              <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--brand-600)' }}>Bank DRs</p>
               <p className="text-[20px] font-bold tnum" style={{ color: 'var(--brand-800)' }}>{formatINR(maintSpent)}</p>
             </div>
           </div>

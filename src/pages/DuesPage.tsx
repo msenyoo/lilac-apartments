@@ -14,13 +14,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from 'sonner'
 
-type AgingTab = 'Due' | '30d+' | '60d+' | '90d+'
+type AgingTab = 'Due' | '30d+' | '60d+' | '90d+' | 'Partial' | 'Clear'
 
-const AGING_TABS: AgingTab[] = ['Due', '30d+', '60d+', '90d+']
+const AGING_TABS: AgingTab[] = ['Due', '30d+', '60d+', '90d+', 'Partial', 'Clear']
 
 function applyAgingFilter(rows: DuesEntry[], tab: AgingTab): DuesEntry[] {
+  if (tab === 'Clear')   return rows.filter(r => r.total_outstanding <= 0)
   const openRows = rows.filter(r => r.total_outstanding > 0)
-  if (tab === 'Due') return openRows
+  if (tab === 'Due')     return openRows
+  if (tab === 'Partial') return openRows.filter(r => r.collected_fy > 0)
   const monthMultiplier = tab === '30d+' ? 1 : tab === '60d+' ? 2 : 3
   return openRows.filter(r => r.pending > r.maintenance_amt * monthMultiplier)
 }
@@ -203,16 +205,15 @@ export default function DuesPage() {
       {/* Summary cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
         {[
-          { label: 'Total pending',  value: formatINR(totalPending),   tone: 'bad',  onClick: undefined },
+          { label: 'Total pending',  value: formatINR(totalPending),   tone: 'bad',  onClick: () => setAgingTab('Due') },
           { label: 'Overdue 1 mo+',  value: String(counts.Overdue),    tone: 'bad',  onClick: () => setAgingTab('30d+') },
-          { label: 'Partial',        value: String(counts.Partial),    tone: 'warn', onClick: undefined },
-          { label: 'Clear',          value: String(counts.Clear),      tone: 'ok',   onClick: undefined },
+          { label: 'Partial',        value: String(counts.Partial),    tone: 'warn', onClick: () => setAgingTab('Partial') },
+          { label: 'Clear',          value: String(counts.Clear),      tone: 'ok',   onClick: () => setAgingTab('Clear') },
         ].map(({ label, value, tone, onClick }) => (
           <button
             key={label}
             onClick={onClick}
-            disabled={!onClick}
-            className={`surface !p-4 text-left ${onClick ? 'hover:shadow-md transition-shadow cursor-pointer' : ''}`}
+            className="surface !p-4 text-left hover:shadow-md transition-shadow cursor-pointer"
             style={{
               background: tone === 'bad' ? 'var(--bad-bg)' : tone === 'warn' ? 'var(--warn-bg)' : tone === 'ok' ? 'var(--ok-bg)' : '#fff',
             }}
