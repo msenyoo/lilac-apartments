@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   LayoutDashboard, TrendingUp, AlertTriangle, ArrowRight,
-  IndianRupee, Building2, CalendarClock, GitMerge,
+  IndianRupee, Building2,
 } from 'lucide-react'
 import {
   Bar, Line, XAxis, YAxis, Tooltip,
@@ -434,49 +434,6 @@ function DashboardContent() {
               <Line type="monotone" dataKey="Expenses" stroke="var(--expense)" strokeWidth={2} dot={{ r: 3, fill: 'var(--expense)', strokeWidth: 0 } as object} activeDot={{ r: 5 }} />
             </ComposedChart>
           </ResponsiveContainer>
-        )}
-      </div>
-
-      <div className="flex flex-col gap-2">
-        {overdueFlatCount > 0 && (
-          <div className="flex items-center gap-3 px-4 py-3 rounded-[12px] border" style={{ background: 'var(--bad-bg)', borderColor: 'var(--bad-bd)' }}>
-            <IndianRupee size={17} style={{ color: 'var(--bad)' }} className="shrink-0" />
-            <p className="flex-1 text-[13px] font-semibold" style={{ color: 'var(--bad)' }}>
-              {overdueFlatCount} flat{overdueFlatCount > 1 ? 's' : ''} with pending dues — {formatINR(pendingDuesTotal)} outstanding
-            </p>
-            <Button size="sm" variant="outline" className="text-[12px] shrink-0" style={{ borderColor: 'var(--bad-bd)', color: 'var(--bad)' }} onClick={() => navigate('/dues')}>
-              View <ArrowRight size={12} className="ml-1" />
-            </Button>
-          </div>
-        )}
-        {fdMaturingSoon.length > 0 && (
-          <div className="flex items-center gap-3 px-4 py-3 rounded-[12px] border" style={{ background: 'var(--warn-bg)', borderColor: 'var(--warn-bd)' }}>
-            <CalendarClock size={17} style={{ color: 'var(--warn)' }} className="shrink-0" />
-            <p className="flex-1 text-[13px] font-semibold" style={{ color: 'var(--warn)' }}>
-              {fdMaturingSoon.length} FD{fdMaturingSoon.length > 1 ? 's' : ''} maturing in the next 30 days
-              {fdMaturingSoon.length === 1 && nextFD ? ` — ${parseLocalDate(nextFD.maturity_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}` : ''}
-            </p>
-            <Button size="sm" variant="outline" className="text-[12px] shrink-0" style={{ borderColor: 'var(--warn-bd)', color: 'var(--warn)' }} onClick={() => navigate('/finance')}>
-              View <ArrowRight size={12} className="ml-1" />
-            </Button>
-          </div>
-        )}
-        {unreconciledCount > 0 && (
-          <div className="flex items-center gap-3 px-4 py-3 rounded-[12px] border" style={{ background: 'var(--warn-bg)', borderColor: 'var(--warn-bd)' }}>
-            <GitMerge size={17} style={{ color: 'var(--warn)' }} className="shrink-0" />
-            <p className="flex-1 text-[13px] font-semibold" style={{ color: 'var(--warn)' }}>
-              {unreconciledCount} unreconciled expense{unreconciledCount > 1 ? 's' : ''} — bank DRs not matched
-            </p>
-            <Button size="sm" variant="outline" className="text-[12px] shrink-0" style={{ borderColor: 'var(--warn-bd)', color: 'var(--warn)' }} onClick={() => navigate('/expenses?tab=reconcile')}>
-              Reconcile <ArrowRight size={12} className="ml-1" />
-            </Button>
-          </div>
-        )}
-        {overdueFlatCount === 0 && unreconciledCount === 0 && fdMaturingSoon.length === 0 && (
-          <div className="flex items-center gap-3 px-4 py-3 rounded-[12px] border" style={{ background: 'var(--ok-bg)', borderColor: 'var(--ok-bd)' }}>
-            <AlertTriangle size={17} style={{ color: 'var(--ok)' }} className="shrink-0" />
-            <p className="text-[13px] font-semibold" style={{ color: 'var(--ok)' }}>No pending actions — everything is up to date</p>
-          </div>
         )}
       </div>
 
