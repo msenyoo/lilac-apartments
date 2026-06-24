@@ -2,7 +2,6 @@ import { useQuery } from '@tanstack/react-query'
 import { NavLink } from 'react-router-dom'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell,
 } from 'recharts'
 import {
   TrendingUp, AlertCircle, ArrowRight, IndianRupee,
@@ -39,7 +38,10 @@ export default function DashboardPage() {
   const { data: duesData = [] } = useQuery({
     queryKey: ['dues-all'],
     queryFn: async () => {
-      const { data } = await supabase.from('v_dues_tracker').select('pending,status')
+      const { data } = await supabase
+        .from('v_dues_tracker')
+        .select('flat_code, block, pending, status, total_outstanding, collected_fy')
+        .order('pending', { ascending: false })
       return data ?? []
     },
   })
@@ -108,11 +110,11 @@ export default function DashboardPage() {
     },
   })
 
-  const { data: fdTotal = 0 } = useQuery({
-    queryKey: ['dashboard-fd-total'],
+  const { data: deposits = [] } = useQuery({
+    queryKey: ['dashboard-deposits'],
     queryFn: async () => {
-      const { data } = await supabase.from('deposits').select('principal').eq('status', 'active')
-      return (data ?? []).reduce((s: number, d: any) => s + (d.principal ?? 0), 0)
+      const { data } = await supabase.from('deposits').select('id, principal, maturity_date, status').eq('status', 'active')
+      return (data ?? []) as { id: string; principal: number; maturity_date: string; status: string }[]
     },
   })
 
@@ -130,12 +132,25 @@ export default function DashboardPage() {
   const fyLabel   = `FY ${currentFY}-${String(parseInt(currentFY) + 1).slice(-2)}`
 
   const totalPending     = duesData.reduce((s: number, d: any) => s + Math.max(0, d.pending ?? 0), 0)
-  const duesCounts       = {
-    Due:     duesData.filter((d: any) => d.status === 'Due').length,
-    Partial: duesData.filter((d: any) => d.status === 'Partial').length,
-    Clear:   duesData.filter((d: any) => d.status === 'Clear').length,
-  }
+  const duesCounts       = (duesData as any[]).reduce((acc, d) => {
+    if (d.total_outstanding <= 0) acc.Clear += 1
+    else if (d.collected_fy > 0) acc.Partial += 1
+    else acc.Due += 1
+    return acc
+  }, { Due: 0, Partial: 0, Clear: 0 })
   const overdueFlatCount = duesCounts.Due + duesCounts.Partial
+  const overdueFlats     = (duesData as any[]).filter((d: any) => d.total_outstanding > 0)
+
+  const fdTotal       = deposits.reduce((s, d) => s + (d.principal ?? 0), 0)
+  const fdMaturingSoon = deposits.filter(d => {
+    if (!d.maturity_date) return false
+    const [y, m, day] = d.maturity_date.split('-').map(Number)
+    const days = Math.round((new Date(y, m - 1, day).getTime() - new Date(new Date().toDateString()).getTime()) / 86_400_000)
+    return days >= 0 && days <= 30
+  })
+  const nextFD = deposits.length > 0
+    ? deposits.slice().sort((a, b) => (a.maturity_date ?? '').localeCompare(b.maturity_date ?? ''))[0]
+    : null
 
   const corpusByPlan = new Map<string, { name: string; target: number; collected: number }>()
   for (const row of corpusData as any[]) {
@@ -146,8 +161,7 @@ export default function DashboardPage() {
     p.target    += row.effective_target
     p.collected += row.collected
   }
-  const corpusPlans         = Array.from(corpusByPlan.values())
-  const corpusPoolAvailable = corpusPlans.reduce((s, p) => s + Math.max(0, p.collected), 0)
+  const corpusPlans = Array.from(corpusByPlan.values())
 
   const chartData = (monthlyData as any[]).slice(-12).map((m: any) => ({
     month:       m.fiscal_label,
@@ -155,12 +169,6 @@ export default function DashboardPage() {
     Corpus:      m.corpus_collected,
     Expenses:    m.total_expenses,
   }))
-
-  const pieData = [
-    { name: 'Clear',   value: duesCounts.Clear,   color: 'var(--ok)'   },
-    { name: 'Partial', value: duesCounts.Partial, color: 'var(--warn)' },
-    { name: 'Due',     value: duesCounts.Due,     color: 'var(--bad)'  },
-  ].filter(d => d.value > 0)
 
   return (
     <div className="flex flex-col gap-5 fade-in">
@@ -260,6 +268,17 @@ export default function DashboardPage() {
             <ArrowRight size={15} className="shrink-0 opacity-60" />
           </NavLink>
         )}
+        {fdMaturingSoon.length > 0 && (
+          <NavLink to="/finance"
+            className="flex items-center gap-3 px-4 py-3 rounded-[12px] border transition-colors"
+            style={{ background: 'var(--warn-bg)', borderColor: 'var(--warn-bd)', color: 'var(--warn)' }}>
+            <TrendingUp size={17} className="shrink-0" />
+            <p className="flex-1 text-[13px] font-semibold">
+              {fdMaturingSoon.length} FD{fdMaturingSoon.length > 1 ? 's' : ''} maturing in the next 30 days
+            </p>
+            <ArrowRight size={15} className="shrink-0 opacity-60" />
+          </NavLink>
+        )}
       </div>
 
       {/* KPI strip */}
@@ -272,10 +291,12 @@ export default function DashboardPage() {
             sub: `${duesCounts.Due} Due · ${duesCounts.Partial} Partial · ${duesCounts.Clear} Clear`,
           },
           {
-            icon: <Building2 size={18} />, tone: 'brand',
-            label: 'Corpus pool collected',
-            value: formatINR(corpusPoolAvailable),
-            sub: `${corpusPlans.length} active plan${corpusPlans.length !== 1 ? 's' : ''}`,
+            icon: <TrendingUp size={18} />, tone: 'brand',
+            label: 'Fixed Deposits',
+            value: formatINR(fdTotal),
+            sub: deposits.length === 0
+              ? 'No active FDs'
+              : `${deposits.length} active${nextFD ? ` · next ${new Date(nextFD.maturity_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}` : ''}`,
           },
           {
             icon: <Receipt size={18} />, tone: 'neutral',
@@ -355,41 +376,34 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Dues pie */}
-        <div className="surface !p-5">
-          <p className="text-[13.5px] font-semibold mb-3" style={{ color: 'var(--ink-700)' }}>
-            Dues status ({fyLabel})
-          </p>
-          {pieData.length === 0 ? (
-            <div className="flex items-center justify-center h-[160px]" style={{ color: 'var(--ink-400)' }}>
-              <p className="text-[13px]">No data</p>
-            </div>
+        {/* Aging receivables — top flats with dues */}
+        <div className="surface !p-0 overflow-hidden">
+          <div className="px-5 py-3 border-b hairline flex items-center justify-between">
+            <p className="text-[13.5px] font-semibold" style={{ color: 'var(--ink-700)' }}>Top outstanding</p>
+            <NavLink to="/dues" className="text-[12px] font-medium flex items-center gap-1" style={{ color: 'var(--brand-600)' }}>
+              View all <ArrowRight size={12} />
+            </NavLink>
+          </div>
+          {overdueFlats.length === 0 ? (
+            <div className="px-5 py-8 text-center text-[13px]" style={{ color: 'var(--ink-400)' }}>All flats are clear</div>
           ) : (
-            <>
-              <ResponsiveContainer width="100%" height={160}>
-                <PieChart>
-                  <Pie data={pieData} cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={2} dataKey="value">
-                    {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
-                  </Pie>
-                  <Tooltip formatter={(v: number) => [`${v} flats`, '']} contentStyle={{ borderRadius: 10, fontSize: 12 }} />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="flex flex-col gap-1.5 mt-2">
-                {[
-                  { label: 'Clear',   count: duesCounts.Clear,   color: 'var(--ok)'   },
-                  { label: 'Partial', count: duesCounts.Partial, color: 'var(--warn)' },
-                  { label: 'Due',     count: duesCounts.Due,     color: 'var(--bad)'  },
-                ].map(({ label, count, color }) => (
-                  <div key={label} className="flex items-center justify-between text-[12px]">
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: color }} />
-                      <span style={{ color: 'var(--ink-600)' }}>{label}</span>
-                    </div>
-                    <span className="font-semibold" style={{ color: 'var(--ink-700)' }}>{count} flats</span>
+            <div className="divide-rows">
+              {overdueFlats.slice(0, 8).map((d: any) => (
+                <NavLink key={d.flat_code} to="/dues"
+                  className="px-4 py-2.5 grid grid-cols-[1fr_auto] gap-3 items-center hover:bg-[var(--ink-50)] transition-colors">
+                  <div>
+                    <p className="text-[13px] font-semibold" style={{ color: 'var(--ink-800)' }}>{d.flat_code}</p>
+                    <p className="text-[11px]" style={{ color: 'var(--ink-400)' }}>Block {d.block}</p>
                   </div>
-                ))}
-              </div>
-            </>
+                  <p className="text-[13px] font-semibold tnum" style={{ color: 'var(--bad)' }}>{formatINR(d.total_outstanding)}</p>
+                </NavLink>
+              ))}
+              {overdueFlats.length > 8 && (
+                <NavLink to="/dues" className="block px-4 py-2.5 text-center text-[12px] font-medium" style={{ color: 'var(--brand-600)' }}>
+                  +{overdueFlats.length - 8} more flats — view all
+                </NavLink>
+              )}
+            </div>
           )}
         </div>
       </div>
