@@ -73,6 +73,7 @@ export default function FinanceOverviewPage() {
         .select('amount')
         .eq('cr_dr', 'CR')
         .eq('corpus', 'NO')
+        .neq('row_type', 'VOIDED')
         .gte('value_date', fyStart)
         .lte('value_date', fyEnd)
       if (error) throw error
