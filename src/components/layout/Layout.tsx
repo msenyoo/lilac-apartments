@@ -20,20 +20,20 @@ const ROLE_LABEL: Record<string, string> = {
 }
 
 const NAV = [
-  { to: '/dashboard',     icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/dues',          icon: IndianRupee,     label: 'Dues',              badge: 'dues' },
-  { to: '/transactions',  icon: Banknote,        label: 'Transactions',      badge: 'review' },
-  { to: '/corpus',        icon: Building2,       label: 'Corpus' },
-  { to: '/finance',       icon: PiggyBank,       label: 'Finance' },
+  { to: '/dashboard',        icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/finance-overview', icon: LayoutDashboard, label: 'Finance Overview', adminOrCommitteeOnly: true },
-  { to: '/expenses',      icon: Receipt,         label: 'Expenses' },
-  { to: '/announcements', icon: Megaphone,       label: 'Announcements' },
-  { to: '/flats',         icon: Users,           label: 'Flats & residents' },
-  { to: '/reports',       icon: FileText,        label: 'Reports' },
-  { to: '/activity',      icon: History,         label: 'Activity log' },
-  { to: '/users',         icon: Shield,          label: 'Users',             adminOnly: true },
-  { to: '/settings',      icon: Settings,        label: 'Settings',          adminOnly: true },
-  { to: '/help',          icon: HelpCircle,      label: 'Help Center' },
+  { to: '/dues',             icon: IndianRupee,     label: 'Dues',              badge: 'dues' },
+  { to: '/transactions',     icon: Banknote,        label: 'Transactions',      badge: 'review' },
+  { to: '/expenses',         icon: Receipt,         label: 'Expenses' },
+  { to: '/corpus',           icon: Building2,       label: 'Corpus' },
+  { to: '/finance',          icon: PiggyBank,       label: 'Finance' },
+  { to: '/reports',          icon: FileText,        label: 'Reports' },
+  { to: '/announcements',    icon: Megaphone,       label: 'Announcements' },
+  { to: '/flats',            icon: Users,           label: 'Flats & residents' },
+  { to: '/activity',         icon: History,         label: 'Activity log' },
+  { to: '/users',            icon: Shield,          label: 'Users',             adminOnly: true },
+  { to: '/settings',         icon: Settings,        label: 'Settings',          adminOnly: true },
+  { to: '/help',             icon: HelpCircle,      label: 'Help Center' },
 ]
 
 // Restricted nav for flat owners — self-service portal only
