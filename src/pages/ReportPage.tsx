@@ -1666,23 +1666,19 @@ function RPStatementTab() {
   const [selectedFyYear, setSelectedFyYear] = useState(fy.year)
   const selectedFy = getFyRange(selectedFyYear)
   const [generating, setGenerating] = useState(false)
-  const [openingBalanceOverride, setOpeningBalanceOverride] = useState<string>('')
 
-  const { data: openingBalanceSetting } = useQuery({
-    queryKey: ['opening-balance', selectedFyYear],
+  const { data: openingBalance = 0 } = useQuery({
+    queryKey: ['rp-opening', selectedFy.start],
     queryFn: async () => {
-      const { data } = await supabase
-        .from('app_settings')
-        .select('value')
-        .eq('key', `opening_balance_${selectedFyYear}`)
-        .maybeSingle()
-      return data?.value ?? '0'
+      const [{ data: priorCR }, { data: priorDR }] = await Promise.all([
+        supabase.from('transactions').select('amount').eq('cr_dr', 'CR').neq('row_type', 'VOIDED').lt('value_date', selectedFy.start),
+        supabase.from('transactions').select('amount').eq('cr_dr', 'DR').neq('row_type', 'VOIDED').lt('value_date', selectedFy.start),
+      ])
+      const cr = (priorCR ?? []).reduce((s: number, r: any) => s + (r.amount ?? 0), 0)
+      const dr = (priorDR ?? []).reduce((s: number, r: any) => s + (r.amount ?? 0), 0)
+      return cr - dr
     },
   })
-
-  const openingBalance = openingBalanceOverride !== ''
-    ? (parseInt(openingBalanceOverride, 10) || 0)
-    : (parseInt(openingBalanceSetting ?? '0', 10) || 0)
 
   const { data: maintenanceCR } = useQuery({
     queryKey: ['rp-maintenance-cr', selectedFyYear],
@@ -1692,6 +1688,7 @@ function RPStatementTab() {
         .select('amount')
         .eq('cr_dr', 'CR')
         .eq('corpus', 'NO')
+        .neq('row_type', 'VOIDED')
         .gte('value_date', selectedFy.start)
         .lte('value_date', selectedFy.end)
       return (data ?? []).reduce((s: number, r: any) => s + (r.amount ?? 0), 0)
@@ -1706,6 +1703,7 @@ function RPStatementTab() {
         .select('amount')
         .eq('cr_dr', 'CR')
         .eq('corpus', 'YES')
+        .neq('row_type', 'VOIDED')
         .gte('value_date', selectedFy.start)
         .lte('value_date', selectedFy.end)
       return (data ?? []).reduce((s: number, r: any) => s + (r.amount ?? 0), 0)
@@ -1789,7 +1787,7 @@ function RPStatementTab() {
         <label className="text-sm font-medium" style={{ color: 'var(--ink-600)' }}>Financial Year</label>
         <select
           value={selectedFyYear}
-          onChange={e => { setSelectedFyYear(Number(e.target.value)); setOpeningBalanceOverride('') }}
+          onChange={e => setSelectedFyYear(Number(e.target.value))}
           className="ds-field"
         >
           {FISCAL_YEARS.map(f => <option key={f.year} value={f.year}>{f.label}</option>)}
@@ -1806,25 +1804,6 @@ function RPStatementTab() {
             }
           </button>
         </div>
-      </div>
-
-      <div className="surface !p-4 flex items-center gap-3">
-        <label className="text-sm font-medium shrink-0" style={{ color: 'var(--ink-600)' }}>
-          Opening balance (1 Apr {selectedFyYear})
-        </label>
-        <div className="relative max-w-xs">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: 'var(--ink-400)' }}>₹</span>
-          <input
-            type="number"
-            min={0}
-            value={openingBalanceOverride !== '' ? openingBalanceOverride : (openingBalanceSetting ?? '0')}
-            onChange={e => setOpeningBalanceOverride(e.target.value)}
-            className="ds-field pl-7 max-w-[180px]"
-          />
-        </div>
-        <p className="text-xs" style={{ color: 'var(--ink-400)' }}>
-          Pre-filled from Settings → Opening Balances. Edit here for one-off override (not saved).
-        </p>
       </div>
 
       <div className="surface !p-0 overflow-hidden">
@@ -1892,39 +1871,27 @@ function BalanceSheetTab() {
   const selectedFy = getFyRange(selectedFyYear)
   const [generating, setGenerating] = useState(false)
 
-  const { data: openingBalanceSetting } = useQuery({
-    queryKey: ['opening-balance', selectedFyYear],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('app_settings')
-        .select('value')
-        .eq('key', `opening_balance_${selectedFyYear}`)
-        .maybeSingle()
-      return parseInt(data?.value ?? '0', 10) || 0
-    },
-  })
-
-  const { data: totalCR } = useQuery({
-    queryKey: ['bs-total-cr', selectedFyYear],
+  const { data: cumulativeCR } = useQuery({
+    queryKey: ['bs-cum-cr', selectedFy.end],
     queryFn: async () => {
       const { data } = await supabase
         .from('transactions')
         .select('amount')
         .eq('cr_dr', 'CR')
-        .gte('value_date', selectedFy.start)
+        .neq('row_type', 'VOIDED')
         .lte('value_date', selectedFy.end)
       return (data ?? []).reduce((s: number, r: any) => s + (r.amount ?? 0), 0)
     },
   })
 
-  const { data: totalDR } = useQuery({
-    queryKey: ['bs-total-dr', selectedFyYear],
+  const { data: cumulativeDR } = useQuery({
+    queryKey: ['bs-cum-dr', selectedFy.end],
     queryFn: async () => {
       const { data } = await supabase
         .from('transactions')
         .select('amount')
         .eq('cr_dr', 'DR')
-        .gte('value_date', selectedFy.start)
+        .neq('row_type', 'VOIDED')
         .lte('value_date', selectedFy.end)
       return (data ?? []).reduce((s: number, r: any) => s + (r.amount ?? 0), 0)
     },
@@ -1972,8 +1939,7 @@ function BalanceSheetTab() {
     },
   })
 
-  const openBal     = openingBalanceSetting ?? 0
-  const bankBalance = openBal + (totalCR ?? 0) - (totalDR ?? 0)
+  const bankBalance = (cumulativeCR ?? 0) - (cumulativeDR ?? 0)
   const fdTotal     = activeFDs ?? 0
   const corpColl    = corpusCollected ?? 0
   const totalAssets = bankBalance + fdTotal + corpColl
@@ -2013,7 +1979,7 @@ function BalanceSheetTab() {
     }
   }
 
-  const isLoading = openingBalanceSetting === undefined || totalCR === undefined
+  const isLoading = cumulativeCR === undefined || cumulativeDR === undefined
 
   return (
     <div className="flex flex-col gap-5 max-w-2xl">
@@ -2050,7 +2016,7 @@ function BalanceSheetTab() {
               <p className="text-xs text-blue-600">as at 31 March {selectedFyYear + 1}</p>
             </div>
             {[
-              { label: 'Bank balance',           amount: bankBalance, note: `Opening ₹${openBal.toLocaleString('en-IN')} + CRs − DRs` },
+              { label: 'Bank balance',           amount: bankBalance, note: 'Cumulative CRs − DRs through this date (audit-derived)' },
               { label: 'Fixed deposits (active)', amount: fdTotal,    note: 'Sum of active FD principals' },
               { label: 'Corpus fund collected',   amount: corpColl,   note: 'All plans combined' },
             ].map(({ label, amount, note }) => (

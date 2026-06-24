@@ -313,6 +313,7 @@ export default function OwnerPortalPage() {
         .eq('flat_code', (myFlat as any).code)
         .eq('cr_dr', 'CR')
         .eq('fiscal_year', fy.year)
+        .neq('row_type', 'VOIDED')
 
       const fyTxns = (fyPayments ?? []) as {
         id: string; value_date: string; amount: number
