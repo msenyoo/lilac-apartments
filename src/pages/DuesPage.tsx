@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AgGridReact } from 'ag-grid-react'
 import type { ColDef } from 'ag-grid-community'
-import { X, TrendingDown, Download, MessageCircle, Check, Pencil, Trash2, ListChecks, Loader2 } from 'lucide-react'
+import { X, TrendingDown, Download, MessageCircle, Check, Pencil, Trash2, ListChecks, Loader2, Search } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { supabase, DuesEntry, Transaction, Flat } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
@@ -14,15 +14,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from 'sonner'
 
-type AgingTab = 'All' | 'Due' | '30d+' | '60d+' | '90d+'
+type AgingTab = 'Due' | '30d+' | '60d+' | '90d+'
 
-const AGING_TABS: AgingTab[] = ['All', 'Due', '30d+', '60d+', '90d+']
+const AGING_TABS: AgingTab[] = ['Due', '30d+', '60d+', '90d+']
 
 function applyAgingFilter(rows: DuesEntry[], tab: AgingTab): DuesEntry[] {
-  if (tab === 'All') return rows
-  if (tab === 'Due') return rows.filter(r => r.pending > 0)
+  const openRows = rows.filter(r => r.total_outstanding > 0)
+  if (tab === 'Due') return openRows
   const monthMultiplier = tab === '30d+' ? 1 : tab === '60d+' ? 2 : 3
-  return rows.filter(r => r.pending > r.maintenance_amt * monthMultiplier)
+  return openRows.filter(r => r.pending > r.maintenance_amt * monthMultiplier)
 }
 
 function toFiscalLabel(dateStr: string): string {
@@ -61,7 +61,7 @@ interface BulkRow {
 
 export default function DuesPage() {
   const [selectedFlat, setSelectedFlat] = useState<DuesEntry | null>(null)
-  const [agingTab, setAgingTab] = useState<AgingTab>('All')
+  const [agingTab, setAgingTab] = useState<AgingTab>('Due')
   const [bulkOpen, setBulkOpen] = useState(false)
   const gridRef = useRef<AgGridReact>(null)
   const { isAdmin } = useRoleCtx()
@@ -91,11 +91,13 @@ export default function DuesPage() {
   })
 
   const totalPending = (data ?? []).reduce((s, d) => s + Math.max(0, d.pending), 0)
-  const counts = {
-    Due:     (data ?? []).filter(d => d.status === 'Due').length,
-    Partial: (data ?? []).filter(d => d.status === 'Partial').length,
-    Clear:   (data ?? []).filter(d => d.status === 'Clear').length,
-  }
+  const counts = (data ?? []).reduce((acc, d) => {
+    if (d.total_outstanding <= 0) acc.Clear += 1
+    else if (d.collected_fy > 0) acc.Partial += 1
+    else acc.NeverPaid += 1
+    if (d.pending > d.maintenance_amt) acc.Overdue += 1
+    return acc
+  }, { Overdue: 0, Partial: 0, Clear: 0, NeverPaid: 0 })
 
   const filteredData = useMemo(() => applyAgingFilter(data ?? [], agingTab), [data, agingTab])
 
@@ -134,10 +136,10 @@ export default function DuesPage() {
     },
     { headerName: 'Status', width: 110, filter: true,
       valueGetter: (p: any) => {
-        const { total_outstanding, pending, status } = p.data
+        const { total_outstanding, collected_fy } = p.data
         if (total_outstanding <= 0) return 'Clear'
-        if (pending <= 0) return 'Arrears'
-        return status
+        if (collected_fy > 0) return 'Partial'
+        return 'Due'
       },
       cellRenderer: (p: any) => (
         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -201,14 +203,16 @@ export default function DuesPage() {
       {/* Summary cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
         {[
-          { label: 'Total pending', value: formatINR(totalPending), tone: 'bad' },
-          { label: 'Due (0 paid)',  value: String(counts.Due),      tone: 'bad' },
-          { label: 'Partial',       value: String(counts.Partial),  tone: 'warn' },
-          { label: 'Clear',         value: String(counts.Clear),    tone: 'ok' },
-        ].map(({ label, value, tone }) => (
-          <div
+          { label: 'Total pending',  value: formatINR(totalPending),   tone: 'bad',  onClick: undefined },
+          { label: 'Overdue 1 mo+',  value: String(counts.Overdue),    tone: 'bad',  onClick: () => setAgingTab('30d+') },
+          { label: 'Partial',        value: String(counts.Partial),    tone: 'warn', onClick: undefined },
+          { label: 'Clear',          value: String(counts.Clear),      tone: 'ok',   onClick: undefined },
+        ].map(({ label, value, tone, onClick }) => (
+          <button
             key={label}
-            className="surface !p-4"
+            onClick={onClick}
+            disabled={!onClick}
+            className={`surface !p-4 text-left ${onClick ? 'hover:shadow-md transition-shadow cursor-pointer' : ''}`}
             style={{
               background: tone === 'bad' ? 'var(--bad-bg)' : tone === 'warn' ? 'var(--warn-bg)' : tone === 'ok' ? 'var(--ok-bg)' : '#fff',
             }}
@@ -220,25 +224,44 @@ export default function DuesPage() {
             >
               {value}
             </p>
-          </div>
+          </button>
         ))}
       </div>
 
-      {/* Aging filter tabs */}
-      <div className="flex gap-1 p-1 rounded-[12px] flex-wrap" style={{ background: 'var(--ink-100)' }}>
-        {AGING_TABS.map(t => (
-          <button
-            key={t}
-            onClick={() => setAgingTab(t)}
-            className="px-4 py-1.5 rounded-[9px] text-[13.5px] font-medium transition-colors"
-            style={agingTab === t
-              ? { background: '#fff', color: 'var(--ink-900)', boxShadow: '0 1px 4px rgba(26,24,32,.10)' }
-              : { color: 'var(--ink-500)' }
-            }
-          >
-            {t}
-          </button>
-        ))}
+      {/* Aging filter tabs + flat lookup */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex gap-1 p-1 rounded-[12px] flex-wrap" style={{ background: 'var(--ink-100)' }}>
+          {AGING_TABS.map(t => (
+            <button
+              key={t}
+              onClick={() => setAgingTab(t)}
+              className="px-4 py-1.5 rounded-[9px] text-[13.5px] font-medium transition-colors"
+              style={agingTab === t
+                ? { background: '#fff', color: 'var(--ink-900)', boxShadow: '0 1px 4px rgba(26,24,32,.10)' }
+                : { color: 'var(--ink-500)' }
+              }
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+        <div className="relative ml-auto" style={{ width: 220 }}>
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--ink-400)' }} />
+          <input
+            type="text"
+            placeholder="Open any flat (e.g. AG1)"
+            className="ds-field pl-8 text-[13px] w-full"
+            list="all-flat-codes"
+            onChange={e => {
+              const code = e.target.value.trim().toUpperCase()
+              const flat = (data ?? []).find(d => d.flat_code === code)
+              if (flat) { setSelectedFlat(flat); e.target.value = '' }
+            }}
+          />
+          <datalist id="all-flat-codes">
+            {(data ?? []).map(d => <option key={d.flat_code} value={d.flat_code} />)}
+          </datalist>
+        </div>
       </div>
 
       {/* Grid + detail panel */}
@@ -287,7 +310,7 @@ function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat
         .eq('cr_dr', 'CR')
         .eq('category', 'Maintenance')
         .neq('row_type', 'VOIDED')
-        .order('value_date')
+        .order('value_date', { ascending: false })
       return (data ?? []) as Transaction[]
     },
   })
@@ -354,13 +377,14 @@ function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat
 
         <div className="flex flex-col gap-1.5 text-[13.5px]">
           {[
-            { label: 'Rate/mo',    val: formatINR(flat.maintenance_amt), special: '' },
-            { label: 'Annual due', val: formatINR(flat.annual_due),      special: '' },
-            { label: 'Collected',  val: formatINR(flat.collected_fy),    special: 'ok' },
-          ].map(({ label, val, special }) => (
+            { label: 'Rate/mo',          val: formatINR(flat.maintenance_amt),    tone: 'default', show: true },
+            { label: 'Previous arrears', val: formatINR(flat.arrears_maintenance), tone: 'bad',    show: flat.arrears_maintenance > 0 },
+            { label: 'Annual due',       val: formatINR(flat.annual_due),         tone: 'default', show: true },
+            { label: 'Collected',        val: formatINR(flat.collected_fy),       tone: 'ok',     show: true },
+          ].filter(r => r.show).map(({ label, val, tone }) => (
             <div key={label} className="flex justify-between">
               <span style={{ color: 'var(--ink-500)' }}>{label}</span>
-              <span className="font-medium" style={{ color: special === 'ok' ? 'var(--ok)' : 'var(--ink-800)' }}>{val}</span>
+              <span className="font-medium" style={{ color: tone === 'ok' ? 'var(--ok)' : tone === 'bad' ? 'var(--bad)' : 'var(--ink-800)' }}>{val}</span>
             </div>
           ))}
           <div className="flex justify-between border-t hairline pt-1.5">
@@ -369,12 +393,6 @@ function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat
               {flat.pending > 0 ? formatINR(flat.pending) : '✓ Clear'}
             </span>
           </div>
-          {flat.arrears_maintenance > 0 && (
-            <div className="flex justify-between">
-              <span style={{ color: 'var(--ink-500)' }}>Previous arrears</span>
-              <span className="font-medium" style={{ color: 'var(--bad)' }}>{formatINR(flat.arrears_maintenance)}</span>
-            </div>
-          )}
           {flat.advance_credits > 0 && (
             <div className="flex justify-between">
               <span style={{ color: 'var(--ink-500)' }}>Advance paid</span>
