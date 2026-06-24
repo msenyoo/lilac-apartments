@@ -6,7 +6,7 @@ import {
 } from 'recharts'
 import {
   TrendingUp, AlertCircle, ArrowRight, IndianRupee,
-  Building2, Receipt, GitMerge, Users,
+  Building2, Receipt, GitMerge, Users, Landmark, Coins, Wallet,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
@@ -81,6 +81,41 @@ export default function DashboardPage() {
     refetchInterval: 60_000,
   })
 
+  const { data: bankPosition } = useQuery({
+    queryKey: ['dashboard-bank-position'],
+    queryFn: async () => {
+      const [{ data: crs }, { data: drs }] = await Promise.all([
+        supabase.from('transactions').select('amount, corpus').eq('cr_dr', 'CR').neq('row_type', 'VOIDED'),
+        supabase.from('transactions').select('amount, corpus').eq('cr_dr', 'DR').neq('row_type', 'VOIDED'),
+      ])
+      let totalCR = 0, totalDR = 0, corpCR = 0, corpDR = 0
+      for (const r of crs ?? []) { totalCR += r.amount; if (r.corpus === 'YES') corpCR += r.amount }
+      for (const r of drs ?? []) { totalDR += r.amount; if (r.corpus === 'YES') corpDR += r.amount }
+      return {
+        bank: totalCR - totalDR,
+        corpusInBank: corpCR - corpDR,
+        maintInBank: (totalCR - totalDR) - (corpCR - corpDR),
+      }
+    },
+  })
+
+  const { data: cashOnHand = 0 } = useQuery({
+    queryKey: ['dashboard-cash-on-hand'],
+    queryFn: async () => {
+      const { data } = await supabase.from('petty_cash_transactions').select('txn_type, amount')
+      return (data ?? []).reduce((s: number, t: any) =>
+        t.txn_type === 'Disbursement' ? s - t.amount : s + t.amount, 0)
+    },
+  })
+
+  const { data: fdTotal = 0 } = useQuery({
+    queryKey: ['dashboard-fd-total'],
+    queryFn: async () => {
+      const { data } = await supabase.from('deposits').select('principal').eq('status', 'active')
+      return (data ?? []).reduce((s: number, d: any) => s + (d.principal ?? 0), 0)
+    },
+  })
+
   const { data: thisMonthExpenses = 0 } = useQuery({
     queryKey: ['this-month-expenses'],
     queryFn: async () => {
@@ -133,6 +168,61 @@ export default function DashboardPage() {
       <div>
         <h1 className="text-[24px] font-extrabold">Dashboard</h1>
         <p className="text-[13.5px] mt-1" style={{ color: 'var(--ink-500)' }}>{fyLabel} · Lilac Apartments</p>
+      </div>
+
+      {/* Financial Position strip */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+        {[
+          {
+            icon: <Landmark size={18} />, tone: 'brand',
+            label: 'Bank balance',
+            value: formatINR(bankPosition?.bank ?? 0),
+            sub: fdTotal > 0 ? `+ ${formatINR(fdTotal)} in FDs` : undefined,
+          },
+          {
+            icon: <Coins size={18} />, tone: cashOnHand > 0 ? 'neutral' : 'warn',
+            label: 'Cash on hand',
+            value: formatINR(cashOnHand),
+            sub: cashOnHand === 0 ? 'Not tracked — record via Expenses → Petty Cash' : undefined,
+          },
+          {
+            icon: <Building2 size={18} />, tone: 'brand',
+            label: 'Corpus available',
+            value: formatINR(Math.max(0, bankPosition?.corpusInBank ?? 0)),
+            sub: 'Collected − spent (in bank)',
+          },
+          {
+            icon: <Wallet size={18} />, tone: (bankPosition?.maintInBank ?? 0) < 0 ? 'bad' : 'neutral',
+            label: 'Maintenance available',
+            value: formatINR(bankPosition?.maintInBank ?? 0),
+            sub: (bankPosition?.maintInBank ?? 0) < 0
+              ? 'Deficit — corpus subsidising'
+              : 'Bank − corpus claim',
+          },
+        ].map(({ icon, tone, label, value, sub }) => (
+          <div key={label} className="surface !p-4 sm:!p-5 flex flex-col gap-3">
+            <div
+              className="w-9 h-9 rounded-[10px] flex items-center justify-center"
+              style={{
+                background: tone === 'brand' ? 'var(--brand-50)'
+                  : tone === 'bad'    ? 'var(--bad-bg)'
+                  : tone === 'warn'   ? 'var(--warn-bg)'
+                  : 'var(--ink-100)',
+                color: tone === 'brand' ? 'var(--brand-600)'
+                  : tone === 'bad'   ? 'var(--bad)'
+                  : tone === 'warn'  ? 'var(--warn)'
+                  : 'var(--ink-500)',
+              }}
+            >
+              {icon}
+            </div>
+            <div>
+              <p className="text-[12.5px] font-medium leading-tight" style={{ color: 'var(--ink-500)' }}>{label}</p>
+              <p className="text-[26px] font-bold leading-tight mt-1 tnum">{value}</p>
+              {sub && <p className="text-[11.5px] mt-1" style={{ color: 'var(--ink-400)' }}>{sub}</p>}
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Alert strip */}
