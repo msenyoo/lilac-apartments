@@ -247,21 +247,23 @@ export default function DuesPage() {
           ))}
         </div>
         <div className="relative ml-auto" style={{ width: 220 }}>
-          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--ink-400)' }} />
-          <input
-            type="text"
-            placeholder="Open any flat (e.g. AG1)"
-            className="ds-field pl-8 text-[13px] w-full"
-            list="all-flat-codes"
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--ink-400)' }} />
+          <select
+            value=""
             onChange={e => {
-              const code = e.target.value.trim().toUpperCase()
+              const code = e.target.value
               const flat = (data ?? []).find(d => d.flat_code === code)
-              if (flat) { setSelectedFlat(flat); e.target.value = '' }
+              if (flat) setSelectedFlat(flat)
             }}
-          />
-          <datalist id="all-flat-codes">
-            {(data ?? []).map(d => <option key={d.flat_code} value={d.flat_code} />)}
-          </datalist>
+            className="ds-field pl-8 text-[13px] w-full appearance-none"
+          >
+            <option value="" disabled>Open any flat…</option>
+            {(data ?? []).slice().sort((a, b) => a.flat_code.localeCompare(b.flat_code)).map(d => (
+              <option key={d.flat_code} value={d.flat_code}>
+                {d.flat_code} {d.total_outstanding > 0 ? `· ${formatINR(d.total_outstanding)}` : '· clear'}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
