@@ -251,6 +251,14 @@ function UploadTab({ onImported }: { onImported: () => void }) {
       {stage === 'preview' && preview && (
         <ImportPreview
           preview={preview}
+          onRowEdited={(rowIndex, patch) => {
+            setPreview(p => {
+              if (!p) return p
+              const next = [...p.rows]
+              next[rowIndex] = { ...next[rowIndex], ...patch }
+              return { ...p, rows: next }
+            })
+          }}
           fileName={pendingFile?.name ?? ''}
           onConfirm={confirmImport}
           onCancel={reset}
@@ -287,13 +295,25 @@ function UploadTab({ onImported }: { onImported: () => void }) {
   )
 }
 
-function ImportPreview({ preview, fileName, onConfirm, onCancel }: {
+function ImportPreview({ preview, fileName, onConfirm, onCancel, onRowEdited }: {
   preview: { rows: PreviewRow[]; duplicates: number; totalInFile: number }
   fileName: string
   onConfirm: () => void
   onCancel: () => void
+  onRowEdited: (rowIndex: number, patch: Partial<PreviewRow>) => void
 }) {
   const reviewCount = preview.rows.filter(r => r._confidence === 'REVIEW').length
+
+  const { data: flats = [] } = useQuery({
+    queryKey: ['flats-for-preview-edit'],
+    queryFn: async () => {
+      const { data } = await supabase.from('flats').select('id, code').order('code')
+      return (data ?? []) as { id: string; code: string }[]
+    },
+  })
+  const flatCodeOptions = useMemo(() => ['', ...flats.map(f => f.code)], [flats])
+  const categoryOptions = useMemo(() => ['', 'Maintenance', 'Corpus', ...EXPENSE_CATS], [])
+  const flatIdByCode = useMemo(() => new Map(flats.map(f => [f.code, f.id])), [flats])
 
   const colDefs = useMemo((): ColDef<any>[] => [
     { field: 'value_date',   headerName: 'Date',       width: 110 },
@@ -308,15 +328,40 @@ function ImportPreview({ preview, fileName, onConfirm, onCancel }: {
     { field: 'amount', headerName: 'Amount', width: 110, type: 'numericColumn',
       valueFormatter: (p: any) => formatINR(p.value),
     },
-    { field: 'flat_code', headerName: 'Flat / Cat', width: 110, filter: true },
-    { field: 'category',  headerName: 'Category',   width: 120, filter: true },
+    {
+      field: 'flat_code', headerName: 'Flat / Cat', width: 110, filter: true,
+      editable: true,
+      cellEditor: 'agSelectCellEditor',
+      cellEditorParams: { values: flatCodeOptions },
+      onCellValueChanged: (e: any) => {
+        const newCode = e.newValue ?? ''
+        const newFlatId = newCode ? (flatIdByCode.get(newCode) ?? null) : null
+        const patch: Partial<PreviewRow> = { flat_code: newCode, flat_id: newFlatId }
+        // If linking to a flat for the first time on a CR row, default category to Maintenance
+        if (newCode && e.data.cr_dr === 'CR' && !e.data.category) patch.category = 'Maintenance'
+        patch._confidence = 'Auto'
+        onRowEdited(e.rowIndex, patch)
+      },
+    },
+    {
+      field: 'category', headerName: 'Category', width: 130, filter: true,
+      editable: true,
+      cellEditor: 'agSelectCellEditor',
+      cellEditorParams: { values: categoryOptions },
+      onCellValueChanged: (e: any) => {
+        const patch: Partial<PreviewRow> = { category: e.newValue ?? '', _confidence: 'Auto' }
+        if (e.newValue === 'Corpus') patch.corpus = 'YES'
+        else if (e.newValue === 'Maintenance') patch.corpus = 'NO'
+        onRowEdited(e.rowIndex, patch)
+      },
+    },
     { field: '_confidence', headerName: 'Match',    width: 90, filter: true,
       cellRenderer: (p: any) => p.value === 'REVIEW'
         ? <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-amber-100 text-amber-700">REVIEW</span>
         : <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-green-100 text-green-700">Auto</span>,
     },
     { field: 'description', headerName: 'Description', flex: 1, minWidth: 200 },
-  ], [])
+  ], [flatCodeOptions, categoryOptions, flatIdByCode, onRowEdited])
 
   return (
     <div className="flex flex-col gap-4">
@@ -339,9 +384,10 @@ function ImportPreview({ preview, fileName, onConfirm, onCancel }: {
         </div>
       </div>
 
-      <p className="text-xs text-slate-400 flex items-center gap-1.5">
+      <p className="text-xs text-slate-400 flex items-center gap-1.5 flex-wrap">
         <FileText size={12} /> {fileName}
-        {reviewCount > 0 && <span className="ml-2 text-amber-600">· Amber rows need manual tagging after import</span>}
+        <span className="ml-2">· Click any <b>Flat / Cat</b> or <b>Category</b> cell to correct before importing</span>
+        {reviewCount > 0 && <span className="ml-2 text-amber-600">· Amber rows need attention</span>}
       </p>
 
       <div className="rounded-xl overflow-hidden border hairline" style={{ height: 440 }}>
