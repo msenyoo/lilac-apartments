@@ -148,16 +148,17 @@ export default function DuesPage() {
       return
     }
     const total = openFlats.reduce((s, d) => s + d.total_outstanding, 0)
+    const asOf = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
     const lines = [
       `*Lilac Apartments — Dues update*`,
-      `${fyLabel}`,
+      `As of ${asOf}`,
       ``,
       ...openFlats.map(d => `${d.flat_code.padEnd(5)} ₹${d.total_outstanding.toLocaleString('en-IN')}`),
       ``,
-      `*Total outstanding: ₹${total.toLocaleString('en-IN')}* across ${openFlats.length} flat${openFlats.length !== 1 ? 's' : ''}`,
+      `Total outstanding: *₹${total.toLocaleString('en-IN')}* across ${openFlats.length} flat${openFlats.length !== 1 ? 's' : ''}`,
       ``,
       `Kindly settle at your earliest convenience.`,
-      `— Lilac Apartments Management Committee`,
+      `— The Lilac Apartment Association, Rajakilpakkam`,
     ].join('\n')
     try {
       await navigator.clipboard.writeText(lines)
