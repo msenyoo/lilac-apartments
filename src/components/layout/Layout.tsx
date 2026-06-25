@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import {
   LayoutDashboard, IndianRupee, Banknote, Building2, Receipt,
   FileText, Users, Settings, LogOut, Menu,
-  Megaphone, History, Shield, Search, Bell,
+  Megaphone, History, Shield, Bell,
   MoreHorizontal, HelpCircle, Home, User, PiggyBank,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
@@ -253,32 +253,14 @@ export default function Layout() {
             <Menu size={20} />
           </button>
 
-          {/* Search bar (desktop) */}
-          <button
-            className="hidden sm:flex items-center gap-2.5 px-3.5 h-10 rounded-xl border hairline bg-[var(--ink-50)] hover:border-[var(--ink-300)] transition-colors flex-1 max-w-[360px]"
-            style={{ color: 'var(--ink-400)' }}
-          >
-            <Search size={16} />
-            <span className="text-[13.5px] flex-1 text-left">Search flats, pages, actions…</span>
-            <span className="kbd">⌘K</span>
-          </button>
-
-          {/* Mobile: page title */}
-          <div className="flex-1 sm:hidden">
-            <p className="text-[14px] font-bold" style={{ color: 'var(--ink-900)' }}>
+          {/* Page title */}
+          <div className="flex-1">
+            <p className="text-[14px] sm:text-[15px] font-bold" style={{ color: 'var(--ink-900)' }}>
               {currentPage?.label ?? 'Lilac Apartments'}
             </p>
           </div>
 
           <div className="flex items-center gap-2 ml-auto">
-            {/* Mobile search icon */}
-            <button
-              className="sm:hidden p-2 rounded-xl hover:bg-[var(--ink-100)]"
-              style={{ color: 'var(--ink-600)' }}
-            >
-              <Search size={19} />
-            </button>
-
             {/* Role badge (desktop) */}
             {role && (
               <span
