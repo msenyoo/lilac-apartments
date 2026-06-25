@@ -74,33 +74,19 @@ function DashboardContent() {
   const navigate = useNavigate()
   const { fyLabel } = getCurrentFY()
 
-  const { data: maintCollected = 0 } = useQuery({
-    queryKey: ['fo-maint-collected-lifetime'],
+  const { data: fundPositions = [] } = useQuery<{ fund: string; receipts: number; payments: number; balance: number }[]>({
+    queryKey: ['fo-fund-position'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('transactions')
-        .select('amount')
-        .eq('cr_dr', 'CR')
-        .eq('corpus', 'NO')
-        .neq('row_type', 'VOIDED')
+        .from('v_fund_position')
+        .select('fund, receipts, payments, balance')
       if (error) throw error
-      return (data ?? []).reduce((s: number, r: { amount: number | null }) => s + (r.amount ?? 0), 0)
+      return (data ?? []) as { fund: string; receipts: number; payments: number; balance: number }[]
     },
   })
-
-  const { data: maintSpent = 0 } = useQuery({
-    queryKey: ['fo-maint-spent-lifetime'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('transactions')
-        .select('amount')
-        .eq('cr_dr', 'DR')
-        .eq('corpus', 'NO')
-        .neq('row_type', 'VOIDED')
-      if (error) throw error
-      return (data ?? []).reduce((s: number, r: { amount: number | null }) => s + (r.amount ?? 0), 0)
-    },
-  })
+  const maintenancePos = fundPositions.find(p => p.fund === 'Maintenance')
+  const maintCollected = maintenancePos?.receipts ?? 0
+  const maintSpent     = maintenancePos?.payments ?? 0
 
   const { data: duesData = [] } = useQuery<DuesRow[]>({
     queryKey: ['fo-dues'],
@@ -219,7 +205,7 @@ function DashboardContent() {
   const activePlans     = corpusPlans.filter(p => p.status === 'active')
   const corpusCollected = corpusPlans.reduce((s, p) => s + p.collected, 0)
   const corpusAvailable = Math.max(0, corpusCollected - corpusSpent)
-  const maintAvailable  = Math.max(0, maintCollected - maintSpent)
+  const maintAvailable  = Math.max(0, maintenancePos?.balance ?? 0)
 
   const fdTotal        = deposits.reduce((s, d) => s + d.principal, 0)
   const fdMaturingSoon = deposits.filter(d => { const days = daysUntil(d.maturity_date); return days >= 0 && days <= 30 })
