@@ -1,17 +1,16 @@
-import { useState, useMemo, useRef, useEffect } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AgGridReact } from 'ag-grid-react'
 import type { ColDef } from 'ag-grid-community'
-import { X, TrendingDown, Download, MessageCircle, Check, Pencil, Trash2, ListChecks, Loader2, Search } from 'lucide-react'
+import { X, TrendingDown, Download, MessageCircle, Check, Pencil, Trash2, Search, Send } from 'lucide-react'
 import * as XLSX from 'xlsx'
-import { supabase, DuesEntry, Transaction, Flat } from '@/lib/supabase'
+import { supabase, DuesEntry, Transaction } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
 import { useRoleCtx } from '@/contexts/RoleContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from 'sonner'
 
 type AgingTab = 'Due' | '30d+' | '60d+' | '90d+' | 'Partial' | 'Clear'
@@ -27,46 +26,11 @@ function applyAgingFilter(rows: DuesEntry[], tab: AgingTab): DuesEntry[] {
   return openRows.filter(r => r.pending > r.maintenance_amt * monthMultiplier)
 }
 
-function toFiscalLabel(dateStr: string): string {
-  const d = new Date(dateStr)
-  return d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' }).replace(' ', '-')
-}
-
-function toFiscalYear(dateStr: string): number {
-  const d = new Date(dateStr)
-  return d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1
-}
-
-function toFiscalMonth(dateStr: string): string {
-  const d = new Date(dateStr)
-  const monthName = d.toLocaleDateString('en-GB', { month: 'short' })
-  const calYear = d.getFullYear()
-  return `${monthName}-${calYear}`
-}
-
-interface UnmatchedCR {
-  id: string
-  value_date: string
-  description: string
-  amount: number
-}
-
-interface BulkRow {
-  txnId: string
-  valueDate: string
-  description: string
-  amount: number
-  flatId: string
-  flatCode: string
-  fiscalLabel: string
-}
 
 export default function DuesPage() {
   const [selectedFlat, setSelectedFlat] = useState<DuesEntry | null>(null)
   const [agingTab, setAgingTab] = useState<AgingTab>('Due')
-  const [bulkOpen, setBulkOpen] = useState(false)
   const gridRef = useRef<AgGridReact>(null)
-  const { isAdmin } = useRoleCtx()
 
   const { data: settings } = useQuery({
     queryKey: ['app-settings'],
@@ -176,6 +140,34 @@ export default function DuesPage() {
     XLSX.writeFile(wb, `Dues_${fyLabel.replace(/[^a-z0-9]/gi, '_')}.xlsx`)
   }
 
+  async function handleBroadcast() {
+    const openFlats = (data ?? []).filter(d => d.total_outstanding > 0)
+      .sort((a, b) => b.total_outstanding - a.total_outstanding)
+    if (openFlats.length === 0) {
+      toast.info('No flats with outstanding dues')
+      return
+    }
+    const total = openFlats.reduce((s, d) => s + d.total_outstanding, 0)
+    const lines = [
+      `*Lilac Apartments — Dues update*`,
+      `${fyLabel}`,
+      ``,
+      ...openFlats.map(d => `${d.flat_code.padEnd(5)} ₹${d.total_outstanding.toLocaleString('en-IN')}`),
+      ``,
+      `*Total outstanding: ₹${total.toLocaleString('en-IN')}* across ${openFlats.length} flat${openFlats.length !== 1 ? 's' : ''}`,
+      ``,
+      `Kindly settle at your earliest convenience.`,
+      `— Lilac Apartments Management Committee`,
+    ].join('\n')
+    try {
+      await navigator.clipboard.writeText(lines)
+      toast.success('Copied — open WhatsApp and paste in your group')
+      window.open(`https://wa.me/?text=${encodeURIComponent(lines)}`, '_blank', 'noopener')
+    } catch {
+      toast.error('Copy failed — open dev tools console')
+    }
+  }
+
   return (
     <div className="flex flex-col gap-5 fade-in">
       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -186,16 +178,14 @@ export default function DuesPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {isAdmin && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setBulkOpen(true)}
-              className="flex items-center gap-2"
-            >
-              <ListChecks size={14} /> Bulk Record
-            </Button>
-          )}
+          <button
+            onClick={handleBroadcast}
+            disabled={!data?.length || totalPending === 0}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-[10px] border font-semibold text-[13.5px] disabled:opacity-40"
+            style={{ borderColor: 'var(--ok-bd)', background: 'var(--ok-bg)', color: 'var(--ok)' }}
+          >
+            <Send size={14} /> Broadcast
+          </button>
           <button
             onClick={handleExport}
             disabled={!data?.length}
@@ -296,8 +286,6 @@ export default function DuesPage() {
           <FlatPaymentPanel flat={selectedFlat} fiscalYear={parseInt(fiscalYear)} startFiscalYear={parseInt(startFY)} onClose={() => setSelectedFlat(null)} />
         )}
       </div>
-
-      {bulkOpen && <BulkRecordDialog open={bulkOpen} onClose={() => setBulkOpen(false)} />}
     </div>
   )
 }
@@ -636,205 +624,6 @@ function ArrearsDialog({ flatId, row, onClose, onSaved }: {
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Button>
         </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-function BulkRecordDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const qc = useQueryClient()
-  const [rows, setRows] = useState<BulkRow[]>([])
-  const [saving, setSaving] = useState(false)
-
-  const { data: unmatchedCRs = [], isLoading: loadingCRs } = useQuery({
-    queryKey: ['unmatched-crs'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('transactions')
-        .select('id, value_date, description, amount')
-        .eq('cr_dr', 'CR')
-        .eq('corpus', 'NO')
-        .is('flat_id', null)
-        .order('value_date', { ascending: false })
-      if (error) throw error
-      return (data ?? []) as UnmatchedCR[]
-    },
-    enabled: open,
-  })
-
-  const { data: flats = [], isLoading: loadingFlats } = useQuery({
-    queryKey: ['flats-list'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('flats')
-        .select('id, code, block')
-        .order('code')
-      if (error) throw error
-      return (data ?? []) as Pick<Flat, 'id' | 'code' | 'block'>[]
-    },
-    enabled: open,
-  })
-
-  useEffect(() => {
-    if (unmatchedCRs.length > 0) {
-      setRows(
-        unmatchedCRs.map(cr => ({
-          txnId:       cr.id,
-          valueDate:   cr.value_date,
-          description: cr.description,
-          amount:      cr.amount,
-          flatId:      '',
-          flatCode:    '',
-          fiscalLabel: toFiscalLabel(cr.value_date),
-        }))
-      )
-    }
-  }, [unmatchedCRs])
-
-  function setRowFlat(txnId: string, flatId: string, flatCode: string) {
-    setRows(prev => prev.map(r => r.txnId === txnId ? { ...r, flatId, flatCode } : r))
-  }
-
-  function setRowFiscalLabel(txnId: string, fiscalLabel: string) {
-    setRows(prev => prev.map(r => r.txnId === txnId ? { ...r, fiscalLabel } : r))
-  }
-
-  const assignedRows = rows.filter(r => r.flatId !== '')
-
-  async function handleSaveAll() {
-    if (assignedRows.length === 0) return
-    setSaving(true)
-
-    const results = await Promise.all(
-      assignedRows.map(r =>
-        supabase
-          .from('transactions')
-          .update({
-            flat_id:      r.flatId,
-            flat_code:    r.flatCode,
-            category:     'Maintenance',
-            corpus:       'NO',
-            fiscal_year:  toFiscalYear(r.valueDate),
-            fiscal_month: toFiscalMonth(r.valueDate),
-            fiscal_label: r.fiscalLabel,
-          })
-          .eq('id', r.txnId)
-      )
-    )
-
-    setSaving(false)
-    const errors = results.filter(r => r.error)
-    if (errors.length > 0) {
-      toast.error(`${errors.length} row(s) failed to save`)
-      return
-    }
-
-    toast.success(`${assignedRows.length} payment(s) recorded successfully`)
-    qc.invalidateQueries({ queryKey: ['dues'] })
-    qc.invalidateQueries({ queryKey: ['unmatched-crs'] })
-    onClose()
-  }
-
-  const isLoading = loadingCRs || loadingFlats
-
-  return (
-    <Dialog open={open} onOpenChange={v => { if (!v) onClose() }}>
-      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle>Bulk Record Maintenance Payments</DialogTitle>
-          <p className="text-sm mt-1" style={{ color: 'var(--ink-500)' }}>
-            Assign each unmatched bank credit to a flat. Only rows with a flat selected will be saved.
-          </p>
-        </DialogHeader>
-
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 size={24} className="animate-spin" style={{ color: 'var(--ink-400)' }} />
-          </div>
-        ) : rows.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 gap-2">
-            <ListChecks size={32} style={{ color: 'var(--ink-300)' }} />
-            <p className="text-sm" style={{ color: 'var(--ink-400)' }}>No unmatched CR transactions found</p>
-            <p className="text-xs" style={{ color: 'var(--ink-400)' }}>All credits have already been attributed to flats</p>
-          </div>
-        ) : (
-          <div className="flex-1 overflow-y-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b hairline text-left">
-                  <th className="py-2 pr-3 font-semibold text-xs" style={{ color: 'var(--ink-500)' }}>Date</th>
-                  <th className="py-2 pr-3 font-semibold text-xs" style={{ color: 'var(--ink-500)' }}>Description</th>
-                  <th className="py-2 pr-3 font-semibold text-xs text-right" style={{ color: 'var(--ink-500)' }}>Amount</th>
-                  <th className="py-2 pr-3 font-semibold text-xs" style={{ color: 'var(--ink-500)' }}>Flat</th>
-                  <th className="py-2 font-semibold text-xs" style={{ color: 'var(--ink-500)' }}>Fiscal month</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y hairline">
-                {rows.map(r => (
-                  <tr key={r.txnId} className={r.flatId ? 'bg-green-50' : ''}>
-                    <td className="py-2 pr-3 font-mono text-xs whitespace-nowrap" style={{ color: 'var(--ink-600)' }}>
-                      {r.valueDate}
-                    </td>
-                    <td className="py-2 pr-3 text-xs max-w-[180px] truncate" style={{ color: 'var(--ink-700)' }}>
-                      {r.description}
-                    </td>
-                    <td className="py-2 pr-3 text-xs text-right font-semibold tabular-nums" style={{ color: 'var(--ink-800)' }}>
-                      {formatINR(r.amount)}
-                    </td>
-                    <td className="py-2 pr-3">
-                      <Select
-                        value={r.flatId}
-                        onValueChange={val => {
-                          const flat = flats.find(f => f.id === val)
-                          if (flat) setRowFlat(r.txnId, flat.id, flat.code)
-                        }}
-                      >
-                        <SelectTrigger className="h-7 text-xs w-28">
-                          <SelectValue placeholder="Select flat" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {flats.map(f => (
-                            <SelectItem key={f.id} value={f.id}>
-                              {f.code} ({f.block})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </td>
-                    <td className="py-2">
-                      <Input
-                        className="h-7 text-xs w-24 font-mono"
-                        value={r.fiscalLabel}
-                        onChange={e => setRowFiscalLabel(r.txnId, e.target.value)}
-                        placeholder="Jun-26"
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {rows.length > 0 && (
-          <div className="border-t hairline pt-3 flex items-center justify-between gap-3 flex-shrink-0">
-            <p className="text-xs" style={{ color: 'var(--ink-500)' }}>
-              {assignedRows.length} of {rows.length} rows assigned
-            </p>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={onClose}>Cancel</Button>
-              <Button
-                disabled={assignedRows.length === 0 || saving}
-                onClick={handleSaveAll}
-              >
-                {saving
-                  ? <><Loader2 size={14} className="animate-spin mr-1" /> Saving...</>
-                  : `Record ${assignedRows.length} payment${assignedRows.length !== 1 ? 's' : ''}`
-                }
-              </Button>
-            </div>
-          </div>
-        )}
       </DialogContent>
     </Dialog>
   )

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useMemo } from 'react'
+import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { AgGridReact } from 'ag-grid-react'
@@ -6,6 +6,7 @@ import type { ColDef } from 'ag-grid-community'
 import {
   Upload as UploadIcon, CheckCircle, AlertTriangle, FileText,
   X, Plus, Trash2, Scissors, RefreshCw, Download, Copy,
+  ListChecks, Loader2,
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { supabase, Transaction, ReviewEntry } from '@/lib/supabase'
@@ -16,7 +17,10 @@ import {
 import { useRoleCtx } from '@/contexts/RoleContext'
 import { toast } from 'sonner'
 import { Label } from '@/components/ui/label'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
 
 type Tab = 'upload' | 'review' | 'all'
@@ -417,8 +421,9 @@ function UploadHistory() {
 
 // ── REVIEW TAB ────────────────────────────────────────────────
 function ReviewTab() {
-  const { canWrite } = useRoleCtx()
+  const { canWrite, isAdmin } = useRoleCtx()
   const qc = useQueryClient()
+  const [bulkOpen, setBulkOpen] = useState(false)
   const { data: items, isLoading } = useQuery({
     queryKey: ['review-queue'],
     queryFn: async () => {
@@ -448,6 +453,11 @@ function ReviewTab() {
       <div className="flex items-center gap-2">
         <h3 className="font-semibold">Review queue</h3>
         <span className="ds-badge-warn">{items.length} pending</span>
+        {isAdmin && (
+          <Button size="sm" variant="outline" onClick={() => setBulkOpen(true)} className="ml-auto flex items-center gap-2">
+            <ListChecks size={14} /> Bulk Record
+          </Button>
+        )}
       </div>
       <p className="text-sm text-slate-500">
         {canWrite
@@ -459,7 +469,177 @@ function ReviewTab() {
           <ReviewItem key={item.id} item={item} flats={flats ?? []} onSaved={() => qc.invalidateQueries()} />
         ))}
       </div>
+      {bulkOpen && <BulkRecordDialog open={bulkOpen} onClose={() => setBulkOpen(false)} />}
     </div>
+  )
+}
+
+// ── BULK RECORD DIALOG ────────────────────────────────────────
+// Assign unmatched bank CR transactions (corpus=NO, no flat_id) to flats
+// in a single table view; faster than reviewing items one-by-one.
+
+interface UnmatchedCR { id: string; value_date: string; description: string; amount: number }
+interface BulkRow {
+  txnId: string; valueDate: string; description: string; amount: number
+  flatId: string; flatCode: string; fiscalLabel: string
+}
+
+function bulkFiscalMonth(dateStr: string): string {
+  const d = new Date(dateStr)
+  return `${d.toLocaleDateString('en-GB', { month: 'short' })}-${d.getFullYear()}`
+}
+
+function BulkRecordDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const qc = useQueryClient()
+  const [rows, setRows] = useState<BulkRow[]>([])
+  const [saving, setSaving] = useState(false)
+
+  const { data: unmatchedCRs = [], isLoading: loadingCRs } = useQuery({
+    queryKey: ['unmatched-crs'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('id, value_date, description, amount')
+        .eq('cr_dr', 'CR')
+        .eq('corpus', 'NO')
+        .is('flat_id', null)
+        .order('value_date', { ascending: false })
+      if (error) throw error
+      return (data ?? []) as UnmatchedCR[]
+    },
+    enabled: open,
+  })
+
+  const { data: flats = [], isLoading: loadingFlats } = useQuery({
+    queryKey: ['flats-list'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('flats').select('id, code, block').order('code')
+      if (error) throw error
+      return (data ?? []) as { id: string; code: string; block: string }[]
+    },
+    enabled: open,
+  })
+
+  useEffect(() => {
+    if (unmatchedCRs.length > 0) {
+      setRows(unmatchedCRs.map(cr => ({
+        txnId: cr.id, valueDate: cr.value_date, description: cr.description, amount: cr.amount,
+        flatId: '', flatCode: '', fiscalLabel: getFiscalLabel(cr.value_date),
+      })))
+    }
+  }, [unmatchedCRs])
+
+  const setRowFlat       = (txnId: string, flatId: string, flatCode: string) =>
+    setRows(prev => prev.map(r => r.txnId === txnId ? { ...r, flatId, flatCode } : r))
+  const setRowFiscalLabel = (txnId: string, fiscalLabel: string) =>
+    setRows(prev => prev.map(r => r.txnId === txnId ? { ...r, fiscalLabel } : r))
+
+  const assignedRows = rows.filter(r => r.flatId !== '')
+
+  async function handleSaveAll() {
+    if (assignedRows.length === 0) return
+    setSaving(true)
+    const results = await Promise.all(assignedRows.map(r =>
+      supabase.from('transactions').update({
+        flat_id: r.flatId, flat_code: r.flatCode,
+        category: 'Maintenance', corpus: 'NO',
+        fiscal_year: getFiscalYear(r.valueDate),
+        fiscal_month: bulkFiscalMonth(r.valueDate),
+        fiscal_label: r.fiscalLabel,
+      }).eq('id', r.txnId)
+    ))
+    setSaving(false)
+    const errors = results.filter(r => r.error)
+    if (errors.length > 0) { toast.error(`${errors.length} row(s) failed to save`); return }
+    toast.success(`${assignedRows.length} payment(s) recorded successfully`)
+    qc.invalidateQueries({ queryKey: ['dues'] })
+    qc.invalidateQueries({ queryKey: ['unmatched-crs'] })
+    qc.invalidateQueries({ queryKey: ['review-queue'] })
+    qc.invalidateQueries({ queryKey: ['review-count'] })
+    onClose()
+  }
+
+  const isLoading = loadingCRs || loadingFlats
+
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!v) onClose() }}>
+      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>Bulk Record Maintenance Payments</DialogTitle>
+          <p className="text-sm mt-1" style={{ color: 'var(--ink-500)' }}>
+            Assign each unmatched bank credit to a flat. Only rows with a flat selected will be saved.
+          </p>
+        </DialogHeader>
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 size={24} className="animate-spin" style={{ color: 'var(--ink-400)' }} />
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 gap-2">
+            <ListChecks size={32} style={{ color: 'var(--ink-300)' }} />
+            <p className="text-sm" style={{ color: 'var(--ink-400)' }}>No unmatched CR transactions found</p>
+            <p className="text-xs" style={{ color: 'var(--ink-400)' }}>All credits have already been attributed to flats</p>
+          </div>
+        ) : (
+          <div className="flex-1 overflow-y-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b hairline text-left">
+                  <th className="py-2 pr-3 font-semibold text-xs" style={{ color: 'var(--ink-500)' }}>Date</th>
+                  <th className="py-2 pr-3 font-semibold text-xs" style={{ color: 'var(--ink-500)' }}>Description</th>
+                  <th className="py-2 pr-3 font-semibold text-xs text-right" style={{ color: 'var(--ink-500)' }}>Amount</th>
+                  <th className="py-2 pr-3 font-semibold text-xs" style={{ color: 'var(--ink-500)' }}>Flat</th>
+                  <th className="py-2 font-semibold text-xs" style={{ color: 'var(--ink-500)' }}>Fiscal month</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y hairline">
+                {rows.map(r => (
+                  <tr key={r.txnId} className={r.flatId ? 'bg-green-50' : ''}>
+                    <td className="py-2 pr-3 font-mono text-xs whitespace-nowrap" style={{ color: 'var(--ink-600)' }}>{r.valueDate}</td>
+                    <td className="py-2 pr-3 text-xs max-w-[180px] truncate" style={{ color: 'var(--ink-700)' }}>{r.description}</td>
+                    <td className="py-2 pr-3 text-xs text-right font-semibold tabular-nums" style={{ color: 'var(--ink-800)' }}>{formatINR(r.amount)}</td>
+                    <td className="py-2 pr-3">
+                      <Select
+                        value={r.flatId}
+                        onValueChange={val => {
+                          const flat = flats.find(f => f.id === val)
+                          if (flat) setRowFlat(r.txnId, flat.id, flat.code)
+                        }}
+                      >
+                        <SelectTrigger className="h-7 text-xs w-28"><SelectValue placeholder="Select flat" /></SelectTrigger>
+                        <SelectContent>
+                          {flats.map(f => <SelectItem key={f.id} value={f.id}>{f.code} ({f.block})</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    <td className="py-2">
+                      <Input className="h-7 text-xs w-24 font-mono" value={r.fiscalLabel}
+                        onChange={e => setRowFiscalLabel(r.txnId, e.target.value)} placeholder="Jun-26" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {rows.length > 0 && (
+          <div className="border-t hairline pt-3 flex items-center justify-between gap-3 flex-shrink-0">
+            <p className="text-xs" style={{ color: 'var(--ink-500)' }}>
+              {assignedRows.length} of {rows.length} rows assigned
+            </p>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={onClose}>Cancel</Button>
+              <Button disabled={assignedRows.length === 0 || saving} onClick={handleSaveAll}>
+                {saving
+                  ? <><Loader2 size={14} className="animate-spin mr-1" /> Saving...</>
+                  : `Record ${assignedRows.length} payment${assignedRows.length !== 1 ? 's' : ''}`}
+              </Button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   )
 }
 
