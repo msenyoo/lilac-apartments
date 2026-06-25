@@ -320,25 +320,51 @@ function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat
     },
   })
 
+  const { data: ownerPhone } = useQuery({
+    queryKey: ['flat-owner-phone', flat.flat_code],
+    queryFn: async () => {
+      const { data: f } = await supabase.from('flats').select('id').eq('code', flat.flat_code).maybeSingle()
+      if (!f) return null
+      const { data: r } = await supabase
+        .from('residents').select('phone, type')
+        .eq('flat_id', f.id).eq('is_active', true).order('type').maybeSingle()
+      const raw = r?.phone?.trim().replace(/\D/g, '') ?? ''
+      if (!raw) return null
+      // Add +91 country code if 10-digit local number
+      return raw.length === 10 ? `91${raw}` : raw
+    },
+  })
+
   const fyLabel = `FY ${fiscalYear}-${String(fiscalYear + 1).slice(-2)}`
 
   function buildReminderText() {
+    const asOf = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
     const lines = [
-      `Dear resident of ${flat.flat_code},`,
+      `*Lilac Apartments — Dues reminder*`,
+      `Flat ${flat.flat_code} · As of ${asOf}`,
       ``,
-      `Your maintenance dues of ${formatINR(flat.pending)} are pending for ${fyLabel}.`,
+      `Dear resident,`,
       ``,
-      `Please make the payment at your earliest convenience.`,
+      `Your outstanding maintenance dues: *${formatINR(flat.total_outstanding)}* (${fyLabel}).`,
     ]
+    if (flat.arrears_maintenance > 0) {
+      lines.push(`  • Previous arrears: ${formatINR(flat.arrears_maintenance)}`)
+    }
+    if (flat.pending > 0) {
+      lines.push(`  • Current FY pending: ${formatINR(flat.pending)}`)
+    }
     const upi  = settings?.collection_upi
     const bank = settings?.collection_bank
     if (upi || bank) {
-      lines.push(``)
-      lines.push(`Payment details:`)
+      lines.push(``, `Payment details:`)
       if (upi)  lines.push(`  UPI: ${upi}`)
-      if (bank) lines.push(`  Bank transfer: ${bank}`)
+      if (bank) lines.push(`  Bank: ${bank}`)
     }
-    lines.push(``, `— Lilac Apartment Association`)
+    lines.push(
+      ``,
+      `Kindly settle at your earliest convenience.`,
+      `— The Lilac Apartment Association, Rajakilpakkam`,
+    )
     return lines.join('\n')
   }
 
@@ -346,6 +372,14 @@ function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat
     await navigator.clipboard.writeText(buildReminderText())
     setCopied(true)
     setTimeout(() => setCopied(false), 2500)
+  }
+
+  function handleSendWhatsApp() {
+    const text = buildReminderText()
+    const url = ownerPhone
+      ? `https://wa.me/${ownerPhone}?text=${encodeURIComponent(text)}`
+      : `https://wa.me/?text=${encodeURIComponent(text)}`
+    window.open(url, '_blank', 'noopener')
   }
 
   return (
@@ -417,16 +451,25 @@ function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat
         </div>
 
         {flat.total_outstanding > 0 && (
-          <button
-            onClick={handleCopyReminder}
-            className="w-full flex items-center justify-center gap-2 py-2 rounded-[10px] border font-medium text-[13px] transition-colors"
-            style={{ borderColor: 'var(--ok-bd)', background: 'var(--ok-bg)', color: 'var(--ok)' }}
-          >
-            {copied
-              ? <><Check size={14} /> Copied!</>
-              : <><MessageCircle size={14} /> Copy WhatsApp reminder</>
-            }
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleCopyReminder}
+              className="flex-1 flex items-center justify-center gap-2 py-2 rounded-[10px] border font-medium text-[13px] transition-colors"
+              style={{ borderColor: 'var(--ink-200)', background: '#fff', color: 'var(--ink-700)' }}
+            >
+              {copied
+                ? <><Check size={14} /> Copied!</>
+                : <><MessageCircle size={14} /> Copy</>}
+            </button>
+            <button
+              onClick={handleSendWhatsApp}
+              className="flex-1 flex items-center justify-center gap-2 py-2 rounded-[10px] border font-medium text-[13px] transition-colors"
+              style={{ borderColor: 'var(--ok-bd)', background: 'var(--ok-bg)', color: 'var(--ok)' }}
+              title={ownerPhone ? `Opens WhatsApp chat with owner (+${ownerPhone})` : 'Owner phone not on file — opens WhatsApp share to pick a contact'}
+            >
+              <Send size={14} /> {ownerPhone ? 'Send' : 'Share'}
+            </button>
+          </div>
         )}
 
         <ArrearsMgmt flatCode={flat.flat_code} showAdd={showAddArrears} onCloseAdd={() => setShowAddArrears(false)} />
