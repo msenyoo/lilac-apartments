@@ -308,13 +308,13 @@ function DuesAgingTab() {
         .from('v_dues_tracker')
         .select('*')
         .eq('fiscal_year', selectedFyYear)
-        .gt('pending', 0)
-        .order('pending', { ascending: false })
+        .gt('total_outstanding', 0)
+        .order('total_outstanding', { ascending: false })
       return (data ?? []) as DuesEntry[]
     },
   })
 
-  const totalPending = (dues ?? []).reduce((s, r) => s + r.pending, 0)
+  const totalPending = (dues ?? []).reduce((s, r) => s + r.total_outstanding, 0)
 
   function handleExcel() {
     if (!dues?.length) return
@@ -322,13 +322,17 @@ function DuesAgingTab() {
     const rows: any[][] = [
       [`Lilac Apartment Association — Defaulters List — ${selectedFy.label}`],
       [],
-      ['Flat', 'Block', 'Annual Due', 'Collected', 'Pending', 'Status'],
-      ...(dues ?? []).map(r => [r.flat_code, r.block, r.annual_due, r.collected_fy, r.pending, r.status]),
+      ['Flat', 'Block', 'Annual Due', 'Collected', 'Pending', 'Arrears', 'Total Outstanding', 'Status'],
+      ...(dues ?? []).map(r => [
+        r.flat_code, r.block, r.annual_due, r.collected_fy,
+        r.pending, r.arrears_maintenance, r.total_outstanding,
+        r.total_outstanding <= 0 ? 'Clear' : (r.collected_fy > 0 ? 'Partial' : 'Due'),
+      ]),
       [],
-      ['', '', '', 'TOTAL PENDING', totalPending, ''],
+      ['', '', '', '', '', 'TOTAL OUTSTANDING', totalPending, ''],
     ]
     const ws = XLSX.utils.aoa_to_sheet(rows)
-    ws['!cols'] = [10, 8, 14, 14, 14, 10].map(w => ({ wch: w }))
+    ws['!cols'] = [10, 8, 14, 14, 14, 14, 18, 10].map(w => ({ wch: w }))
     XLSX.utils.book_append_sheet(wb, ws, 'Defaulters')
     XLSX.writeFile(wb, `Defaulters_${selectedFy.label.replace(/\s/g, '_')}.xlsx`)
   }

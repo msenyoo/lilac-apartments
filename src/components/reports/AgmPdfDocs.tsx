@@ -64,7 +64,9 @@ function TableHead({ cols }: { cols: { label: string; right?: boolean; flex?: nu
 
 interface DefaulterRow {
   flat_code: string; block: string; annual_due: number
-  collected_fy: number; pending: number; status: string
+  collected_fy: number; pending: number
+  arrears_maintenance?: number; total_outstanding?: number
+  status: string
 }
 
 export function DefaultersListDoc({ rows, fyLabel, generated }: {
@@ -72,7 +74,7 @@ export function DefaultersListDoc({ rows, fyLabel, generated }: {
   fyLabel: string
   generated: string
 }) {
-  const total = rows.reduce((s, r) => s + r.pending, 0)
+  const total = rows.reduce((s, r) => s + (r.total_outstanding ?? r.pending), 0)
   return (
     <Document>
       <Page size="A4" style={S.page}>
@@ -86,7 +88,8 @@ export function DefaultersListDoc({ rows, fyLabel, generated }: {
           <TableHead cols={[
             { label: 'Flat' }, { label: 'Block' },
             { label: 'Annual Due', right: true }, { label: 'Collected', right: true },
-            { label: 'Pending', right: true }, { label: 'Status' },
+            { label: 'Pending', right: true }, { label: 'Arrears', right: true },
+            { label: 'Outstanding', right: true }, { label: 'Status' },
           ]} />
           {rows.map((r, i) => (
             <View key={r.flat_code} style={[S.row, i % 2 === 1 ? S.rowAlt : {}]}>
@@ -94,12 +97,14 @@ export function DefaultersListDoc({ rows, fyLabel, generated }: {
               <Text style={S.col}>{r.block}</Text>
               <Text style={S.colR}>{formatINR(r.annual_due)}</Text>
               <Text style={S.colR}>{formatINR(r.collected_fy)}</Text>
-              <Text style={[S.colR, S.bold, { color: '#dc2626' }]}>{formatINR(r.pending)}</Text>
+              <Text style={S.colR}>{formatINR(r.pending)}</Text>
+              <Text style={S.colR}>{formatINR(r.arrears_maintenance ?? 0)}</Text>
+              <Text style={[S.colR, S.bold, { color: '#dc2626' }]}>{formatINR(r.total_outstanding ?? r.pending)}</Text>
               <Text style={S.col}>{r.status}</Text>
             </View>
           ))}
           <View style={S.rowTotal}>
-            <Text style={[S.col, S.bold, { flex: 4 }]}>Total outstanding</Text>
+            <Text style={[S.col, S.bold, { flex: 6 }]}>Total outstanding</Text>
             <Text style={[S.colR, S.bold, { color: '#dc2626' }]}>{formatINR(total)}</Text>
             <Text style={S.col} />
           </View>
