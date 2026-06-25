@@ -209,10 +209,9 @@ export default function CorpusPage() {
     }
     const total = openFlats.reduce((s, d) => s + d.balance, 0)
     const asOf = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-    const planTitle = selectedPlan ? `${selectedPlan.name}` : `All active plans`
     const lines = [
       `*Lilac Apartments — Corpus update*`,
-      `${planTitle} · As of ${asOf}`,
+      selectedPlan ? `${selectedPlan.name} · As of ${asOf}` : `As of ${asOf}`,
       ``,
       ...openFlats.map(d => `${d.flat_code.padEnd(5)} ₹${d.balance.toLocaleString('en-IN')}`),
       ``,
