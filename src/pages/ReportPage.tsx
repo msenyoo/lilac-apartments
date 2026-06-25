@@ -1762,13 +1762,13 @@ function RPStatementTab() {
   const { data: openingBalance = 0 } = useQuery({
     queryKey: ['rp-opening', selectedFy.start],
     queryFn: async () => {
-      const [{ data: priorCR }, { data: priorDR }] = await Promise.all([
-        supabase.from('transactions').select('amount').eq('cr_dr', 'CR').neq('row_type', 'VOIDED').lt('value_date', selectedFy.start),
-        supabase.from('transactions').select('amount').eq('cr_dr', 'DR').neq('row_type', 'VOIDED').lt('value_date', selectedFy.start),
-      ])
-      const cr = (priorCR ?? []).reduce((s: number, r: any) => s + (r.amount ?? 0), 0)
-      const dr = (priorDR ?? []).reduce((s: number, r: any) => s + (r.amount ?? 0), 0)
-      return cr - dr
+      // Opening = bank balance as of day BEFORE this FY starts
+      const d = new Date(selectedFy.start)
+      d.setDate(d.getDate() - 1)
+      const priorDate = d.toISOString().slice(0, 10)
+      const { data, error } = await supabase.rpc('fn_bank_balance_as_of', { p_date: priorDate })
+      if (error) throw error
+      return (data as number) ?? 0
     },
   })
 
@@ -1963,29 +1963,12 @@ function BalanceSheetTab() {
   const selectedFy = getFyRange(selectedFyYear)
   const [generating, setGenerating] = useState(false)
 
-  const { data: cumulativeCR } = useQuery({
-    queryKey: ['bs-cum-cr', selectedFy.end],
+  const { data: bankBalanceData = 0 } = useQuery({
+    queryKey: ['bs-bank-balance', selectedFy.end],
     queryFn: async () => {
-      const { data } = await supabase
-        .from('transactions')
-        .select('amount')
-        .eq('cr_dr', 'CR')
-        .neq('row_type', 'VOIDED')
-        .lte('value_date', selectedFy.end)
-      return (data ?? []).reduce((s: number, r: any) => s + (r.amount ?? 0), 0)
-    },
-  })
-
-  const { data: cumulativeDR } = useQuery({
-    queryKey: ['bs-cum-dr', selectedFy.end],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('transactions')
-        .select('amount')
-        .eq('cr_dr', 'DR')
-        .neq('row_type', 'VOIDED')
-        .lte('value_date', selectedFy.end)
-      return (data ?? []).reduce((s: number, r: any) => s + (r.amount ?? 0), 0)
+      const { data, error } = await supabase.rpc('fn_bank_balance_as_of', { p_date: selectedFy.end })
+      if (error) throw error
+      return (data as number) ?? 0
     },
   })
 
@@ -2031,7 +2014,7 @@ function BalanceSheetTab() {
     },
   })
 
-  const bankBalance = (cumulativeCR ?? 0) - (cumulativeDR ?? 0)
+  const bankBalance = bankBalanceData
   const fdTotal     = activeFDs ?? 0
   const corpColl    = corpusCollected ?? 0
   const totalAssets = bankBalance + fdTotal + corpColl
@@ -2071,7 +2054,7 @@ function BalanceSheetTab() {
     }
   }
 
-  const isLoading = cumulativeCR === undefined || cumulativeDR === undefined
+  const isLoading = bankBalanceData === undefined
 
   return (
     <div className="flex flex-col gap-5 max-w-2xl">
