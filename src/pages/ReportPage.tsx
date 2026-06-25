@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { formatINR, FLAT_CODES } from '@/lib/tagger'
-import { Share2, CheckCircle, AlertTriangle, Download, FileText, Loader2, Zap } from 'lucide-react'
+import { Share2, CheckCircle, AlertTriangle, Download, FileText, Loader2, Zap, MessageCircle, Check, Send } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import type { DuesEntry } from '@/lib/supabase'
@@ -866,6 +866,75 @@ function FlatStatementTab() {
 
   const outstandingAmt = duesEntry ? Number(duesEntry.pending) : null
 
+  const [copied, setCopied] = useState(false)
+
+  const { data: appSettings } = useQuery({
+    queryKey: ['app-settings'],
+    queryFn: async () => {
+      const { data } = await supabase.from('app_settings').select('*')
+      return Object.fromEntries((data ?? []).map((s: any) => [s.key, s.value]))
+    },
+  })
+
+  const { data: ownerPhone } = useQuery({
+    queryKey: ['flat-owner-phone', flatCode],
+    queryFn: async () => {
+      if (!flatInfo?.id) return null
+      const { data: r } = await supabase
+        .from('residents').select('phone, type')
+        .eq('flat_id', flatInfo.id).eq('is_active', true).order('type').maybeSingle()
+      const raw = r?.phone?.trim().replace(/\D/g, '') ?? ''
+      if (!raw) return null
+      return raw.length === 10 ? `91${raw}` : raw
+    },
+    enabled: !!flatInfo?.id,
+  })
+
+  const maintOutstanding = outstandingAmt ?? 0
+  const corpusOutstanding = corpusTotals?.balance ?? 0
+  const combinedOutstanding = Math.max(0, maintOutstanding) + Math.max(0, corpusOutstanding)
+
+  function buildConsolidatedReminder() {
+    const asOf = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+    const lines = [
+      `*Lilac Apartments — Statement reminder*`,
+      `Flat ${flatCode} · As of ${asOf}`,
+      ``,
+      `Dear resident,`,
+      ``,
+      `Your consolidated outstanding: *${formatINR(combinedOutstanding)}*`,
+    ]
+    if (maintOutstanding > 0) lines.push(`  • Maintenance: ${formatINR(maintOutstanding)}`)
+    if (corpusOutstanding > 0) lines.push(`  • Corpus: ${formatINR(corpusOutstanding)}`)
+    const upi  = appSettings?.collection_upi
+    const bank = appSettings?.collection_bank
+    if (upi || bank) {
+      lines.push(``, `Payment details:`)
+      if (upi)  lines.push(`  UPI: ${upi}`)
+      if (bank) lines.push(`  Bank: ${bank}`)
+    }
+    lines.push(
+      ``,
+      `Kindly settle at your earliest convenience.`,
+      `— The Lilac Apartment Association, Rajakilpakkam`,
+    )
+    return lines.join('\n')
+  }
+
+  async function handleCopyConsolidated() {
+    await navigator.clipboard.writeText(buildConsolidatedReminder())
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2500)
+  }
+
+  function handleSendConsolidated() {
+    const text = buildConsolidatedReminder()
+    const url = ownerPhone
+      ? `https://wa.me/${ownerPhone}?text=${encodeURIComponent(text)}`
+      : `https://wa.me/?text=${encodeURIComponent(text)}`
+    window.open(url, '_blank', 'noopener')
+  }
+
   return (
     <div className="flex flex-col gap-4">
       {/* Controls */}
@@ -903,10 +972,29 @@ function FlatStatementTab() {
           </div>
         )}
 
-        <button onClick={handleExport} disabled={!txns?.length}
-          className="ml-auto flex items-center gap-1.5 text-sm hover:opacity-80 disabled:opacity-40" style={{ color: 'var(--brand-700)' }}>
-          <Download size={14} /> Export Excel
-        </button>
+        <div className="ml-auto flex items-center gap-2 flex-wrap">
+          {combinedOutstanding > 0 && (
+            <>
+              <button onClick={handleCopyConsolidated}
+                className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border hover:opacity-80"
+                style={{ borderColor: 'var(--ink-200)', color: 'var(--ink-700)' }}>
+                {copied
+                  ? <><Check size={14} /> Copied!</>
+                  : <><MessageCircle size={14} /> Copy reminder</>}
+              </button>
+              <button onClick={handleSendConsolidated}
+                className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border font-medium hover:opacity-80"
+                style={{ borderColor: 'var(--ok-bd)', background: 'var(--ok-bg)', color: 'var(--ok)' }}
+                title={ownerPhone ? `Opens WhatsApp chat with owner (+${ownerPhone})` : 'Owner phone not on file — opens WhatsApp share to pick a contact'}>
+                <Send size={14} /> {ownerPhone ? 'Send' : 'Share'} reminder
+              </button>
+            </>
+          )}
+          <button onClick={handleExport} disabled={!txns?.length}
+            className="flex items-center gap-1.5 text-sm hover:opacity-80 disabled:opacity-40" style={{ color: 'var(--brand-700)' }}>
+            <Download size={14} /> Export Excel
+          </button>
+        </div>
       </div>
 
       {/* Summary cards */}
