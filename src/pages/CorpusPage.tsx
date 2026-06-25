@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AgGridReact } from 'ag-grid-react'
 import type { ColDef } from 'ag-grid-community'
-import { Download, X, TrendingDown, ChevronDown, Layers, Plus, Trash2 } from 'lucide-react'
+import { Download, X, TrendingDown, ChevronDown, Layers, Plus, Trash2, Send } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { supabase, CorpusEntry, CorpusPlan, Flat } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
@@ -192,6 +192,44 @@ export default function CorpusPage() {
     ? `${selectedPlan.name} · FY ${selectedPlan.start_fiscal_year}-${String((selectedPlan.start_fiscal_year ?? 0) + 1).slice(-2)} – FY ${selectedPlan.end_fiscal_year}-${String((selectedPlan.end_fiscal_year ?? 0) + 1).slice(-2)}`
     : `All active plans (${activePlans.length})`
 
+  async function handleBroadcast() {
+    // Aggregate balance per flat (when multiple plans, sum across them)
+    const byFlat = new Map<string, number>()
+    for (const c of corpus) {
+      if ((c.balance ?? 0) > 0) {
+        byFlat.set(c.flat_code, (byFlat.get(c.flat_code) ?? 0) + c.balance)
+      }
+    }
+    const openFlats = Array.from(byFlat.entries())
+      .map(([flat_code, balance]) => ({ flat_code, balance }))
+      .sort((a, b) => a.flat_code.localeCompare(b.flat_code))
+    if (openFlats.length === 0) {
+      toast.info('All flats have completed their corpus contribution')
+      return
+    }
+    const total = openFlats.reduce((s, d) => s + d.balance, 0)
+    const asOf = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+    const planTitle = selectedPlan ? `${selectedPlan.name}` : `All active plans`
+    const lines = [
+      `*Lilac Apartments — Corpus update*`,
+      `${planTitle} · As of ${asOf}`,
+      ``,
+      ...openFlats.map(d => `${d.flat_code.padEnd(5)} ₹${d.balance.toLocaleString('en-IN')}`),
+      ``,
+      `Total pending: *₹${total.toLocaleString('en-IN')}* across ${openFlats.length} flat${openFlats.length !== 1 ? 's' : ''}`,
+      ``,
+      `Kindly contribute at your earliest convenience.`,
+      `— The Lilac Apartment Association, Rajakilpakkam`,
+    ].join('\n')
+    try {
+      await navigator.clipboard.writeText(lines)
+      toast.success('Copied — open WhatsApp and paste in your group')
+      window.open(`https://wa.me/?text=${encodeURIComponent(lines)}`, '_blank', 'noopener')
+    } catch {
+      toast.error('Copy failed')
+    }
+  }
+
   return (
     <div className="flex flex-col gap-5 fade-in">
       {/* Header + plan selector */}
@@ -201,6 +239,16 @@ export default function CorpusPage() {
           <p className="text-[13.5px] mt-1" style={{ color: 'var(--ink-500)' }}>{planLabel}</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleBroadcast}
+            disabled={!corpus.length}
+            className="flex items-center gap-1.5"
+            style={{ borderColor: 'var(--ok-bd)', background: 'var(--ok-bg)', color: 'var(--ok)' }}
+          >
+            <Send size={14} /> Broadcast
+          </Button>
           {isAdmin && selectedPlanId !== '__all__' && selectedPlan?.status === 'draft' && (
             <Button size="sm" onClick={() => setShowActivate(true)} style={{ background: 'var(--brand-600)', color: '#fff' }}>
               Activate plan
