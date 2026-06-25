@@ -813,7 +813,7 @@ function FlatStatementTab() {
     queryFn: async () => {
       const { data } = await supabase
         .from('v_dues_tracker')
-        .select('collected_fy, pending, status, start_fiscal_year')
+        .select('collected_fy, pending, total_outstanding, arrears_maintenance, advance_credits, status, start_fiscal_year')
         .eq('flat_code', flatCode)
         .single()
       return data
@@ -864,7 +864,7 @@ function FlatStatementTab() {
     XLSX.writeFile(wb, `Lilac_${flatCode}_${rangeLabel.replace(/\s/g, '_')}.xlsx`)
   }
 
-  const outstandingAmt = duesEntry ? Number(duesEntry.pending) : null
+  const outstandingAmt = duesEntry ? Number(duesEntry.total_outstanding) : null
 
   const [copied, setCopied] = useState(false)
 
