@@ -238,7 +238,7 @@ export default function CorpusPage() {
           <h1 className="text-[24px] font-extrabold">Corpus fund</h1>
           <p className="text-[13.5px] mt-1" style={{ color: 'var(--ink-500)' }}>{planLabel}</p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap justify-end ml-auto">
           <Button
             size="sm"
             variant="outline"
