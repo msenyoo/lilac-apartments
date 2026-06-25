@@ -142,7 +142,7 @@ export default function DuesPage() {
 
   async function handleBroadcast() {
     const openFlats = (data ?? []).filter(d => d.total_outstanding > 0)
-      .sort((a, b) => b.total_outstanding - a.total_outstanding)
+      .slice().sort((a, b) => a.flat_code.localeCompare(b.flat_code))
     if (openFlats.length === 0) {
       toast.info('No flats with outstanding dues')
       return
