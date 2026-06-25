@@ -30,3 +30,7 @@ scripts/apply_views.py
 scripts/migrate-history.js
 scripts/verify-migration.js
 .worktrees
+
+# Transient audit script outputs (regenerate via `node scripts/audit-review.js > docs/audits/...`)
+/audit-*.md
+/audit-*-output.md
