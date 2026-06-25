@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AgGridReact } from 'ag-grid-react'
 import type { ColDef } from 'ag-grid-community'
-import { Download, X, TrendingDown, ChevronDown, Layers, Plus, Trash2, Send } from 'lucide-react'
+import { Download, X, TrendingDown, ChevronDown, Layers, Plus, Trash2, Send, MessageCircle, Check } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { supabase, CorpusEntry, CorpusPlan, Flat } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
@@ -673,6 +673,7 @@ function PlanGrid({ planFlats, installments, flatInstallments, corpus }: {
 // ── Flat detail panel ─────────────────────────────────────────
 
 function FlatCorpusPanel({ flat, onClose }: { flat: CorpusEntry; onClose: () => void }) {
+  const [copied, setCopied] = useState(false)
   const { data: payments = [] } = useQuery({
     queryKey: ['flat-corpus-payments', flat.flat_code, flat.plan_id],
     queryFn: async () => {
@@ -686,6 +687,69 @@ function FlatCorpusPanel({ flat, onClose }: { flat: CorpusEntry; onClose: () => 
       return data ?? []
     },
   })
+
+  const { data: settings } = useQuery({
+    queryKey: ['app-settings'],
+    queryFn: async () => {
+      const { data } = await supabase.from('app_settings').select('*')
+      return Object.fromEntries((data ?? []).map((s: any) => [s.key, s.value]))
+    },
+  })
+
+  const { data: ownerPhone } = useQuery({
+    queryKey: ['flat-owner-phone', flat.flat_code],
+    queryFn: async () => {
+      const { data: f } = await supabase.from('flats').select('id').eq('code', flat.flat_code).maybeSingle()
+      if (!f) return null
+      const { data: r } = await supabase
+        .from('residents').select('phone, type')
+        .eq('flat_id', f.id).eq('is_active', true).order('type').maybeSingle()
+      const raw = r?.phone?.trim().replace(/\D/g, '') ?? ''
+      if (!raw) return null
+      return raw.length === 10 ? `91${raw}` : raw
+    },
+  })
+
+  function buildReminderText() {
+    const asOf = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+    const lines = [
+      `*Lilac Apartments — Corpus reminder*`,
+      `Flat ${flat.flat_code} · ${flat.plan_name} · As of ${asOf}`,
+      ``,
+      `Dear resident,`,
+      ``,
+      `Your corpus contribution balance: *${formatINR(flat.balance)}*.`,
+      `  • Target: ${formatINR(flat.corpus_target + (flat.carry_forward_amount ?? 0))}`,
+      `  • Collected so far: ${formatINR(flat.collected)}`,
+    ]
+    const upi  = settings?.collection_upi
+    const bank = settings?.collection_bank
+    if (upi || bank) {
+      lines.push(``, `Payment details:`)
+      if (upi)  lines.push(`  UPI: ${upi}`)
+      if (bank) lines.push(`  Bank: ${bank}`)
+    }
+    lines.push(
+      ``,
+      `Kindly contribute at your earliest convenience.`,
+      `— The Lilac Apartment Association, Rajakilpakkam`,
+    )
+    return lines.join('\n')
+  }
+
+  async function handleCopy() {
+    await navigator.clipboard.writeText(buildReminderText())
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2500)
+  }
+
+  function handleSend() {
+    const text = buildReminderText()
+    const url = ownerPhone
+      ? `https://wa.me/${ownerPhone}?text=${encodeURIComponent(text)}`
+      : `https://wa.me/?text=${encodeURIComponent(text)}`
+    window.open(url, '_blank', 'noopener')
+  }
 
   return (
     <div className="w-full lg:w-72 shrink-0 space-y-3">
@@ -734,6 +798,28 @@ function FlatCorpusPanel({ flat, onClose }: { flat: CorpusEntry; onClose: () => 
             }}
           />
         </div>
+
+        {flat.balance > 0 && (
+          <div className="flex gap-2">
+            <button
+              onClick={handleCopy}
+              className="flex-1 flex items-center justify-center gap-2 py-2 rounded-[10px] border font-medium text-[13px] transition-colors"
+              style={{ borderColor: 'var(--ink-200)', background: '#fff', color: 'var(--ink-700)' }}
+            >
+              {copied
+                ? <><Check size={14} /> Copied!</>
+                : <><MessageCircle size={14} /> Copy</>}
+            </button>
+            <button
+              onClick={handleSend}
+              className="flex-1 flex items-center justify-center gap-2 py-2 rounded-[10px] border font-medium text-[13px] transition-colors"
+              style={{ borderColor: 'var(--ok-bd)', background: 'var(--ok-bg)', color: 'var(--ok)' }}
+              title={ownerPhone ? `Opens WhatsApp chat with owner (+${ownerPhone})` : 'Owner phone not on file — opens WhatsApp share to pick a contact'}
+            >
+              <Send size={14} /> {ownerPhone ? 'Send' : 'Share'}
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="surface !p-4">
