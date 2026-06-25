@@ -156,16 +156,21 @@ export default function DuesPage() {
   function handleExport() {
     const rows: any[] = []
     gridRef.current?.api?.forEachNodeAfterFilterAndSort(node => { if (node.data) rows.push(node.data) })
+    const dueLabel = sameYear ? 'Due to date' : 'Total Due'
     const exportRows = (rows.length > 0 ? rows : data ?? []).map(r => ({
-      Flat: r.flat_code, Block: r.block, BHK: r.bhk_type,
-      'Rate/mo': r.maintenance_amt,
-      'Due to date': r.annual_due,
-      Collected: r.collected_fy,
-      Pending: r.pending,
-      Status: r.status,
+      Flat:                r.flat_code,
+      Block:               r.block,
+      BHK:                 r.bhk_type,
+      'Rate/mo':           r.maintenance_amt,
+      [dueLabel]:          r.annual_due,
+      Collected:           r.collected_fy,
+      Pending:             r.pending,
+      Arrears:             r.arrears_maintenance,
+      'Total Outstanding': r.total_outstanding,
+      Status:              r.total_outstanding <= 0 ? 'Clear' : (r.collected_fy > 0 ? 'Partial' : 'Due'),
     }))
     const ws = XLSX.utils.json_to_sheet(exportRows)
-    ws['!cols'] = [8, 8, 12, 12, 14, 12, 12, 10].map(w => ({ wch: w }))
+    ws['!cols'] = [8, 8, 12, 12, 14, 12, 12, 12, 16, 10].map(w => ({ wch: w }))
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Dues')
     XLSX.writeFile(wb, `Dues_${fyLabel.replace(/[^a-z0-9]/gi, '_')}.xlsx`)
