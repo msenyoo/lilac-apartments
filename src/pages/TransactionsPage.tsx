@@ -397,7 +397,8 @@ function ImportPreview({ preview, fileName, onConfirm, onCancel, onRowEdited }: 
           defaultColDef={{ sortable: true, resizable: true, filter: true, floatingFilter: true }}
           pagination={true}
           paginationPageSize={25}
-          suppressCellFocus={true}
+          singleClickEdit={true}
+          stopEditingWhenCellsLoseFocus={true}
           getRowStyle={(p: any) => p.data?._confidence === 'REVIEW' ? { background: '#fffbeb' } : undefined}
         />
       </div>
