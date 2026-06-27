@@ -3188,6 +3188,7 @@ function PendingItemDialog({ item, onClose }: { item?: PendingItem; onClose: () 
 
   const originalUrlRef = useRef<string | null>(item?.attachment_url ?? null)
   const savedRef = useRef(false)
+  const stagedDeleteOriginalRef = useRef(false)
 
   async function cleanupOrphan() {
     if (!savedRef.current && attachmentUrl && attachmentUrl !== originalUrlRef.current) {
@@ -3217,7 +3218,11 @@ function PendingItemDialog({ item, onClose }: { item?: PendingItem; onClose: () 
 
   async function clearAttachment() {
     if (attachmentUrl) {
-      await supabase.storage.from('expense-attachments').remove([attachmentUrl])
+      if (attachmentUrl === originalUrlRef.current) {
+        stagedDeleteOriginalRef.current = true
+      } else {
+        await supabase.storage.from('expense-attachments').remove([attachmentUrl])
+      }
     }
     setAttachmentUrl(null); setAttachmentName(null)
   }
@@ -3251,6 +3256,9 @@ function PendingItemDialog({ item, onClose }: { item?: PendingItem; onClose: () 
       toast.success('Pending item added')
     }
     qc.invalidateQueries({ queryKey: ['pending-line-items'] })
+    if (stagedDeleteOriginalRef.current && originalUrlRef.current) {
+      await supabase.storage.from('expense-attachments').remove([originalUrlRef.current])
+    }
     savedRef.current = true
     onClose()
   }
