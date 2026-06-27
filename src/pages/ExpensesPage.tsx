@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRoleCtx } from '@/contexts/RoleContext'
@@ -3100,6 +3100,15 @@ function PendingItemDialog({ item, onClose }: { item?: PendingItem; onClose: () 
   const [uploading, setUploading] = useState(false)
   const [uploadErr, setUploadErr] = useState('')
 
+  const originalUrlRef = useRef<string | null>(item?.attachment_url ?? null)
+  const savedRef = useRef(false)
+
+  async function cleanupOrphan() {
+    if (!savedRef.current && attachmentUrl && attachmentUrl !== originalUrlRef.current) {
+      await supabase.storage.from('expense-attachments').remove([attachmentUrl])
+    }
+  }
+
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: { 'image/*': [], 'application/pdf': [] },
     maxSize: 10 * 1024 * 1024,
@@ -3156,11 +3165,12 @@ function PendingItemDialog({ item, onClose }: { item?: PendingItem; onClose: () 
       toast.success('Pending item added')
     }
     qc.invalidateQueries({ queryKey: ['pending-line-items'] })
+    savedRef.current = true
     onClose()
   }
 
   return (
-    <Dialog open onOpenChange={(o) => { if (!o) onClose() }}>
+    <Dialog open onOpenChange={async (o) => { if (!o) { await cleanupOrphan(); onClose() } }}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Edit pending item' : 'Add pending item'}</DialogTitle>
@@ -3288,7 +3298,7 @@ function PendingItemDialog({ item, onClose }: { item?: PendingItem; onClose: () 
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+            <Button type="button" variant="outline" onClick={async () => { await cleanupOrphan(); onClose() }}>Cancel</Button>
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? 'Saving…' : (isEdit ? 'Update' : 'Add item')}
             </Button>
