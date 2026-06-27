@@ -817,23 +817,26 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
         ? editExpense.line_items.map(li => ({
             description:    li.description,
             payee_type:     li.payee_type,
-            payee_name_raw: li.payee_name_raw ?? undefined,
-            staff_id:       undefined,
-            vendor_id:      undefined,
+            payee_name_raw: li.payee_name_raw ?? '',
+            staff_id:       (li as any).staff_id ?? '',
+            vendor_id:      (li as any).vendor_id ?? '',
             category_id:    li.category?.id ?? '',
             cost_center:    li.cost_center,
             amount:         li.amount,
             utility_units:  li.utility_units ?? undefined,
             utility_rate:   li.utility_rate ?? undefined,
-            period_from:    li.period_from ?? undefined,
-            period_to:      li.period_to ?? undefined,
+            period_from:    li.period_from ?? '',
+            period_to:      li.period_to ?? '',
+            paid_date:      li.paid_date ?? '',
+            payment_mode:   li.payment_mode ?? '',
+            reference_no:   li.reference_no ?? '',
           }))
-        : [{ description: '', payee_type: 'Other', cost_center: 'Common', category_id: '', amount: 0 }],
+        : [{ description: '', payee_type: 'Other', cost_center: 'Common', category_id: '', amount: 0, paid_date: '', payment_mode: '', reference_no: '' }],
     } : {
       expense_date: new Date().toISOString().slice(0, 10),
       payee_type:   'Vendor',
       payment_mode: 'Online',
-      line_items: [{ description: '', payee_type: 'Other', cost_center: 'Common', category_id: '', amount: 0 }],
+      line_items: [{ description: '', payee_type: 'Other', cost_center: 'Common', category_id: '', amount: 0, paid_date: '', payment_mode: '', reference_no: '' }],
     },
   })
 
@@ -925,6 +928,9 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
         utility_rate:   li.utility_rate   || null,
         period_from:    li.period_from    || null,
         period_to:      li.period_to      || null,
+        paid_date:      li.paid_date      || null,
+        payment_mode:   li.payment_mode   || null,
+        reference_no:   li.reference_no   || null,
       }))
 
       const { error: liErr } = await supabase.from('expense_line_items').insert(linePayloads)
@@ -1231,6 +1237,72 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
                         <Input type="date" {...register(`line_items.${idx}.period_to`)} />
                       </div>
                     </div>
+
+                    {/* Payee name picker — conditional on payee_type */}
+                    <div className="grid grid-cols-1 gap-2">
+                      {(() => {
+                        const lineType = watch(`line_items.${idx}.payee_type`)
+                        if (lineType === 'Vendor') {
+                          return (
+                            <div className="flex flex-col gap-1">
+                              <Label className="text-xs">Vendor</Label>
+                              <Controller name={`line_items.${idx}.vendor_id`} control={control} render={({ field: f }) => (
+                                <Select value={f.value ?? ''} onValueChange={f.onChange}>
+                                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Pick vendor" /></SelectTrigger>
+                                  <SelectContent>
+                                    {vendors.map(v => <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>)}
+                                  </SelectContent>
+                                </Select>
+                              )} />
+                            </div>
+                          )
+                        }
+                        if (lineType === 'Staff') {
+                          return (
+                            <div className="flex flex-col gap-1">
+                              <Label className="text-xs">Staff member</Label>
+                              <Controller name={`line_items.${idx}.staff_id`} control={control} render={({ field: f }) => (
+                                <Select value={f.value ?? ''} onValueChange={f.onChange}>
+                                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Pick staff" /></SelectTrigger>
+                                  <SelectContent>
+                                    {staffList.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                                  </SelectContent>
+                                </Select>
+                              )} />
+                            </div>
+                          )
+                        }
+                        return (
+                          <div className="flex flex-col gap-1">
+                            <Label className="text-xs">Payee name</Label>
+                            <Input placeholder="Free-text payee" {...register(`line_items.${idx}.payee_name_raw`)} />
+                          </div>
+                        )
+                      })()}
+                    </div>
+
+                    {/* Paid on / Payment mode / Reference */}
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="flex flex-col gap-1">
+                        <Label className="text-xs">Paid on</Label>
+                        <Input type="date" {...register(`line_items.${idx}.paid_date`)} />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <Label className="text-xs">Payment mode</Label>
+                        <Controller name={`line_items.${idx}.payment_mode`} control={control} render={({ field: f }) => (
+                          <Select value={f.value ?? ''} onValueChange={f.onChange}>
+                            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Mode" /></SelectTrigger>
+                            <SelectContent>
+                              {PAYMENT_MODES.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        )} />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <Label className="text-xs">Reference</Label>
+                        <Input placeholder="UPI/NEFT ref" {...register(`line_items.${idx}.reference_no`)} />
+                      </div>
+                    </div>
                   </div>
                 )
               })}
@@ -1238,7 +1310,7 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
 
             <button
               type="button"
-              onClick={() => append({ description: '', payee_type: 'Other', cost_center: 'Common', category_id: '', amount: 0 })}
+              onClick={() => append({ description: '', payee_type: 'Other', cost_center: 'Common', category_id: '', amount: 0, paid_date: '', payment_mode: '', reference_no: '' })}
               className="flex items-center gap-1.5 text-sm text-brand-600 hover:text-brand-800 font-medium"
             >
               <Plus size={14} /> Add line item
