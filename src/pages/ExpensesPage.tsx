@@ -643,12 +643,19 @@ function ExpenseDetailPanel({
             {e.line_items.map(li => (
               <div key={li.id} className="rounded-lg p-2.5 text-xs flex flex-col gap-1" style={{ background: 'var(--ink-50)' }}>
                 <div className="flex justify-between font-medium">
-                  <span style={{ color: 'var(--ink-700)' }}>{li.description}</span>
+                  <span style={{ color: 'var(--ink-700)' }}>
+                    <span className="text-[10px] mr-2" style={{ color: 'var(--ink-400)' }}>
+                      {new Date(li.paid_date ?? e.expense_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                    </span>
+                    {li.description}
+                  </span>
                   <span style={{ color: 'var(--ink-800)' }}>{formatINR(li.amount)}</span>
                 </div>
                 <div className="flex gap-2 flex-wrap" style={{ color: 'var(--ink-400)' }}>
                   <span>{li.cost_center}</span>
                   {li.category && <span>· {li.category.name}</span>}
+                  {li.payment_mode && <span>· {li.payment_mode}</span>}
+                  {li.reference_no && <span>· {li.reference_no}</span>}
                   {li.utility_units != null && li.utility_rate != null && (
                     <span>· {li.utility_units} units × ₹{li.utility_rate}</span>
                   )}
