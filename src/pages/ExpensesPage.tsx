@@ -3095,21 +3095,55 @@ function PendingItemDialog({ item, onClose }: { item?: PendingItem; onClose: () 
 
   const payeeType = watch('payee_type')
 
+  const [attachmentUrl, setAttachmentUrl] = useState<string | null>(item?.attachment_url ?? null)
+  const [attachmentName, setAttachmentName] = useState<string | null>(item?.attachment_name ?? null)
+  const [uploading, setUploading] = useState(false)
+  const [uploadErr, setUploadErr] = useState('')
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    accept: { 'image/*': [], 'application/pdf': [] },
+    maxSize: 10 * 1024 * 1024,
+    multiple: false,
+    onDrop: async (files) => {
+      const file = files[0]
+      if (!file) return
+      setUploading(true); setUploadErr('')
+      try {
+        const ext = file.name.split('.').pop() ?? 'bin'
+        const path = `pending/${crypto.randomUUID()}.${ext}`
+        const { error: upErr } = await supabase.storage.from('expense-attachments').upload(path, file)
+        if (upErr) throw upErr
+        setAttachmentUrl(path)
+        setAttachmentName(file.name)
+      } catch (e: any) { setUploadErr(e.message) }
+      finally { setUploading(false) }
+    },
+  })
+
+  async function clearAttachment() {
+    if (attachmentUrl) {
+      await supabase.storage.from('expense-attachments').remove([attachmentUrl])
+    }
+    setAttachmentUrl(null); setAttachmentName(null)
+  }
+
   async function onSubmit(form: PendingItemForm) {
     const payload = {
-      paid_date:      form.paid_date,
-      description:    form.description,
-      amount:         form.amount,
-      payment_mode:   form.payment_mode,
-      reference_no:   form.reference_no || null,
-      payee_type:     form.payee_type,
-      staff_id:       form.payee_type === 'Staff'  && form.staff_id  ? form.staff_id  : null,
-      vendor_id:      form.payee_type === 'Vendor' && form.vendor_id ? form.vendor_id : null,
-      payee_name_raw: form.payee_name_raw || null,
-      category_id:    form.category_id,
-      cost_center:    form.cost_center,
-      corpus_plan_id: form.corpus_plan_id || null,
-      notes:          form.notes || null,
+      paid_date:       form.paid_date,
+      description:     form.description,
+      amount:          form.amount,
+      payment_mode:    form.payment_mode,
+      reference_no:    form.reference_no || null,
+      payee_type:      form.payee_type,
+      staff_id:        form.payee_type === 'Staff'  && form.staff_id  ? form.staff_id  : null,
+      vendor_id:       form.payee_type === 'Vendor' && form.vendor_id ? form.vendor_id : null,
+      payee_name_raw:  form.payee_name_raw || null,
+      category_id:     form.category_id,
+      cost_center:     form.cost_center,
+      corpus_plan_id:  form.corpus_plan_id || null,
+      notes:           form.notes || null,
+      attachment_url:  attachmentUrl,
+      attachment_name: attachmentName,
     }
     if (isEdit && item) {
       const { error } = await supabase.from('pending_line_items').update(payload).eq('id', item.id)
@@ -3218,6 +3252,39 @@ function PendingItemDialog({ item, onClose }: { item?: PendingItem; onClose: () 
           <div>
             <Label>Notes</Label>
             <Textarea {...register('notes')} rows={2} />
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs">Receipt (optional)</Label>
+            {attachmentUrl ? (
+              <div className="flex items-center gap-2 p-2 rounded-lg text-xs" style={{ background: 'var(--ink-50)' }}>
+                <Paperclip size={12} style={{ color: 'var(--ink-400)' }} />
+                <span className="flex-1 truncate" style={{ color: 'var(--ink-700)' }}>{attachmentName}</span>
+                <button type="button" onClick={clearAttachment} className="hover:text-red-500" style={{ color: 'var(--ink-400)' }}>
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            ) : (
+              <div
+                {...getRootProps()}
+                className={`border-2 border-dashed rounded-lg p-3 text-center cursor-pointer transition-colors text-xs ${
+                  isDragActive ? 'border-violet-400 bg-[var(--brand-50)]' : 'border-[var(--ink-200,#e2e8f0)] hover:border-violet-300 hover:bg-[var(--ink-50)]'
+                }`}
+              >
+                <input {...getInputProps()} />
+                {uploading ? (
+                  <div className="flex items-center justify-center gap-1.5" style={{ color: 'var(--ink-500)' }}>
+                    <Loader2 size={13} className="animate-spin" /> Uploading…
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center gap-1.5" style={{ color: 'var(--ink-400)' }}>
+                    <Upload size={13} />
+                    {isDragActive ? 'Drop to upload' : 'Drop file or click — PDF / JPG / PNG (max 10 MB)'}
+                  </div>
+                )}
+              </div>
+            )}
+            {uploadErr && <p className="text-xs text-red-500">{uploadErr}</p>}
           </div>
 
           <DialogFooter>
