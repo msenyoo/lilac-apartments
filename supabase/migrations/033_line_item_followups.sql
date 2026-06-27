@@ -59,7 +59,8 @@ BEGIN
          array_agg(DISTINCT COALESCE(corpus_plan_id, '00000000-0000-0000-0000-000000000000'::uuid))
   INTO   v_count, v_total, v_corpus_plan_ids
   FROM   public.pending_line_items
-  WHERE  id = ANY(p_ids) AND voided_at IS NULL;
+  WHERE  id = ANY(p_ids) AND voided_at IS NULL
+  FOR UPDATE;
 
   IF v_count <> cardinality(p_ids) THEN
     RAISE EXCEPTION 'one or more items not found or voided';
