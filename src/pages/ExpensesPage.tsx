@@ -949,6 +949,11 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
             utility_rate:   li.utility_rate ?? null,
             period_from:    li.period_from ?? null,
             period_to:      li.period_to ?? null,
+            staff_id:       (li as any).staff_id ?? null,
+            vendor_id:      (li as any).vendor_id ?? null,
+            paid_date:      li.paid_date ?? null,
+            payment_mode:   li.payment_mode ?? null,
+            reference_no:   li.reference_no ?? null,
           }))
           await supabase.from('expense_line_items').insert(originals)
         }
