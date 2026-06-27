@@ -2892,6 +2892,7 @@ function PendingItemsTab() {
         `)
         .is('voided_at', null)
         .order('paid_date', { ascending: false })
+        .order('created_at', { ascending: false })
       if (error) throw error
       return (data ?? []) as PendingItem[]
     },
@@ -2974,6 +2975,7 @@ function PendingItemsTab() {
                 <p className="text-sm font-medium truncate" style={{ color: 'var(--ink-800)' }}>{i.description}</p>
                 <p className="text-xs truncate" style={{ color: 'var(--ink-500)' }}>
                   {i.category?.name ?? 'Uncategorised'} · {i.cost_center} · {i.payment_mode}
+                  {i.attachment_url && <Paperclip size={11} className="inline ml-1.5 align-text-bottom" style={{ color: 'var(--ink-400)' }} />}
                   {(i.payee_name_raw || i.staff_member?.name || i.vendor?.name) && (
                     <> · {i.payee_name_raw || i.staff_member?.name || i.vendor?.name}</>
                   )}
