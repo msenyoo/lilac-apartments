@@ -58,6 +58,8 @@ const HELP: Record<string, HelpPage> = {
       'Click "Add Expense" to record a new payment — fill in the payee, date, amount, and payment mode, then add line items for the cost breakdown.',
       'The Pending Items tab captures individual small payments (cash, UPI, online) as they happen. Select several and click Bundle to merge them into one Day Book expense.',
       'Items in one bundle must all be either maintenance or all belong to the same corpus plan.',
+      'Attach a receipt photo when capturing a pending item — a paper-clip icon shows on items with attachments.',
+      'When editing a bundled expense, each line item can be tagged with its own paid date, vendor/staff payee, payment mode, and reference number.',
       'Vendor and Staff tabs let you manage the master lists used when recording expenses.',
     ],
     howTo: 'For single payments: click "Add Expense", fill the header (payee, date, amount, mode), and add at least one line item with a category and amount. For lots of small payments: capture each in Pending Items as you pay it, then bundle them later — the bundled expense enters the normal approval and reconciliation flow.',
