@@ -67,6 +67,7 @@ interface ExpenseLineItem {
   period_from: string | null; period_to: string | null
   payment_mode: string | null
   reference_no: string | null
+  paid_date: string | null
   category: ExpenseCategory | null
 }
 interface PendingItem {
@@ -84,6 +85,8 @@ interface PendingItem {
   cost_center: string
   corpus_plan_id: string | null
   notes: string | null
+  attachment_url: string | null
+  attachment_name: string | null
   voided_at: string | null
   category: ExpenseCategory | null
   staff_member: StaffMember | null
@@ -105,6 +108,9 @@ const lineItemSchema = z.object({
   utility_rate:   z.coerce.number().optional(),
   period_from:    z.string().optional(),
   period_to:      z.string().optional(),
+  paid_date:      z.string().optional(),
+  payment_mode:   z.string().optional(),
+  reference_no:   z.string().optional(),
 })
 
 const expenseSchema = z.object({
