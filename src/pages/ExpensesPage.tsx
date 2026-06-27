@@ -68,6 +68,8 @@ interface ExpenseLineItem {
   payment_mode: string | null
   reference_no: string | null
   paid_date: string | null
+  staff_id: string | null
+  vendor_id: string | null
   category: ExpenseCategory | null
 }
 interface PendingItem {
@@ -818,8 +820,8 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
             description:    li.description,
             payee_type:     li.payee_type,
             payee_name_raw: li.payee_name_raw ?? '',
-            staff_id:       (li as any).staff_id ?? '',
-            vendor_id:      (li as any).vendor_id ?? '',
+            staff_id:       li.staff_id ?? '',
+            vendor_id:      li.vendor_id ?? '',
             category_id:    li.category?.id ?? '',
             cost_center:    li.cost_center,
             amount:         li.amount,
@@ -949,8 +951,8 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
             utility_rate:   li.utility_rate ?? null,
             period_from:    li.period_from ?? null,
             period_to:      li.period_to ?? null,
-            staff_id:       (li as any).staff_id ?? null,
-            vendor_id:      (li as any).vendor_id ?? null,
+            staff_id:       li.staff_id ?? null,
+            vendor_id:      li.vendor_id ?? null,
             paid_date:      li.paid_date ?? null,
             payment_mode:   li.payment_mode ?? null,
             reference_no:   li.reference_no ?? null,
