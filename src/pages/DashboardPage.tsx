@@ -85,6 +85,7 @@ function DashboardContent() {
     },
   })
   const maintenancePos = fundPositions.find(p => p.fund === 'Maintenance')
+  const corpusPos      = fundPositions.find(p => p.fund === 'Corpus')
   const maintCollected = maintenancePos?.receipts ?? 0
   const maintSpent     = maintenancePos?.payments ?? 0
 
@@ -204,7 +205,10 @@ function DashboardContent() {
   const corpusPlans     = Array.from(corpusByPlan.entries()).map(([id, p]) => ({ id, ...p }))
   const activePlans     = corpusPlans.filter(p => p.status === 'active')
   const corpusCollected = corpusPlans.reduce((s, p) => s + p.collected, 0)
-  const corpusAvailable = Math.max(0, corpusCollected - corpusSpent)
+  // Available = bank-ledger balance per fund (v_fund_position), so the net
+  // always ties to the actual bank balance. corpusCollected/corpusSpent stay
+  // for plan-progress displays only.
+  const corpusAvailable = Math.max(0, corpusPos?.balance ?? 0)
   const maintAvailable  = Math.max(0, maintenancePos?.balance ?? 0)
 
   const fdTotal        = deposits.reduce((s, d) => s + d.principal, 0)
