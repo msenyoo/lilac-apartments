@@ -57,6 +57,7 @@ const HELP: Record<string, HelpPage> = {
       'The Day Book tab lists all expenses in chronological order with payee, amount, mode, and category.',
       'Click "Add Expense" to record a new payment — fill in the payee, date, amount, and payment mode, then add line items for the cost breakdown.',
       'The Pending Items tab captures individual small payments (cash, UPI, online) as they happen. Select several and click Bundle to merge them into one Day Book expense.',
+      '"Bulk add" in Pending Items opens a spreadsheet-style grid — type rows or paste them straight from Excel (Date, Description, Amount, Category columns) and save them all at once.',
       'Inside Add Expense, "Add from pending" pulls waiting pending items into the form as line items — receipts carry over and the items leave the pending list when you save.',
       'Items in one bundle must all be either maintenance or all belong to the same corpus plan.',
       'Attach a receipt photo when capturing a pending item — a paper-clip icon shows on items with attachments.',

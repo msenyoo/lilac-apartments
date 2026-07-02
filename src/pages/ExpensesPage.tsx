@@ -10,6 +10,7 @@ import { useDropzone } from 'react-dropzone'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
+import { BulkAddPendingDialog } from '@/components/expenses/BulkAddPendingDialog'
 import { normalizeImageFile, isHeicName, heicBlobToObjectUrl } from '@/lib/heic'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -3131,6 +3132,7 @@ function PendingItemsTab() {
   const { canWrite } = useRoleCtx()
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [addOpen, setAddOpen] = useState(false)
+  const [bulkOpen, setBulkOpen] = useState(false)
   const [editItem, setEditItem] = useState<PendingItem | null>(null)
   const [bundleOpen, setBundleOpen] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>(null)
@@ -3181,6 +3183,11 @@ function PendingItemsTab() {
           {canWrite && (
             <Button size="sm" onClick={() => setAddOpen(true)} className="flex items-center gap-1.5">
               <Plus size={14} /> Quick Add
+            </Button>
+          )}
+          {canWrite && (
+            <Button size="sm" variant="outline" onClick={() => setBulkOpen(true)} className="flex items-center gap-1.5">
+              <ListPlus size={14} /> Bulk add
             </Button>
           )}
           {canWrite && selectedIds.size > 0 && (
@@ -3256,6 +3263,7 @@ function PendingItemsTab() {
       )}
 
       {addOpen && <PendingItemDialog onClose={() => setAddOpen(false)} />}
+      {bulkOpen && <BulkAddPendingDialog onClose={() => setBulkOpen(false)} />}
       {editItem && <PendingItemDialog item={editItem} onClose={() => setEditItem(null)} />}
       {bundleOpen && (
         <BundleDialog
