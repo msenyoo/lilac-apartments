@@ -1258,6 +1258,9 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
                             </SelectContent>
                           </Select>
                         )} />
+                        {errors.line_items?.[idx]?.category_id && (
+                          <p className="text-xs text-red-500">{errors.line_items[idx]?.category_id?.message}</p>
+                        )}
                       </div>
                       <div className="flex flex-col gap-1">
                         <Label className="text-xs">Cost center *</Label>
