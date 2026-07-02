@@ -186,6 +186,9 @@ export default function CorpusPage() {
   const totalTarget    = corpus.reduce((s, c) => s + c.effective_target, 0)
   const totalCollected = corpus.reduce((s, c) => s + c.collected, 0)
   const totalSpent     = expenditures.reduce((s: number, e: any) => s + e.amount, 0)
+  const availableCash  = Math.max(0, totalCollected - totalSpent)
+  const stillToCollect = Math.max(0, totalTarget - totalCollected)
+  const allowedToSpend = availableCash + stillToCollect
   const pct = totalTarget > 0 ? Math.round(totalCollected * 100 / totalTarget) : 0
 
   const planLabel = selectedPlan
@@ -281,13 +284,29 @@ export default function CorpusPage() {
         <ConsolidatedBanner plans={activePlans} allCorpus={allCorpus} />
       )}
 
-      {/* KPI strip */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-        <SummaryCard label="Target"            value={formatINR(totalTarget)}                                    color="text-slate-800" bg="bg-white" />
-        <SummaryCard label="Collected"         value={formatINR(totalCollected)}                                 color="text-green-700" bg="bg-green-50" />
-        <SummaryCard label="Spent so far"      value={formatINR(totalSpent)}                                     color="text-red-600"   bg="bg-red-50" />
-        <SummaryCard label="Available cash"    value={formatINR(Math.max(0, totalCollected - totalSpent))}       color="text-blue-700"  bg="bg-blue-50" />
-        <SummaryCard label="Still to collect"  value={formatINR(Math.max(0, totalTarget - totalCollected))}      color="text-amber-600" bg="bg-amber-50" />
+      {/* Compact KPI strip */}
+      <div className="surface !p-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-[1fr_1fr_1fr_auto] gap-3 items-center">
+          <StatItem label="Target"       value={formatINR(totalTarget)}    color="text-slate-800" />
+          <StatItem label="Collected"    value={formatINR(totalCollected)} color="text-green-700" />
+          <StatItem label="Spent so far" value={formatINR(totalSpent)}     color="text-red-600" />
+          <div className="col-span-2 sm:col-span-3 lg:col-span-1 rounded-lg bg-blue-50 border border-blue-100 px-3 py-2">
+            <p className="text-xs" style={{ color: 'var(--ink-500)' }}>Allowed to spend</p>
+            <p className="text-xl font-bold text-blue-700">{formatINR(allowedToSpend)}</p>
+            <p className="text-xs text-blue-700/80">
+              {formatINR(availableCash)} in hand + {formatINR(stillToCollect)} to collect
+            </p>
+          </div>
+        </div>
+        <div className="mt-3">
+          <div className="ds-track">
+            <div className="ds-track-fill" style={{ width: `${Math.min(pct, 100)}%`, background: 'var(--brand-500)' }} />
+          </div>
+          <div className="flex justify-between mt-1.5 text-xs" style={{ color: 'var(--ink-400)' }}>
+            <span>{formatINR(totalCollected)} collected · {pct}%</span>
+            <span>{formatINR(totalTarget)} target</span>
+          </div>
+        </div>
       </div>
       {totalCollected > totalTarget && totalTarget > 0 && (
         <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-green-50 border border-green-200 text-sm">
@@ -299,21 +318,6 @@ export default function CorpusPage() {
           </span>
         </div>
       )}
-
-      {/* Progress bar */}
-      <div className="surface !p-4">
-        <div className="flex justify-between text-sm mb-2">
-          <span style={{ color: 'var(--ink-500)' }}>Collection progress</span>
-          <span className="font-semibold">{pct}%</span>
-        </div>
-        <div className="ds-track">
-          <div className="ds-track-fill" style={{ width: `${Math.min(pct, 100)}%`, background: 'var(--brand-500)' }} />
-        </div>
-        <div className="flex justify-between mt-1.5 text-xs" style={{ color: 'var(--ink-400)' }}>
-          <span>{formatINR(totalCollected)} collected</span>
-          <span>{formatINR(totalTarget)} target</span>
-        </div>
-      </div>
 
       {/* Tabs */}
       <div className="flex gap-1 rounded-xl p-1 flex-wrap" style={{ background: 'var(--ink-100)' }}>
@@ -480,11 +484,11 @@ function ConsolidatedBanner({ plans, allCorpus }: { plans: CorpusPlan[]; allCorp
 
 // ── Summary card ──────────────────────────────────────────────
 
-function SummaryCard({ label, value, color, bg }: { label: string; value: string; color: string; bg: string }) {
+function StatItem({ label, value, color }: { label: string; value: string; color: string }) {
   return (
-    <div className={`surface !p-4 ${bg}`}>
-      <p className="text-xs mb-1" style={{ color: 'var(--ink-500)' }}>{label}</p>
-      <p className={`text-xl font-bold ${color}`}>{value}</p>
+    <div>
+      <p className="text-xs mb-0.5" style={{ color: 'var(--ink-500)' }}>{label}</p>
+      <p className={`text-lg font-bold ${color}`}>{value}</p>
     </div>
   )
 }
