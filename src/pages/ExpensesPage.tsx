@@ -5,7 +5,7 @@ import { useRoleCtx } from '@/contexts/RoleContext'
 import { useForm, useFieldArray, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Plus, Trash2, Download, Receipt, Users, Building, X, GitMerge, CheckCircle2, Paperclip, RefreshCcw, Coins, Upload, Loader2, Trash, Pencil, Ban, Unlink, AlertTriangle, PiggyBank, ListChecks } from 'lucide-react'
+import { Plus, Trash2, Download, Receipt, Users, Building, X, GitMerge, CheckCircle2, Paperclip, RefreshCcw, Coins, Upload, Loader2, Trash, Pencil, Ban, Unlink, AlertTriangle, PiggyBank, ListChecks, ListPlus } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
@@ -800,7 +800,7 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
   })
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { register, control, handleSubmit, watch, reset, formState: { errors, isSubmitting } } = useForm<ExpenseFormData>({
+  const { register, control, handleSubmit, watch, reset, setValue, getValues, formState: { errors, isSubmitting } } = useForm<ExpenseFormData>({
     resolver: zodResolver(expenseSchema) as any,
     defaultValues: editExpense ? {
       expense_date:   editExpense.expense_date,
@@ -996,6 +996,38 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
     return categories.find(c => c.id === catId)?.is_utility ?? false
   }
 
+  const [pickerOpen, setPickerOpen] = useState(false)
+
+  function handlePick(items: PendingItem[]) {
+    for (const item of items) {
+      append({
+        description:    item.description,
+        payee_type:     item.payee_type,
+        payee_name_raw: item.payee_name_raw ?? '',
+        staff_id:       item.staff_id ?? '',
+        vendor_id:      item.vendor_id ?? '',
+        category_id:    item.category_id ?? '',
+        cost_center:    item.cost_center,
+        amount:         item.amount,
+        paid_date:      item.paid_date,
+        payment_mode:   item.payment_mode,
+        reference_no:   item.reference_no ?? '',
+        pending_id:     item.id,
+      })
+    }
+    const total = items.reduce((s, i) => s + i.amount, 0)
+    setValue('amount', (Number(getValues('amount')) || 0) + total)
+    setPickerOpen(false)
+  }
+
+  function handleRemoveLine(idx: number) {
+    const row = getValues(`line_items.${idx}`)
+    if (row?.pending_id) {
+      setValue('amount', Math.max(0, (Number(getValues('amount')) || 0) - (Number(row.amount) || 0)))
+    }
+    remove(idx)
+  }
+
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) { reset(); onClose() } }}>
       <DialogContent className="max-w-3xl">
@@ -1176,7 +1208,7 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
                     <div className="flex items-center justify-between">
                       <p className="text-xs font-medium" style={{ color: 'var(--ink-600)' }}>Item {idx + 1}</p>
                       {fields.length > 1 && (
-                        <button type="button" onClick={() => remove(idx)} className="hover:text-red-500" style={{ color: 'var(--ink-400)' }}>
+                        <button type="button" onClick={() => handleRemoveLine(idx)} className="hover:text-red-500" style={{ color: 'var(--ink-400)' }}>
                           <Trash2 size={14} />
                         </button>
                       )}
@@ -1331,13 +1363,22 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
               })}
             </div>
 
-            <button
-              type="button"
-              onClick={() => append({ description: '', payee_type: 'Other', cost_center: 'Common', category_id: '', amount: 0, paid_date: '', payment_mode: '', reference_no: '' })}
-              className="flex items-center gap-1.5 text-sm text-brand-600 hover:text-brand-800 font-medium"
-            >
-              <Plus size={14} /> Add line item
-            </button>
+            <div className="flex items-center gap-4">
+              <button
+                type="button"
+                onClick={() => append({ description: '', payee_type: 'Other', cost_center: 'Common', category_id: '', amount: 0, paid_date: '', payment_mode: '', reference_no: '' })}
+                className="flex items-center gap-1.5 text-sm text-brand-600 hover:text-brand-800 font-medium"
+              >
+                <Plus size={14} /> Add line item
+              </button>
+              <button
+                type="button"
+                onClick={() => setPickerOpen(true)}
+                className="flex items-center gap-1.5 text-sm text-brand-600 hover:text-brand-800 font-medium"
+              >
+                <ListPlus size={14} /> Add from pending
+              </button>
+            </div>
           </section>
 
           {mutation.isError && (
@@ -1357,6 +1398,15 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
             </Button>
           </DialogFooter>
         </form>
+
+        {pickerOpen && (
+          <PendingPickerDialog
+            corpusPlanId={watch('corpus_plan_id') || null}
+            excludeIds={(watch('line_items') ?? []).map(li => li.pending_id).filter((id): id is string => !!id)}
+            onPick={handlePick}
+            onClose={() => setPickerOpen(false)}
+          />
+        )}
       </DialogContent>
     </Dialog>
   )
@@ -3136,6 +3186,92 @@ const pendingItemSchema = z.object({
   notes:          z.string().optional(),
 })
 type PendingItemForm = z.infer<typeof pendingItemSchema>
+
+function PendingPickerDialog({ corpusPlanId, excludeIds, onPick, onClose }: {
+  corpusPlanId: string | null
+  excludeIds: string[]
+  onPick: (items: PendingItem[]) => void
+  onClose: () => void
+}) {
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+
+  const { data: items = [], isLoading } = useQuery({
+    queryKey: ['pending-line-items'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('pending_line_items')
+        .select(`
+          *,
+          category:category_id(id, name, budget_type, is_utility),
+          staff_member:staff_id(id, name, role, assigned_area, phone, joined_date, left_date),
+          vendor:vendor_id(id, name, type, phone, pan_number, notes, is_active)
+        `)
+        .is('voided_at', null)
+        .order('paid_date', { ascending: false })
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      return (data ?? []) as PendingItem[]
+    },
+  })
+
+  const compatible = items.filter(i =>
+    (i.corpus_plan_id ?? null) === corpusPlanId && !excludeIds.includes(i.id)
+  )
+
+  function toggle(id: string) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  const picked = compatible.filter(i => selected.has(i.id))
+  const total  = picked.reduce((s, i) => s + i.amount, 0)
+
+  return (
+    <Dialog open onOpenChange={v => { if (!v) onClose() }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader><DialogTitle>Add from pending</DialogTitle></DialogHeader>
+        {isLoading ? (
+          <p className="text-sm py-6 text-center" style={{ color: 'var(--ink-400)' }}>Loading…</p>
+        ) : compatible.length === 0 ? (
+          <p className="text-sm py-6 text-center" style={{ color: 'var(--ink-400)' }}>No pending items match this expense.</p>
+        ) : (
+          <div className="flex flex-col gap-1 max-h-80 overflow-y-auto">
+            {compatible.map(i => (
+              <label key={i.id} className="flex items-center gap-3 p-2.5 rounded-lg cursor-pointer text-sm hover:bg-[var(--ink-50)]">
+                <input type="checkbox" checked={selected.has(i.id)} onChange={() => toggle(i.id)} className="accent-violet-600" />
+                <span className="text-xs shrink-0 w-14" style={{ color: 'var(--ink-400)' }}>
+                  {new Date(i.paid_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                </span>
+                <span className="flex-1 truncate" style={{ color: 'var(--ink-700)' }}>
+                  {i.description}
+                  {i.attachment_url && <Paperclip size={11} className="inline ml-1.5 align-text-bottom" style={{ color: 'var(--ink-400)' }} />}
+                </span>
+                <span className="text-xs truncate max-w-24" style={{ color: 'var(--ink-400)' }}>
+                  {i.staff_member?.name ?? i.vendor?.name ?? i.payee_name_raw ?? ''}
+                </span>
+                <span className="font-medium shrink-0" style={{ color: 'var(--ink-800)' }}>{formatINR(i.amount)}</span>
+              </label>
+            ))}
+          </div>
+        )}
+        <DialogFooter className="flex items-center sm:justify-between">
+          <span className="text-xs" style={{ color: 'var(--ink-500)' }}>
+            {picked.length > 0 ? `${picked.length} item(s) · ${formatINR(total)}` : ''}
+          </span>
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+            <Button type="button" disabled={picked.length === 0} onClick={() => onPick(picked)}>
+              Add {picked.length > 0 ? picked.length : ''}
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
 
 function PendingItemDialog({ item, onClose }: { item?: PendingItem; onClose: () => void }) {
   const qc = useQueryClient()
