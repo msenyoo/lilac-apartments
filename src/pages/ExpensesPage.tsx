@@ -10,6 +10,7 @@ import { useDropzone } from 'react-dropzone'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
+import { normalizeImageFile, isHeicName, heicBlobToObjectUrl } from '@/lib/heic'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
@@ -2958,7 +2959,8 @@ function AttachmentsSection({ expenseId }: { expenseId: string }) {
       if (!files.length) return
       setUploading(true); setUploadErr('')
       try {
-        for (const file of files) {
+        for (const raw of files) {
+          const file = await normalizeImageFile(raw)
           const path = `expenses/${expenseId}/${Date.now()}_${file.name}`
           const { error: upErr } = await supabase.storage
             .from('expense-attachments')
@@ -2991,11 +2993,30 @@ function AttachmentsSection({ expenseId }: { expenseId: string }) {
 
   async function handlePreview(att: Attachment) {
     setPreviewLoading(att.id)
-    const { data } = await supabase.storage
-      .from('expense-attachments')
-      .createSignedUrl(att.file_url, 300)
-    setPreviewLoading(null)
-    if (data?.signedUrl) setPreview({ url: data.signedUrl, name: att.file_name })
+    try {
+      if (isHeicName(att.file_name) || isHeicName(att.file_url)) {
+        const { data: blob, error } = await supabase.storage
+          .from('expense-attachments')
+          .download(att.file_url)
+        if (error || !blob) throw error ?? new Error('download failed')
+        setPreview({ url: await heicBlobToObjectUrl(blob), name: att.file_name })
+      } else {
+        const { data } = await supabase.storage
+          .from('expense-attachments')
+          .createSignedUrl(att.file_url, 300)
+        if (data?.signedUrl) setPreview({ url: data.signedUrl, name: att.file_name })
+      }
+    } catch {
+      toast.error('Could not preview this file — downloading instead')
+      handleDownload(att)
+    } finally {
+      setPreviewLoading(null)
+    }
+  }
+
+  function closePreview() {
+    if (preview?.url.startsWith('blob:')) URL.revokeObjectURL(preview.url)
+    setPreview(null)
   }
 
   return (
@@ -3070,12 +3091,12 @@ function AttachmentsSection({ expenseId }: { expenseId: string }) {
       {preview && (
         <div
           className="fixed inset-0 z-[70] flex flex-col items-center justify-center bg-black/80 p-4"
-          onClick={() => setPreview(null)}
+          onClick={closePreview}
         >
           <div className="flex items-center gap-3 mb-3 max-w-[92vw]">
             <p className="text-sm text-white truncate">{preview.name}</p>
             <button
-              onClick={ev => { ev.stopPropagation(); setPreview(null) }}
+              onClick={ev => { ev.stopPropagation(); closePreview() }}
               className="p-1.5 rounded-full bg-white/20 hover:bg-white/30 text-white shrink-0"
               aria-label="Close preview"
             >
@@ -3426,10 +3447,10 @@ function PendingItemDialog({ item, onClose }: { item?: PendingItem; onClose: () 
     maxSize: 10 * 1024 * 1024,
     multiple: false,
     onDrop: async (files) => {
-      const file = files[0]
-      if (!file) return
+      if (!files[0]) return
       setUploading(true); setUploadErr('')
       try {
+        const file = await normalizeImageFile(files[0])
         const ext = file.name.split('.').pop() ?? 'bin'
         const path = `pending/${crypto.randomUUID()}.${ext}`
         const { error: upErr } = await supabase.storage.from('expense-attachments').upload(path, file)
