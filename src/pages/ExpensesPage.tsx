@@ -532,19 +532,17 @@ function ExpenseDetailPanel({
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/30 z-40" onClick={onClose} />
-
-      <div className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-2rem)] max-w-[620px] lg:max-w-[960px] max-h-[85vh] rounded-2xl bg-white shadow-2xl overflow-hidden flex">
-      <div className="flex-1 min-h-0 overflow-y-auto p-3 md:p-5 grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
+      <Dialog open onOpenChange={v => { if (!v) onClose() }}>
+      <DialogContent className="max-w-[620px] lg:max-w-[960px] max-h-[85vh] rounded-2xl p-3 md:p-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
       <div className="surface !p-4 flex flex-col gap-3">
         <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap pr-6">
             <h3 className="font-semibold" style={{ color: 'var(--ink-800)' }}>{e.description}</h3>
             {isVoided && (
               <span className="text-[11px] px-2 py-0.5 rounded-full font-semibold bg-red-100 text-red-600 uppercase tracking-wide">Voided</span>
             )}
           </div>
-          <button onClick={onClose} className="p-1 rounded hover:bg-[var(--ink-100)] shrink-0"><X size={15} /></button>
         </div>
 
         {e.voucher_no && <p className="text-xs" style={{ color: 'var(--ink-400)' }}>{e.voucher_no}</p>}
@@ -678,7 +676,8 @@ function ExpenseDetailPanel({
 
       <AttachmentsSection expenseId={e.id} />
       </div>
-      </div>
+      </DialogContent>
+      </Dialog>
 
       {/* Void confirm dialog */}
       <AlertDialog open={voidOpen} onOpenChange={setVoidOpen}>

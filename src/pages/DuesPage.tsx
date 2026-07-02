@@ -2,7 +2,7 @@ import { useState, useMemo, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AgGridReact } from 'ag-grid-react'
 import type { ColDef } from 'ag-grid-community'
-import { X, TrendingDown, Download, MessageCircle, Check, Pencil, Trash2, Search, Send } from 'lucide-react'
+import { TrendingDown, Download, MessageCircle, Check, Pencil, Trash2, Search, Send } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { supabase, DuesEntry, Transaction } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
@@ -383,10 +383,9 @@ function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat
   }
 
   return (
-    <>
-    <div className="fixed inset-0 bg-black/30 z-40" onClick={onClose} />
-    <div className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-2rem)] max-w-[520px] lg:max-w-[900px] max-h-[85vh] rounded-2xl bg-white shadow-2xl overflow-hidden flex">
-    <div className="flex-1 min-h-0 overflow-y-auto p-3 md:p-4 grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
+    <Dialog open onOpenChange={v => { if (!v) onClose() }}>
+    <DialogContent className="max-w-[520px] lg:max-w-[900px] max-h-[85vh] rounded-2xl p-3 md:p-4">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
       <div className="surface !p-4 flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <div>
@@ -404,9 +403,6 @@ function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat
             </div>
             <p className="text-[12px] mt-0.5" style={{ color: 'var(--ink-400)' }}>Block {flat.block}</p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[var(--ink-100)]" style={{ color: 'var(--ink-500)' }}>
-            <X size={15} />
-          </button>
         </div>
 
         <div className="flex flex-col gap-1.5 text-[13.5px]">
@@ -499,8 +495,8 @@ function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat
         )}
       </div>
     </div>
-    </div>
-    </>
+    </DialogContent>
+    </Dialog>
   )
 }
 
