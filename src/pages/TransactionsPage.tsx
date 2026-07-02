@@ -712,6 +712,18 @@ function ReviewItem({ item, flats, onSaved }: { item: ReviewEntry; flats: any[];
     },
   })
 
+  const { data: corpusCats = [] } = useQuery({
+    queryKey: ['corpus-cat-names'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('expense_categories')
+        .select('name')
+        .eq('budget_type', 'Corpus')
+        .order('name')
+      return (data ?? []).map(c => c.name as string)
+    },
+  })
+
   const isFlat = FLAT_CODES.includes(flatCode)
   const selectedFlat = flats.find(f => f.code === flatCode)
 
@@ -769,15 +781,23 @@ function ReviewItem({ item, flats, onSaved }: { item: ReviewEntry; flats: any[];
             <select
               value={flatCode}
               onChange={e => {
-                setFlatCode(e.target.value)
-                if (!FLAT_CODES.includes(e.target.value)) setCategory(e.target.value)
+                const val = e.target.value
+                setFlatCode(val)
+                if (!FLAT_CODES.includes(val)) {
+                  setCategory(val)
+                  const isCorpusCat = corpusCats.includes(val)
+                  setCorpus(isCorpusCat ? 'YES' : 'NO')
+                  if (isCorpusCat && activePlans.length === 1) setPlanId(activePlans[0].id)
+                  if (!isCorpusCat) setPlanId(null)
+                }
               }}
               className="w-full ds-field bg-white"
             >
               <option value="">— Select —</option>
               <optgroup label="Flats">{FLAT_CODES.map(f => <option key={f} value={f}>{f}</option>)}</optgroup>
               <optgroup label="Income">{INCOME_CATS.map(c => <option key={c} value={c}>{c}</option>)}</optgroup>
-                  <optgroup label="Expenses">{EXPENSE_CATS.map(c => <option key={c} value={c}>{c}</option>)}</optgroup>
+              <optgroup label="Expenses">{EXPENSE_CATS.map(c => <option key={c} value={c}>{c}</option>)}</optgroup>
+              <optgroup label="Corpus works">{corpusCats.map(c => <option key={c} value={c}>{c}</option>)}</optgroup>
             </select>
           </div>
           {isFlat && (
@@ -885,9 +905,27 @@ function EditModal({ txn, flats, onClose, onSaved, onSplit, onVoided }: {
     },
   })
 
+  const { data: corpusCats = [] } = useQuery({
+    queryKey: ['corpus-cat-names'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('expense_categories')
+        .select('name')
+        .eq('budget_type', 'Corpus')
+        .order('name')
+      return (data ?? []).map(c => c.name as string)
+    },
+  })
+
   function handleFlatChange(val: string) {
     setFlatCode(val)
-    if (!isFlat(val)) { setCategory(val) }
+    if (!isFlat(val)) {
+      setCategory(val)
+      const isCorpusCat = corpusCats.includes(val)
+      setCorpus(isCorpusCat ? 'YES' : 'NO')
+      if (isCorpusCat && activePlans.length === 1) setPlanId(activePlans[0].id)
+      if (!isCorpusCat) setPlanId(null)
+    }
     else { setCategory('Maintenance'); setCorpus('NO'); setPlanId(null) }
   }
 
@@ -964,7 +1002,8 @@ function EditModal({ txn, flats, onClose, onSaved, onSplit, onVoided }: {
               <option value="">— Select —</option>
               <optgroup label="Flats">{FLAT_CODES.map(f => <option key={f} value={f}>{f}</option>)}</optgroup>
               <optgroup label="Income">{INCOME_CATS.map(c => <option key={c} value={c}>{c}</option>)}</optgroup>
-                  <optgroup label="Expenses">{EXPENSE_CATS.map(c => <option key={c} value={c}>{c}</option>)}</optgroup>
+              <optgroup label="Expenses">{EXPENSE_CATS.map(c => <option key={c} value={c}>{c}</option>)}</optgroup>
+              <optgroup label="Corpus works">{corpusCats.map(c => <option key={c} value={c}>{c}</option>)}</optgroup>
             </select>
           </div>
 
@@ -1440,8 +1479,8 @@ function AllTransactionsTab() {
             suppressCellFocus={true}
             onRowClicked={e => {
               if (!e.data) return
-              setSelectedTxn(prev => prev?.id === e.data.id ? null : e.data)
-              setShowEdit(false)
+              setSelectedTxn(e.data)
+              setShowEdit(canWrite && e.data.row_type !== 'VOIDED')
             }}
             getRowStyle={(params: any) => {
               if (params.data?.id === selectedTxn?.id) return { background: 'var(--brand-50)', opacity: 1, textDecoration: 'none' }
