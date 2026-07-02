@@ -989,7 +989,7 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
           p_ids: pendingIds,
         })
         if (rpcErr) {
-          toast.error(`Expense saved, but ${pendingIds.length} pending item(s) could not be cleared — remove them from the Pending tab manually.`)
+          toast.error(`Expense saved, but ${pendingIds.length} pending item(s) could not be cleared. Re-attach their receipts to this expense before deleting them from the Pending tab.`, { duration: 10000 })
         }
       }
     },
