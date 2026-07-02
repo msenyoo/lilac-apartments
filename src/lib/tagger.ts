@@ -45,9 +45,16 @@ const EXPENSE_PATTERNS: Array<[RegExp, string]> = [
   [/\blift\b/i,                              'LIFT'],
   [/internet/i,                              'INTERNET'],
   [/cctv|soakpit/i,                          'CCTV/MOTOR'],
-  [/int on fd|int\.pd|interest/i,            'INTEREST'],
   [/trf to fd|transfer to fd/i,              'FD'],
   [/miscellaneous|marexpenses|augexpenses|monthlyexpenses|octnovexpenses|janexpenses|\bexpenses\b|senthilhdf/i, 'EXPENSES'],
+]
+
+export const INCOME_CATS = ['SB Interest', 'FD Interest']
+
+// FD interest must match before the generic SB pattern
+const INCOME_PATTERNS: Array<[RegExp, string]> = [
+  [/int on fd/i,           'FD Interest'],
+  [/int\.pd|interest/i,    'SB Interest'],
 ]
 
 export interface TagResult {
@@ -97,6 +104,15 @@ export function tagTransaction(
   // 5. Expense patterns (DR only)
   if (crDr === 'DR') {
     for (const [pattern, label] of EXPENSE_PATTERNS) {
+      if (pattern.test(description)) {
+        return { flatCode: label, category: label, corpus: 'NO', confidence: 'Auto' }
+      }
+    }
+  }
+
+  // 6. Income patterns (CR only) — bank interest credits
+  if (crDr === 'CR') {
+    for (const [pattern, label] of INCOME_PATTERNS) {
       if (pattern.test(description)) {
         return { flatCode: label, category: label, corpus: 'NO', confidence: 'Auto' }
       }
