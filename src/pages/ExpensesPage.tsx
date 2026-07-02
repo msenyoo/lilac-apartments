@@ -875,6 +875,26 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
     mutationFn: async (data: ExpenseFormData) => {
       const { data: { user } } = await supabase.auth.getUser()
 
+      const pendingIds = data.line_items
+        .map(li => li.pending_id)
+        .filter((id): id is string => !!id)
+
+      if (pendingIds.length > 0) {
+        const { data: pendingRows, error: pendErr } = await supabase
+          .from('pending_line_items')
+          .select('id, corpus_plan_id')
+          .in('id', pendingIds)
+          .is('voided_at', null)
+        if (pendErr) throw pendErr
+        if ((pendingRows ?? []).length !== pendingIds.length) {
+          throw new Error('Some picked pending items were changed or removed — remove those lines and re-pick from the pending list.')
+        }
+        const headerPlan = data.corpus_plan_id || null
+        if ((pendingRows ?? []).some(r => (r.corpus_plan_id ?? null) !== headerPlan)) {
+          throw new Error('Picked pending items belong to a different corpus plan than this expense — remove those lines or change the plan back.')
+        }
+      }
+
       const headerPayload: any = {
         expense_date:   data.expense_date,
         description:    data.description,
@@ -962,10 +982,6 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
         }
         throw liErr
       }
-
-      const pendingIds = data.line_items
-        .map(li => li.pending_id)
-        .filter((id): id is string => !!id)
 
       if (pendingIds.length > 0) {
         const { error: rpcErr } = await supabase.rpc('attach_pending_items', {
