@@ -536,6 +536,7 @@ function ExpenseDetailPanel({
       <Dialog open onOpenChange={v => { if (!v) onClose() }}>
       <DialogContent className="max-w-[620px] lg:max-w-[960px] max-h-[85vh] rounded-2xl p-3 md:p-5">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
+      <div className="flex flex-col gap-3 min-w-0">
       <div className="surface !p-4 flex flex-col gap-3">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2 flex-wrap pr-6">
@@ -569,7 +570,12 @@ function ExpenseDetailPanel({
               </span>
             } />
           )}
-          {e.notes && !e.notes.startsWith('Imported from') && <Row label="Notes" value={e.notes} />}
+          {e.notes && !e.notes.startsWith('Imported from') && (
+            <div className="flex flex-col gap-1 pt-1">
+              <span className="text-xs" style={{ color: 'var(--ink-400)' }}>Notes</span>
+              <p className="text-[13px] leading-relaxed" style={{ color: 'var(--ink-700)' }}>{e.notes}</p>
+            </div>
+          )}
           {isVoided && e.void_reason && <Row label="Void reason" value={e.void_reason} />}
           {isVoided && e.voided_at && (
             <Row label="Voided on" value={new Date(e.voided_at).toLocaleDateString('en-IN')} />
@@ -633,6 +639,10 @@ function ExpenseDetailPanel({
         )}
       </div>
 
+      <AttachmentsSection expenseId={e.id} />
+      </div>
+
+      <div className="flex flex-col gap-3 min-w-0">
       {e.line_items.length > 0 && (
         <div className="surface !p-4 flex flex-col gap-3">
           <div className="flex items-center justify-between">
@@ -675,7 +685,7 @@ function ExpenseDetailPanel({
         </div>
       )}
 
-      <AttachmentsSection expenseId={e.id} />
+      </div>
       </div>
       </DialogContent>
       </Dialog>
