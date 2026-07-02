@@ -113,6 +113,7 @@ const lineItemSchema = z.object({
   paid_date:      z.string().optional(),
   payment_mode:   z.string().optional(),
   reference_no:   z.string().optional(),
+  pending_id:     z.string().optional(),
 })
 
 const expenseSchema = z.object({
@@ -961,10 +962,25 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
         }
         throw liErr
       }
+
+      const pendingIds = data.line_items
+        .map(li => li.pending_id)
+        .filter((id): id is string => !!id)
+
+      if (pendingIds.length > 0) {
+        const { error: rpcErr } = await supabase.rpc('attach_pending_items', {
+          p_expense_id: expenseId,
+          p_ids: pendingIds,
+        })
+        if (rpcErr) {
+          toast.error(`Expense saved, but ${pendingIds.length} pending item(s) could not be cleared — remove them from the Pending tab manually.`)
+        }
+      }
     },
     onSuccess: () => {
       toast.success(isEditMode ? 'Expense updated' : 'Expense saved')
       qc.invalidateQueries({ queryKey: ['expenses'] })
+      qc.invalidateQueries({ queryKey: ['pending-line-items'] })
       reset()
       onClose()
     },
