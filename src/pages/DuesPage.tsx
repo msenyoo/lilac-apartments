@@ -385,8 +385,8 @@ function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat
   return (
     <>
     <div className="fixed inset-0 bg-black/30 z-40" onClick={onClose} />
-    <div className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-2rem)] max-w-[520px] max-h-[85vh] rounded-2xl bg-white shadow-2xl overflow-hidden flex">
-    <div className="flex-1 min-h-0 overflow-y-auto p-3 md:p-4 flex flex-col gap-3">
+    <div className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-2rem)] max-w-[520px] lg:max-w-[900px] max-h-[85vh] rounded-2xl bg-white shadow-2xl overflow-hidden flex">
+    <div className="flex-1 min-h-0 overflow-y-auto p-3 md:p-4 grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
       <div className="surface !p-4 flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <div>
@@ -485,7 +485,7 @@ function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat
         {!payments?.length ? (
           <p className="text-[13px]" style={{ color: 'var(--ink-400)' }}>No payments yet</p>
         ) : (
-          <div className="flex flex-col gap-2 overflow-y-auto" style={{ maxHeight: 220 }}>
+          <div className="flex flex-col gap-2 overflow-y-auto max-h-[220px] lg:max-h-[55vh]">
             {payments.map(p => (
               <div key={p.id} className="flex justify-between text-[13px]">
                 <div>

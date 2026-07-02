@@ -534,8 +534,8 @@ function ExpenseDetailPanel({
     <>
       <div className="fixed inset-0 bg-black/30 z-40" onClick={onClose} />
 
-      <div className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-2rem)] max-w-[620px] max-h-[85vh] rounded-2xl bg-white shadow-2xl overflow-hidden flex">
-      <div className="flex-1 min-h-0 overflow-y-auto p-3 md:p-5 flex flex-col gap-3">
+      <div className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-2rem)] max-w-[620px] lg:max-w-[960px] max-h-[85vh] rounded-2xl bg-white shadow-2xl overflow-hidden flex">
+      <div className="flex-1 min-h-0 overflow-y-auto p-3 md:p-5 grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
       <div className="surface !p-4 flex flex-col gap-3">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2 flex-wrap">
