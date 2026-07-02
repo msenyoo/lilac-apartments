@@ -190,12 +190,12 @@ function RateChangeModal({ flat, onClose, onSaved }: { flat: Flat; onClose: () =
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
-        <div className="flex items-center justify-between p-5 border-b hairline">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[85vh] overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between p-5 border-b hairline shrink-0">
           <h3 className="font-semibold">Change rate — {flat.code}</h3>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[var(--ink-100)]"><X size={18} /></button>
         </div>
-        <div className="p-5 space-y-4">
+        <div className="p-5 space-y-4 overflow-y-auto flex-1 min-h-0">
           <div>
             <label className="ds-lbl">New monthly rate (₹)</label>
             <input type="number" value={rate} onChange={e => setRate(e.target.value)}
@@ -366,12 +366,12 @@ function AddResidentModal({ flats, onClose, onSaved }: { flats: any[]; onClose: 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-5 border-b hairline">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[85vh] overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between p-5 border-b hairline shrink-0">
           <h3 className="font-semibold">Add resident</h3>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[var(--ink-100)]"><X size={18} /></button>
         </div>
-        <div className="p-5 space-y-4">
+        <div className="p-5 space-y-4 overflow-y-auto flex-1 min-h-0">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="ds-lbl">Flat *</label>

@@ -144,10 +144,13 @@
 *::-webkit-scrollbar-track { background: transparent; }
 
 /* ── Animations ── */
-.fade-in { animation: fadeIn .4s cubic-bezier(.2,.7,.3,1) both; }
-@keyframes fadeIn { from { transform: translateY(7px); } to { transform: none; } }
-.pop-in  { animation: popIn .22s cubic-bezier(.2,.9,.3,1.2) both; }
-@keyframes popIn  { from { transform: scale(.97) translateY(6px); } to { transform: none; } }
+/* "backwards" (not "both") so the animation's transform is dropped once it
+   ends — a retained transform turns the element into the containing block
+   for position:fixed children, breaking viewport-centered popups. */
+.fade-in { animation: fadeIn .4s cubic-bezier(.2,.7,.3,1) backwards; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: none; } }
+.pop-in  { animation: popIn .22s cubic-bezier(.2,.9,.3,1.2) backwards; }
+@keyframes popIn  { from { opacity: 0; transform: scale(.97) translateY(6px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: .001ms !important; transition-duration: .001ms !important; }
 }

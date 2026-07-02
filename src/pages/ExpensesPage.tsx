@@ -534,7 +534,8 @@ function ExpenseDetailPanel({
     <>
       <div className="fixed inset-0 bg-black/30 z-40" onClick={onClose} />
 
-      <div className="fixed inset-x-0 bottom-0 z-50 max-h-[88vh] overflow-y-auto rounded-t-2xl bg-white p-3 flex flex-col gap-3 md:inset-x-auto md:bottom-auto md:left-1/2 md:top-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-[620px] md:max-w-[92vw] md:max-h-[85vh] md:rounded-2xl md:p-5 md:shadow-2xl">
+      <div className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-2rem)] max-w-[620px] max-h-[85vh] rounded-2xl bg-white shadow-2xl overflow-hidden flex">
+      <div className="flex-1 min-h-0 overflow-y-auto p-3 md:p-5 flex flex-col gap-3">
       <div className="surface !p-4 flex flex-col gap-3">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2 flex-wrap">
@@ -676,6 +677,7 @@ function ExpenseDetailPanel({
       )}
 
       <AttachmentsSection expenseId={e.id} />
+      </div>
       </div>
 
       {/* Void confirm dialog */}
@@ -3489,7 +3491,7 @@ function PendingItemDialog({ item, onClose }: { item?: PendingItem; onClose: () 
 
   return (
     <Dialog open onOpenChange={async (o) => { if (!o) { await cleanupOrphan(); onClose() } }}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Edit pending item' : 'Add pending item'}</DialogTitle>
         </DialogHeader>

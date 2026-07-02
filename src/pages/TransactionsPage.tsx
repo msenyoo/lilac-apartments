@@ -972,8 +972,8 @@ function EditModal({ txn, flats, onClose, onSaved, onSplit, onVoided }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
-        <div className="flex items-center justify-between p-5 border-b hairline">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[85vh] overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between p-5 border-b hairline shrink-0">
           <div>
             <h3 className="font-semibold">Edit transaction</h3>
             <p className="text-sm text-slate-500 mt-0.5">{txn.value_date} · {formatINR(txn.amount)}</p>
@@ -981,7 +981,7 @@ function EditModal({ txn, flats, onClose, onSaved, onSplit, onVoided }: {
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[var(--ink-100)]"><X size={18} /></button>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="p-5 space-y-4 overflow-y-auto flex-1 min-h-0">
           {/* Full description + copy */}
           <div className="rounded-lg p-3" style={{ background: 'var(--ink-50)' }}>
             <p className="text-xs text-slate-600 break-words">{txn.description}</p>
@@ -1145,8 +1145,8 @@ function SplitModal({ txn, onClose, onSaved, flats }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-5 border-b hairline">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between p-5 border-b hairline shrink-0">
           <div>
             <h3 className="font-semibold">Split transaction</h3>
             <p className="text-sm text-slate-500 mt-0.5">Original: {formatINR(txn.amount)}</p>
@@ -1154,7 +1154,7 @@ function SplitModal({ txn, onClose, onSaved, flats }: {
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[var(--ink-100)]"><X size={18} /></button>
         </div>
 
-        <div className="p-5 space-y-3">
+        <div className="p-5 space-y-3 overflow-y-auto flex-1 min-h-0">
           {rows.map((row, i) => (
             <div key={i} className="flex gap-2 items-end">
               <div className="flex-1">
