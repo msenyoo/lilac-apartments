@@ -12,7 +12,7 @@ import * as XLSX from 'xlsx'
 import { supabase, Transaction, ReviewEntry } from '@/lib/supabase'
 import {
   parseStatement, tagTransaction, getFiscalLabel,
-  getFiscalYear, getFiscalMonth, bankDateToISO, formatINR, FLAT_CODES,
+  getFiscalYear, getFiscalMonth, bankDateToISO, formatINR, FLAT_CODES, INCOME_CATS,
 } from '@/lib/tagger'
 import { useRoleCtx } from '@/contexts/RoleContext'
 import { toast } from 'sonner'
@@ -25,7 +25,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 
 type Tab = 'upload' | 'review' | 'all'
 
-const EXPENSE_CATS = ['SALARY','EB','CIVIL','SEWAGE','LIFT SERVICE','LIFT','INTERNET','EXPENSES','INTEREST','FD','CCTV/MOTOR']
+const EXPENSE_CATS = ['SALARY','EB','CIVIL','SEWAGE','LIFT SERVICE','LIFT','INTERNET','EXPENSES','FD','CCTV/MOTOR']
 
 // ── MAIN PAGE ─────────────────────────────────────────────────
 export default function TransactionsPage() {
@@ -312,7 +312,7 @@ function ImportPreview({ preview, fileName, onConfirm, onCancel, onRowEdited }: 
     },
   })
   const flatCodeOptions = useMemo(() => ['', ...flats.map(f => f.code)], [flats])
-  const categoryOptions = useMemo(() => ['', 'Maintenance', 'Corpus', ...EXPENSE_CATS], [])
+  const categoryOptions = useMemo(() => ['', 'Maintenance', 'Corpus', ...INCOME_CATS, ...EXPENSE_CATS], [])
   const flatIdByCode = useMemo(() => new Map(flats.map(f => [f.code, f.id])), [flats])
 
   const colDefs = useMemo((): ColDef<any>[] => [
@@ -776,7 +776,8 @@ function ReviewItem({ item, flats, onSaved }: { item: ReviewEntry; flats: any[];
             >
               <option value="">— Select —</option>
               <optgroup label="Flats">{FLAT_CODES.map(f => <option key={f} value={f}>{f}</option>)}</optgroup>
-              <optgroup label="Expenses">{EXPENSE_CATS.map(c => <option key={c} value={c}>{c}</option>)}</optgroup>
+              <optgroup label="Income">{INCOME_CATS.map(c => <option key={c} value={c}>{c}</option>)}</optgroup>
+                  <optgroup label="Expenses">{EXPENSE_CATS.map(c => <option key={c} value={c}>{c}</option>)}</optgroup>
             </select>
           </div>
           {isFlat && (
@@ -962,7 +963,8 @@ function EditModal({ txn, flats, onClose, onSaved, onSplit, onVoided }: {
               className="w-full ds-field">
               <option value="">— Select —</option>
               <optgroup label="Flats">{FLAT_CODES.map(f => <option key={f} value={f}>{f}</option>)}</optgroup>
-              <optgroup label="Expenses">{EXPENSE_CATS.map(c => <option key={c} value={c}>{c}</option>)}</optgroup>
+              <optgroup label="Income">{INCOME_CATS.map(c => <option key={c} value={c}>{c}</option>)}</optgroup>
+                  <optgroup label="Expenses">{EXPENSE_CATS.map(c => <option key={c} value={c}>{c}</option>)}</optgroup>
             </select>
           </div>
 
@@ -1129,6 +1131,7 @@ function SplitModal({ txn, onClose, onSaved, flats }: {
                 >
                   <option value="">— Select —</option>
                   <optgroup label="Flats">{FLAT_CODES.map(f => <option key={f} value={f}>{f}</option>)}</optgroup>
+                  <optgroup label="Income">{INCOME_CATS.map(c => <option key={c} value={c}>{c}</option>)}</optgroup>
                   <optgroup label="Expenses">{EXPENSE_CATS.map(c => <option key={c} value={c}>{c}</option>)}</optgroup>
                 </select>
               </div>
