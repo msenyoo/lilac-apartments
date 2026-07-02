@@ -5,7 +5,7 @@ import { useRoleCtx } from '@/contexts/RoleContext'
 import { useForm, useFieldArray, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Plus, Trash2, Download, Receipt, Users, Building, X, GitMerge, CheckCircle2, Paperclip, RefreshCcw, Coins, Upload, Loader2, Trash, Pencil, Ban, Unlink, AlertTriangle, PiggyBank, ListChecks, ListPlus } from 'lucide-react'
+import { Plus, Trash2, Download, Receipt, Users, Building, X, GitMerge, CheckCircle2, Paperclip, RefreshCcw, Coins, Upload, Loader2, Trash, Pencil, Ban, Unlink, AlertTriangle, PiggyBank, ListChecks, ListPlus, Eye } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
@@ -534,7 +534,7 @@ function ExpenseDetailPanel({
     <>
       <div className="fixed inset-0 bg-black/30 z-40" onClick={onClose} />
 
-      <div className="fixed inset-x-0 bottom-0 z-50 max-h-[85vh] overflow-y-auto rounded-t-2xl bg-white p-3 flex flex-col gap-3 md:inset-x-auto md:right-0 md:top-0 md:bottom-0 md:max-h-none md:h-full md:w-[400px] md:rounded-none md:p-4 md:shadow-2xl">
+      <div className="fixed inset-x-0 bottom-0 z-50 max-h-[88vh] overflow-y-auto rounded-t-2xl bg-white p-3 flex flex-col gap-3 md:inset-x-auto md:bottom-auto md:left-1/2 md:top-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-[620px] md:max-w-[92vw] md:max-h-[85vh] md:rounded-2xl md:p-5 md:shadow-2xl">
       <div className="surface !p-4 flex flex-col gap-3">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2 flex-wrap">
@@ -2925,11 +2925,18 @@ function AddPettyCashDialog({ open, onClose, onSave }: {
 
 // â"€â"€ Attachments section â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 
+const IMAGE_EXT = /\.(jpe?g|png|webp|heic|gif)$/i
+function isImageAttachment(att: Attachment) {
+  return IMAGE_EXT.test(att.file_name) || IMAGE_EXT.test(att.file_url)
+}
+
 function AttachmentsSection({ expenseId }: { expenseId: string }) {
   const { canWrite } = useRoleCtx()
   const qc = useQueryClient()
   const [uploading, setUploading] = useState(false)
   const [uploadErr, setUploadErr] = useState('')
+  const [preview, setPreview] = useState<{ url: string; name: string } | null>(null)
+  const [previewLoading, setPreviewLoading] = useState<string | null>(null)
 
   const { data: attachments = [] } = useQuery({
     queryKey: ['attachments', expenseId],
@@ -2981,6 +2988,15 @@ function AttachmentsSection({ expenseId }: { expenseId: string }) {
     if (data?.signedUrl) window.open(data.signedUrl, '_blank')
   }
 
+  async function handlePreview(att: Attachment) {
+    setPreviewLoading(att.id)
+    const { data } = await supabase.storage
+      .from('expense-attachments')
+      .createSignedUrl(att.file_url, 300)
+    setPreviewLoading(null)
+    if (data?.signedUrl) setPreview({ url: data.signedUrl, name: att.file_name })
+  }
+
   return (
     <div className="surface !p-4 flex flex-col gap-3">
       <div className="flex items-center gap-2">
@@ -2993,22 +3009,36 @@ function AttachmentsSection({ expenseId }: { expenseId: string }) {
 
       {attachments.length > 0 && (
         <div className="flex flex-col gap-1">
-          {attachments.map(att => (
-            <div key={att.id} className="flex items-center gap-2 p-2 rounded-lg text-xs" style={{ background: 'var(--ink-50)' }}>
-              <span className="flex-1 truncate" style={{ color: 'var(--ink-700)' }}>{att.file_name}</span>
-              {att.file_size != null && (
-                <span className="shrink-0" style={{ color: 'var(--ink-400)' }}>{(att.file_size / 1024).toFixed(0)} KB</span>
-              )}
-              <button onClick={() => handleDownload(att)} className="text-violet-600 hover:text-violet-800 shrink-0">
-                <Download size={12} />
-              </button>
-              {canWrite && (
-                <button onClick={() => handleDelete(att)} className="hover:text-red-500 shrink-0" style={{ color: 'var(--ink-400)' }}>
-                  <Trash size={12} />
+          {attachments.map(att => {
+            const canPreview = isImageAttachment(att)
+            return (
+              <div key={att.id} className="flex items-center gap-2 p-2 rounded-lg text-xs" style={{ background: 'var(--ink-50)' }}>
+                <button
+                  onClick={() => canPreview ? handlePreview(att) : handleDownload(att)}
+                  className="flex-1 truncate text-left hover:underline"
+                  style={{ color: 'var(--ink-700)' }}
+                >
+                  {att.file_name}
                 </button>
-              )}
-            </div>
-          ))}
+                {att.file_size != null && (
+                  <span className="shrink-0" style={{ color: 'var(--ink-400)' }}>{(att.file_size / 1024).toFixed(0)} KB</span>
+                )}
+                {canPreview && (
+                  <button onClick={() => handlePreview(att)} className="text-violet-600 hover:text-violet-800 shrink-0" aria-label="Preview image">
+                    {previewLoading === att.id ? <Loader2 size={12} className="animate-spin" /> : <Eye size={12} />}
+                  </button>
+                )}
+                <button onClick={() => handleDownload(att)} className="text-violet-600 hover:text-violet-800 shrink-0" aria-label="Download">
+                  <Download size={12} />
+                </button>
+                {canWrite && (
+                  <button onClick={() => handleDelete(att)} className="hover:text-red-500 shrink-0" style={{ color: 'var(--ink-400)' }} aria-label="Delete">
+                    <Trash size={12} />
+                  </button>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
 
@@ -3034,6 +3064,30 @@ function AttachmentsSection({ expenseId }: { expenseId: string }) {
           </div>
           {uploadErr && <p className="text-xs text-red-500">{uploadErr}</p>}
         </>
+      )}
+
+      {preview && (
+        <div
+          className="fixed inset-0 z-[70] flex flex-col items-center justify-center bg-black/80 p-4"
+          onClick={() => setPreview(null)}
+        >
+          <div className="flex items-center gap-3 mb-3 max-w-[92vw]">
+            <p className="text-sm text-white truncate">{preview.name}</p>
+            <button
+              onClick={ev => { ev.stopPropagation(); setPreview(null) }}
+              className="p-1.5 rounded-full bg-white/20 hover:bg-white/30 text-white shrink-0"
+              aria-label="Close preview"
+            >
+              <X size={16} />
+            </button>
+          </div>
+          <img
+            src={preview.url}
+            alt={preview.name}
+            className="max-h-[80vh] max-w-[92vw] object-contain rounded-lg"
+            onClick={ev => ev.stopPropagation()}
+          />
+        </div>
       )}
     </div>
   )
