@@ -5,7 +5,7 @@ import { useRoleCtx } from '@/contexts/RoleContext'
 import { useForm, useFieldArray, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Plus, Trash2, Download, Receipt, Users, Building, X, GitMerge, CheckCircle2, Paperclip, RefreshCcw, Coins, Upload, Loader2, Trash, Pencil, Ban, Unlink, AlertTriangle, PiggyBank, ListChecks, ListPlus, Eye } from 'lucide-react'
+import { Plus, Trash2, Download, Receipt, Users, Building, X, GitMerge, CheckCircle2, Paperclip, RefreshCcw, Coins, Upload, Loader2, Trash, Pencil, Ban, Unlink, AlertTriangle, PiggyBank, ListChecks, ListPlus, Eye, Share2 } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
@@ -218,6 +218,8 @@ function DayBook() {
   const [detailId, setDetailId] = useState<string | null>(null)
   const [showVoided, setShowVoided] = useState(false)
   const [showPending, setShowPending] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [sharing, setSharing] = useState(false)
 
   const { data: expenses = [], isLoading } = useQuery({
     queryKey: ['expenses', showVoided, showPending],
@@ -266,6 +268,42 @@ function DayBook() {
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Day Book')
     XLSX.writeFile(wb, 'Expenses_DayBook.xlsx')
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  const selectedExpenses = expenses.filter(e => selectedIds.has(e.id) && !e.voided_at)
+  const selectedTotal = selectedExpenses.reduce((s, e) => s + e.amount, 0)
+
+  async function handleSharePdf() {
+    if (!selectedExpenses.length) return
+    setSharing(true)
+    try {
+      const [{ pdf }, { ApprovalPacketDoc }, { buildPacketExpenses, sharePdf }] = await Promise.all([
+        import('@react-pdf/renderer'),
+        import('@/components/reports/ApprovalPacketPdf'),
+        import('@/lib/approvalPacket'),
+      ])
+      const packet = await buildPacketExpenses(selectedExpenses, expenseStatus)
+      const generated = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+      const blob = await pdf(<ApprovalPacketDoc expenses={packet} generated={generated} />).toBlob()
+      const filename = `Approval_${new Date().toISOString().slice(0, 10)}.pdf`
+      const result = await sharePdf(blob, filename)
+      toast.success(result === 'shared'
+        ? 'Share sheet opened — pick your approval group'
+        : 'PDF downloaded — attach it in your WhatsApp approval group')
+      setSelectedIds(new Set())
+    } catch (e: any) {
+      toast.error(e.message ?? 'Could not generate the PDF')
+    } finally {
+      setSharing(false)
+    }
   }
 
   // Summary cards — exclude voided from totals
@@ -331,10 +369,19 @@ function DayBook() {
             )}
           </label>
         </div>
-        <button onClick={handleExport} disabled={!expenses.length}
-          className="flex items-center gap-1.5 text-sm text-brand-700 hover:text-brand-900 disabled:opacity-40">
-          <Download size={14} /> Export
-        </button>
+        <div className="flex items-center gap-3">
+          {selectedIds.size > 0 && (
+            <button onClick={handleSharePdf} disabled={sharing}
+              className="flex items-center gap-1.5 text-sm font-medium text-brand-700 hover:text-brand-900 disabled:opacity-40">
+              <Share2 size={14} />
+              {sharing ? 'Generating…' : `Share PDF (${selectedExpenses.length}) · ${formatINR(selectedTotal)}`}
+            </button>
+          )}
+          <button onClick={handleExport} disabled={!expenses.length}
+            className="flex items-center gap-1.5 text-sm text-brand-700 hover:text-brand-900 disabled:opacity-40">
+            <Download size={14} /> Export
+          </button>
+        </div>
       </div>
 
       {expenses.length === 0 ? (
@@ -356,10 +403,20 @@ function DayBook() {
               const payeeName = e.payee_name_raw ?? e.vendor?.name ?? e.staff_member?.name ?? ''
               const isVoided = !!e.voided_at
               return (
+                <div key={e.id} className={`flex items-center ${detailId === e.id ? 'bg-[var(--brand-50)]' : ''}`}>
+                  {!isVoided ? (
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(e.id)}
+                      onChange={() => toggleSelect(e.id)}
+                      className="w-4 h-4 ml-4 shrink-0"
+                    />
+                  ) : (
+                    <span className="w-4 ml-4 shrink-0" />
+                  )}
                 <button
-                  key={e.id}
                   onClick={() => setDetailId(d => d === e.id ? null : e.id)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-[var(--ink-50)] text-left transition-colors ${detailId === e.id ? 'bg-[var(--brand-50)]' : ''} ${isVoided ? 'opacity-60' : ''}`}
+                  className={`flex-1 min-w-0 flex items-center gap-3 px-4 py-3 hover:bg-[var(--ink-50)] text-left transition-colors ${isVoided ? 'opacity-60' : ''}`}
                 >
                   <div className="shrink-0 text-center w-10">
                     <p className={`text-xs font-bold leading-tight ${isVoided ? 'line-through text-muted-foreground' : ''}`} style={isVoided ? undefined : { color: 'var(--ink-800)' }}>
@@ -399,6 +456,7 @@ function DayBook() {
                     <span className={`text-sm font-semibold ${isVoided ? 'line-through text-muted-foreground' : ''}`} style={isVoided ? undefined : { color: 'var(--ink-800)' }}>{formatINR(e.amount)}</span>
                   </div>
                 </button>
+                </div>
               )
             })}
           </div>
