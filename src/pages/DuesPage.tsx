@@ -56,7 +56,7 @@ export default function DuesPage() {
     },
   })
 
-  const totalPending = (data ?? []).reduce((s, d) => s + Math.max(0, d.pending), 0)
+  const totalPending = (data ?? []).reduce((s, d) => s + Math.max(0, d.total_outstanding), 0)
   const counts = (data ?? []).reduce((acc, d) => {
     if (d.total_outstanding <= 0) acc.Clear += 1
     else if (d.collected_fy > 0) acc.Partial += 1
@@ -201,7 +201,7 @@ export default function DuesPage() {
       {/* Summary cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
         {[
-          { label: 'Total pending',  value: formatINR(totalPending),   tone: 'bad',  onClick: () => setAgingTab('Due') },
+          { label: 'Total outstanding', value: formatINR(totalPending),   tone: 'bad',  onClick: () => setAgingTab('Due') },
           { label: 'Overdue 1 mo+',  value: String(counts.Overdue),    tone: 'bad',  onClick: () => setAgingTab('30d+') },
           { label: 'Partial',        value: String(counts.Partial),    tone: 'warn', onClick: () => setAgingTab('Partial') },
           { label: 'Clear',          value: String(counts.Clear),      tone: 'ok',   onClick: () => setAgingTab('Clear') },
