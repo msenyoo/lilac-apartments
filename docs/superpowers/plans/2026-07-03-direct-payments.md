@@ -51,7 +51,7 @@
   - `void_direct_pairs(p_expense_id uuid, p_cr_id uuid DEFAULT NULL) RETURNS jsonb` → `{"voided": n}`; raises `'forbidden'`, `'contribution not found'` (when `p_cr_id` given and not found).
   - `v_expense_reconciliation` gains columns `direct_total integer`, `net_amount integer`; status can now be `'Direct'`.
 
-- [ ] **Step 1: Write the migration file exactly**
+- [x] **Step 1: Write the migration file exactly**
 
 ```sql
 -- 035: Direct payments — owner pays vendor directly.
@@ -230,7 +230,7 @@ GRANT EXECUTE ON FUNCTION public.add_direct_contribution(uuid, uuid, integer, uu
 GRANT EXECUTE ON FUNCTION public.void_direct_pairs(uuid, uuid) TO authenticated;
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add supabase/migrations/035_direct_payments.sql
@@ -261,16 +261,16 @@ Invoke-RestMethod -Method POST -Uri "https://api.supabase.com/v1/projects/$ref/d
 
 For short queries, build `$sql` as a single-quoted PowerShell here-string instead of reading a file.
 
-- [ ] **Step 1: Preflight — check dev has the prerequisites**
+- [x] **Step 1: Preflight — check dev has the prerequisites** *(dev was missing `expenses.voided_at` — applied 027 to dev)*
 
 Query: `SELECT proname FROM pg_proc WHERE proname IN ('get_my_role','generate_expense_voucher');` and `SELECT column_name FROM information_schema.columns WHERE table_name='transactions' AND column_name IN ('expense_id','split_ref_code','source','row_type');`
 Expected: both functions and all four columns present. If `get_my_role` or `expense_id` is missing, apply the earlier migration that defines it (open `supabase/migrations/` and apply in number order) before continuing.
 
-- [ ] **Step 2: Apply the migration to dev**
+- [x] **Step 2: Apply the migration to dev**
 
 POST the full content of `supabase/migrations/035_direct_payments.sql`. Expected: empty/null response.
 
-- [ ] **Step 3: Run the fixture test (single DO block — asserts and cleans up)**
+- [x] **Step 3: Run the fixture test (single DO block — asserts and cleans up)** *(passed; `get_my_role()` returns NULL for the Management API session so the admin check doesn't raise — no workaround needed; fixture needed `corpus_target` in the flats insert)*
 
 ```sql
 DO $$
@@ -340,7 +340,7 @@ Note: `add_direct_contribution` checks `get_my_role() = 'admin'`. The Management
 
 Expected output: NOTICE `ALL DIRECT-PAYMENT TESTS PASSED`; the flat/expense/transactions fixture rows deleted.
 
-- [ ] **Step 4: Confirm nothing left behind on dev**
+- [x] **Step 4: Confirm nothing left behind on dev**
 
 Query: `SELECT count(*) FROM flats WHERE code='ZZTEST';` → 0. `SELECT count(*) FROM expenses WHERE description='DP fixture';` → 0.
 
@@ -360,7 +360,7 @@ Query: `SELECT count(*) FROM flats WHERE code='ZZTEST';` → 0. `SELECT count(*)
   - `export function DirectContributionsSection(props: { expenseId: string | null; expenseAmount: number; corpusPlanId: string | null; staged: StagedContribution[]; onStagedChange: (rows: StagedContribution[]) => void })`
   - `export function directTotalOf(txns: { amount: number; cr_dr: string; source: string; row_type: string }[] | undefined): number`
 
-- [ ] **Step 1: Create the component**
+- [x] **Step 1: Create the component**
 
 Behavior spec (write real code following existing project style — native selects, `var(--ink-*)` styling, react-query):
 
@@ -372,7 +372,7 @@ Behavior spec (write real code following existing project style — native selec
 - Footer line always visible: `Contributions {formatINR(total)} · Remainder {formatINR(expenseAmount - total)}`; when `total > expenseAmount` render the remainder in red — the parent uses this same condition to block save.
 - `directTotalOf` helper: sums `amount` over rows where `cr_dr==='CR' && source==='Direct' && row_type!=='VOIDED'`; returns 0 for undefined.
 
-- [ ] **Step 2: Wire into ExpensesPage**
+- [x] **Step 2: Wire into ExpensesPage**
 
 1. Line ~141: `const PAYMENT_MODES = ['Cash', 'Online', 'Bank Transfer', 'Cheque', 'Direct']`. Where the mode `<option>`s render, show label `Direct (owner paid)` for the `Direct` value.
 2. In `AddExpenseDialog`: add state `const [staged, setStaged] = useState<StagedContribution[]>([])`; render `<DirectContributionsSection expenseId={isEditMode ? editExpense!.id : null} expenseAmount={Number(watchedAmount) || 0} corpusPlanId={watch('corpus_plan_id') || null} staged={staged} onStagedChange={setStaged} />` between the payment-details block and line items.
@@ -380,7 +380,7 @@ Behavior spec (write real code following existing project style — native selec
 4. In the create branch of the mutation (after line-items insert and `attach_pending_items`), loop staged rows sequentially calling `add_direct_contribution`; count failures; if any, `toast.error` with the verbatim Add-mode copy, replacing `N`. Invalidate `['expenses']`, `['direct-crs', expenseId]`, `['unreconciled-expenses']`.
 5. When `payment_mode === 'Direct'`: hide the reference-no and cheque-number inputs (like Cash handling if present; otherwise just conditionally render).
 
-- [ ] **Step 3: Typecheck + commit**
+- [x] **Step 3: Typecheck + commit**
 
 Run: `npx tsc --noEmit` → clean.
 
