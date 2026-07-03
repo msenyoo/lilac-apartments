@@ -400,13 +400,13 @@ git commit -m "feat(expenses): direct contributions section in Add/Edit Expense"
 - Consumes: `directTotalOf` from Task 3; view/RPCs from Task 1.
 - Produces: `expenseStatus(e)` may return `'Direct'`; `Expense` interface gains `direct_txns`.
 
-- [ ] **Step 1: Day Book query + type**
+- [x] **Step 1: Day Book query + type**
 
 - `Expense` interface (~line 43): add
   `direct_txns: { id: string; amount: number; cr_dr: string; source: string; row_type: string; flat_code: string | null; plan_id: string | null; value_date: string }[]`.
 - Day Book select (~line 227): add embed line `direct_txns:transactions!expense_id(id,amount,cr_dr,source,row_type,flat_code,plan_id,value_date),` — NOTE: `!expense_id` disambiguates from the forward `transaction:transaction_id` embed. If PostgREST errors with ambiguity, use the FK constraint name `transactions!transactions_expense_id_fkey`.
 
-- [ ] **Step 2: Status + chips**
+- [x] **Step 2: Status + chips**
 
 ```typescript
 function expenseStatus(e: Expense) {
@@ -420,12 +420,12 @@ function expenseStatus(e: Expense) {
 
 Add to `STATUS_STYLE`: `Direct: 'bg-blue-100 text-blue-700'` (and a matching `STATUS_INLINE` entry if that map requires one — mirror how `Reconciled` is styled).
 
-- [ ] **Step 3: Detail panel + void cascade**
+- [x] **Step 3: Detail panel + void cascade**
 
 - In `ExpenseDetailPanel`, when `directTotalOf(e.direct_txns) > 0`, render a "Direct contributions" block: one line per non-voided CR (`{flat_code} · {formatINR(amount)} · {plan_id ? 'Corpus' : 'Maintenance'}`), then `Remainder {formatINR(e.amount - direct)}`.
 - In `handleVoid` (~line 503): after the expense update succeeds, if `directTotalOf(e.direct_txns) > 0` call `supabase.rpc('void_direct_pairs', { p_expense_id: e.id })`; on RPC error `toast.error` with the verbatim Void copy. Then the existing invalidations plus `['direct-crs', e.id]`.
 
-- [ ] **Step 4: Reconcile tab — net everywhere**
+- [x] **Step 4: Reconcile tab — net everywhere**
 
 - `UnreconciledExpense` interface: add `direct_txns` (same shape as Task 4 Step 1).
 - `unreconciled-expenses` query (~line 1527): add the same embed; add `.neq('payment_mode', 'Direct')`; after fetch, `filter(e => netOf(e) > 0)` where `const netOf = (e) => e.amount - directTotalOf(e.direct_txns)`.
@@ -437,7 +437,7 @@ Add to `STATUS_STYLE`: `Direct: 'bg-blue-100 text-blue-700'` (and a matching `ST
 - In the expense list rows, when `directTotalOf(e.direct_txns) > 0` show `formatINR(netOf(e))` as the amount with a sub-line `net of {formatINR(directTotalOf(e.direct_txns))} direct`.
 - Match mutation itself is unchanged (links the DR to the expense).
 
-- [ ] **Step 5: Typecheck + commit**
+- [x] **Step 5: Typecheck + commit**
 
 Run: `npx tsc --noEmit` → clean.
 
@@ -458,18 +458,18 @@ git commit -m "feat(expenses): Direct status + net-amount reconciliation"
 - Consumes: `Transaction.source` (already in the type).
 - Produces: none downstream.
 
-- [ ] **Step 1: Guard the void action**
+- [x] **Step 1: Guard the void action**
 
 - At the void button render (~1441 `canWrite && selectedTxn.row_type !== 'VOIDED'`): add `&& selectedTxn.source !== 'Direct'`.
 - Where the button would have been, when `selectedTxn.source === 'Direct'` render a muted note: `Created by a direct payment — void it from the expense instead.`
 - In the second void path (~line 1127, split/edit dialog): early-return with `toast.error('Direct payment rows are managed from their expense')` if `txn.source === 'Direct'`.
 
-- [ ] **Step 2: Help bullet**
+- [x] **Step 2: Help bullet**
 
 In `src/components/HelpButton.tsx` `/expenses` bullets, append:
 `'Payment mode "Direct (owner paid)" records an owner paying the vendor directly: add contributions per flat and each creates a flat credit + matching debit (net zero to the bank). The bank transfer for any remainder reconciles at the net amount.'`
 
-- [ ] **Step 3: Typecheck + commit**
+- [x] **Step 3: Typecheck + commit**
 
 Run: `npx tsc --noEmit` → clean.
 
@@ -484,15 +484,15 @@ git commit -m "feat(transactions): guard direct-payment rows from standalone voi
 
 **Files:** none new (prod DB `aulttcsvxzcwyceezzpz`; browser verification)
 
-- [ ] **Step 1: Snapshot prod bank balance**
+- [x] **Step 1: Snapshot prod bank balance** *(₹3,93,093.69 — unchanged after full e2e + cleanup)*
 
 Management API (prod ref) query: `SELECT COALESCE(SUM(CASE WHEN cr_dr='CR' THEN amount ELSE -amount END),0) FROM transactions WHERE row_type <> 'VOIDED';` — record the number.
 
-- [ ] **Step 2: Apply migration 035 to prod**
+- [x] **Step 2: Apply migration 035 to prod**
 
 Same PowerShell pattern with `$ref = "aulttcsvxzcwyceezzpz"`. Expected: empty response. Verify: `SELECT proname FROM pg_proc WHERE proname IN ('add_direct_contribution','void_direct_pairs');` returns both.
 
-- [ ] **Step 3: Browser end-to-end on the running dev server (prod DB)**
+- [x] **Step 3: Browser end-to-end on the running dev server (prod DB)** *(use `npm run dev:prod` — plain `npm run dev` targets the dev project via .env.dev.local)*
 
 1. Add Expense: description `Direct payment verification (temp)`, payee Other/`Test Vendor`, amount `1000`, mode `Bank Transfer`, one line item; add one staged contribution: any flat, `200`, Maintenance. Save.
 2. Verify: Day Book shows the expense; detail panel lists the contribution and `Remainder ₹800`; Transactions page shows the CR and DR rows tagged `Direct`; the flat's dues tracker shows +₹200 collected; Reconcile tab lists the expense at `₹800 net`.
@@ -502,7 +502,7 @@ Same PowerShell pattern with `$ref = "aulttcsvxzcwyceezzpz"`. Expected: empty re
 6. Re-run the Step 1 balance query — the number MUST be identical.
 7. Hard-delete the fixture: Management API `DELETE FROM transactions WHERE expense_id = (SELECT id FROM expenses WHERE description='Direct payment verification (temp)'); DELETE FROM expenses WHERE description='Direct payment verification (temp)';`
 
-- [ ] **Step 4: Push + memory**
+- [x] **Step 4: Push + memory**
 
 ```bash
 npx tsc --noEmit
