@@ -63,6 +63,7 @@ const HELP: Record<string, HelpPage> = {
       'Items in one bundle must all be either maintenance or all belong to the same corpus plan.',
       'Attach a receipt photo when capturing a pending item — a paper-clip icon shows on items with attachments.',
       'When editing a bundled expense, each line item can be tagged with its own paid date, vendor/staff payee, payment mode, and reference number.',
+      'Payment mode "Direct (owner paid)" records an owner paying the vendor directly: add contributions per flat and each creates a flat credit + matching debit (net zero to the bank). The bank transfer for any remainder reconciles at the net amount.',
       'Vendor and Staff tabs let you manage the master lists used when recording expenses.',
     ],
     howTo: 'For single payments: click "Add Expense", fill the header (payee, date, amount, mode), and add at least one line item with a category and amount. For lots of small payments: capture each in Pending Items as you pay it, then bundle them later — the bundled expense enters the normal approval and reconciliation flow.',

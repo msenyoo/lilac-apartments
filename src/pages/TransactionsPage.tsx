@@ -962,6 +962,10 @@ function EditModal({ txn, flats, onClose, onSaved, onSplit, onVoided }: {
   }
 
   async function handleVoid() {
+    if (txn.source === 'Direct') {
+      toast.error('Direct payment rows are managed from their expense')
+      return
+    }
     setVoiding(true)
     const { error } = await supabase.from('transactions').update({ row_type: 'VOIDED' }).eq('id', txn.id)
     setVoiding(false)
@@ -1438,12 +1442,17 @@ function AllTransactionsTab() {
             )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {canWrite && selectedTxn.row_type !== 'VOIDED' && (
+            {canWrite && selectedTxn.row_type !== 'VOIDED' && selectedTxn.source !== 'Direct' && (
               <button onClick={() => setShowEdit(true)}
                 style={{ borderColor: 'var(--brand-500)', color: 'var(--brand-600)' }}
                 className="flex items-center gap-1.5 border rounded-lg px-3 py-1.5 text-sm font-medium hover:bg-[var(--brand-50)]">
                 Edit
               </button>
+            )}
+            {canWrite && selectedTxn.row_type !== 'VOIDED' && selectedTxn.source === 'Direct' && (
+              <span className="text-xs" style={{ color: 'var(--ink-400)' }}>
+                Created by a direct payment — void it from the expense instead.
+              </span>
             )}
             <button onClick={() => setSelectedTxn(null)}
               className="p-1.5 rounded-lg hover:bg-blue-100 text-slate-500">
@@ -1480,7 +1489,7 @@ function AllTransactionsTab() {
             onRowClicked={e => {
               if (!e.data) return
               setSelectedTxn(e.data)
-              setShowEdit(canWrite && e.data.row_type !== 'VOIDED')
+              setShowEdit(canWrite && e.data.row_type !== 'VOIDED' && e.data.source !== 'Direct')
             }}
             getRowStyle={(params: any) => {
               if (params.data?.id === selectedTxn?.id) return { background: 'var(--brand-50)', opacity: 1, textDecoration: 'none' }
