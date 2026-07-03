@@ -471,7 +471,7 @@ function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat
           </div>
         )}
 
-        <ArrearsMgmt flatCode={flat.flat_code} showAdd={showAddArrears} onCloseAdd={() => setShowAddArrears(false)} />
+        <ArrearsMgmt flatCode={flat.flat_code} arrearsPaid={flat.arrears_paid} showAdd={showAddArrears} onCloseAdd={() => setShowAddArrears(false)} />
       </div>
 
       <div className="surface !p-4">
@@ -500,7 +500,7 @@ function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat
   )
 }
 
-function ArrearsMgmt({ flatCode, showAdd = false, onCloseAdd }: { flatCode: string; showAdd?: boolean; onCloseAdd?: () => void }) {
+function ArrearsMgmt({ flatCode, arrearsPaid = 0, showAdd = false, onCloseAdd }: { flatCode: string; arrearsPaid?: number; showAdd?: boolean; onCloseAdd?: () => void }) {
   const qc = useQueryClient()
   const { isAdmin } = useRoleCtx()
   const [editRow, setEditRow] = useState<any>(null)
@@ -528,7 +528,13 @@ function ArrearsMgmt({ flatCode, showAdd = false, onCloseAdd }: { flatCode: stri
     enabled: !!flatIdData,
   })
 
-  const arrears = rows.filter((r: any) => r.arrears_type === 'maintenance')
+  // Collections settle arrears oldest-first (matches v_dues_tracker + rollover RPC)
+  let toAllocate = arrearsPaid
+  const arrears = rows.filter((r: any) => r.arrears_type === 'maintenance').map((r: any) => {
+    const paid = Math.min(toAllocate, r.amount)
+    toAllocate -= paid
+    return { ...r, remaining: r.amount - paid }
+  })
   const credits = rows.filter((r: any) => r.arrears_type === 'credit')
 
   async function handleDelete(id: string) {
@@ -541,11 +547,27 @@ function ArrearsMgmt({ flatCode, showAdd = false, onCloseAdd }: { flatCode: stri
   if (rows.length === 0 && !showAdd && !editRow) return null
 
   function renderRow(row: any, color: string) {
+    const settled = row.remaining !== undefined && row.remaining < row.amount
+    const fullySettled = row.remaining === 0
     return (
       <div key={row.id} className="flex items-center justify-between text-[12.5px]">
-        <span>{row.source_label}</span>
+        <span>
+          {row.source_label}
+          {fullySettled && (
+            <span className="ml-1.5 text-[10.5px] font-medium px-1.5 py-0.5 rounded-full bg-green-100 text-green-700">settled</span>
+          )}
+        </span>
         <div className="flex items-center gap-2">
-          <span className="font-semibold" style={{ color }}>{formatINR(row.amount)}</span>
+          {fullySettled ? (
+            <span className="font-semibold line-through" style={{ color: 'var(--ink-400)' }}>{formatINR(row.amount)}</span>
+          ) : settled ? (
+            <span className="font-semibold" style={{ color }}>
+              {formatINR(row.remaining)}{' '}
+              <span className="font-normal text-[11px]" style={{ color: 'var(--ink-400)' }}>of {formatINR(row.amount)}</span>
+            </span>
+          ) : (
+            <span className="font-semibold" style={{ color }}>{formatINR(row.amount)}</span>
+          )}
           {isAdmin && (
             <>
               <button onClick={() => setEditRow(row)} className="text-[var(--ink-400)] hover:text-[var(--ink-700)]">
