@@ -28,5 +28,16 @@ export default defineConfig({
   ],
   resolve: {
     alias: { '@': '/src' }
-  }
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'ag-grid': ['ag-grid-community', 'ag-grid-react'],
+          recharts: ['recharts'],
+          xlsx: ['xlsx'],
+        },
+      },
+    },
+  },
 })
