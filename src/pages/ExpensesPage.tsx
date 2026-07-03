@@ -11,6 +11,7 @@ import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
 import { BulkAddPendingDialog } from '@/components/expenses/BulkAddPendingDialog'
+import { DirectContributionsSection, type StagedContribution } from '@/components/expenses/DirectContributions'
 import { normalizeImageFile, isHeicName, heicBlobToObjectUrl } from '@/lib/heic'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -138,7 +139,8 @@ const expenseSchema = z.object({
 type ExpenseFormData = z.infer<typeof expenseSchema>
 
 const PAYEE_TYPES  = ['Staff', 'Vendor', 'Intermediary', 'Municipal', 'Other']
-const PAYMENT_MODES = ['Cash', 'Online', 'Bank Transfer', 'Cheque']
+const PAYMENT_MODES = ['Cash', 'Online', 'Bank Transfer', 'Cheque', 'Direct']
+const paymentModeLabel = (m: string) => m === 'Direct' ? 'Direct (owner paid)' : m
 const COST_CENTERS = ['Block-A', 'Block-B', 'Block-C', 'Block-D', 'Block-E', 'Common', 'Municipal', 'All']
 
 function expenseStatus(e: Expense) {
@@ -923,6 +925,10 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
   const lineTotal        = lineItems.reduce((s, li) => s + (Number(li.amount) || 0), 0)
   const lineBalanceDiff  = Number(watchedAmount) - lineTotal
 
+  const [staged, setStaged] = useState<StagedContribution[]>([])
+  const stagedTotal = staged.reduce((s, r) => s + (Number(r.amount) || 0), 0)
+  const stagedOver = !isEditMode && stagedTotal > (Number(watchedAmount) || 0)
+
   const { data: vendorYtd = 0 } = useQuery({
     queryKey: ['vendor-ytd', watchedVendorId],
     enabled: !!watchedVendorId,
@@ -1062,11 +1068,31 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
           toast.error(`Expense saved, but ${pendingIds.length} pending item(s) could not be cleared. Re-attach their receipts to this expense before deleting them from the Pending tab.`, { duration: 10000 })
         }
       }
+
+      if (!isEditMode) {
+        const contributions = staged.filter(r => r.flat_id && Number(r.amount) > 0)
+        let failed = 0
+        for (const c of contributions) {
+          const { error: crErr } = await supabase.rpc('add_direct_contribution', {
+            p_expense_id: expenseId,
+            p_flat_id: c.flat_id,
+            p_amount: Number(c.amount),
+            p_corpus_plan_id: c.corpus_plan_id,
+          })
+          if (crErr) failed++
+        }
+        if (failed > 0) {
+          toast.error(`Expense saved, but ${failed} contribution(s) could not be recorded — open the expense and add them again.`, { duration: 10000 })
+        }
+      }
     },
     onSuccess: () => {
       toast.success(isEditMode ? 'Expense updated' : 'Expense saved')
       qc.invalidateQueries({ queryKey: ['expenses'] })
       qc.invalidateQueries({ queryKey: ['pending-line-items'] })
+      qc.invalidateQueries({ queryKey: ['direct-crs'] })
+      qc.invalidateQueries({ queryKey: ['unreconciled-expenses'] })
+      setStaged([])
       reset()
       onClose()
     },
@@ -1203,7 +1229,7 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
                   <Select value={field.value} onValueChange={field.onChange}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {PAYMENT_MODES.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                      {PAYMENT_MODES.map(m => <SelectItem key={m} value={m}>{paymentModeLabel(m)}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 )} />
@@ -1266,6 +1292,14 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
               <Textarea placeholder="Optional remarks" rows={2} {...register('notes')} />
             </div>
           </section>
+
+          <DirectContributionsSection
+            expenseId={isEditMode ? editExpense!.id : null}
+            expenseAmount={Number(watchedAmount) || 0}
+            corpusPlanId={watch('corpus_plan_id') || null}
+            staged={staged}
+            onStagedChange={setStaged}
+          />
 
           {/* ── Line items ─────────────────────────────── */}
           <section className="flex flex-col gap-3">
@@ -1437,7 +1471,7 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
                           <Select value={f.value ?? ''} onValueChange={f.onChange}>
                             <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Mode" /></SelectTrigger>
                             <SelectContent>
-                              {PAYMENT_MODES.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                              {PAYMENT_MODES.map(m => <SelectItem key={m} value={m}>{paymentModeLabel(m)}</SelectItem>)}
                             </SelectContent>
                           </Select>
                         )} />
@@ -1480,8 +1514,8 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
             <Button type="button" variant="outline" onClick={() => { reset(); onClose() }}>Cancel</Button>
             <Button
               type="submit"
-              disabled={isSubmitting || mutation.isPending || lineBalanceDiff !== 0}
-              title={lineBalanceDiff !== 0 ? `Line items must sum to header amount (off by ${formatINR(Math.abs(lineBalanceDiff))})` : ''}
+              disabled={isSubmitting || mutation.isPending || lineBalanceDiff !== 0 || stagedOver}
+              title={stagedOver ? 'Contributions exceed the expense amount' : lineBalanceDiff !== 0 ? `Line items must sum to header amount (off by ${formatINR(Math.abs(lineBalanceDiff))})` : ''}
             >
               {mutation.isPending ? 'Saving…' : isEditMode ? 'Update Expense' : 'Save Expense'}
             </Button>
