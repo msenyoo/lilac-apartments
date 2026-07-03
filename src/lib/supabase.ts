@@ -200,6 +200,8 @@ export interface DuesEntry {
   annual_due: number
   pending: number
   arrears_maintenance: number
+  arrears_original: number
+  arrears_paid: number
   advance_credits: number
   total_outstanding: number
   status: 'Clear' | 'Partial' | 'Due'
