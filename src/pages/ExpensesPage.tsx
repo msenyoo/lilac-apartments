@@ -11,7 +11,7 @@ import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
 import { BulkAddPendingDialog } from '@/components/expenses/BulkAddPendingDialog'
-import { DirectContributionsSection, type StagedContribution } from '@/components/expenses/DirectContributions'
+import { DirectContributionsSection, directTotalOf, type StagedContribution } from '@/components/expenses/DirectContributions'
 import { normalizeImageFile, isHeicName, heicBlobToObjectUrl } from '@/lib/heic'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -57,6 +57,7 @@ interface Expense {
   corpus_plan_id: string | null
   corpus_plan: { name: string } | null
   transaction: { id: string; value_date: string; description: string; amount: number } | null
+  direct_txns: { id: string; amount: number; cr_dr: string; source: string; row_type: string; flat_code: string | null; plan_id: string | null; value_date: string }[]
   line_items: ExpenseLineItem[]
   approval_status: 'pending' | 'approved' | 'rejected'
   approved_by: string | null
@@ -146,6 +147,8 @@ const COST_CENTERS = ['Block-A', 'Block-B', 'Block-C', 'Block-D', 'Block-E', 'Co
 function expenseStatus(e: Expense) {
   if (e.payment_mode === 'Cash') return 'Cash'
   if (e.reconciled_at || e.transaction_id) return 'Reconciled'
+  const direct = directTotalOf(e.direct_txns)
+  if (e.payment_mode === 'Direct' || (direct > 0 && direct >= e.amount)) return 'Direct'
   return 'Unreconciled'
 }
 
@@ -153,6 +156,7 @@ const STATUS_STYLE: Record<string, string> = {
   Cash:          '',
   Reconciled:    'bg-green-100 text-green-700',
   Unreconciled:  'bg-amber-100 text-amber-700',
+  Direct:        'bg-blue-100 text-blue-700',
 }
 const STATUS_INLINE: Record<string, React.CSSProperties> = {
   Cash: { background: 'var(--ink-100)', color: 'var(--ink-600)' },
@@ -238,6 +242,7 @@ function DayBook() {
           staff_member:staff_id(id,name,role,assigned_area,phone,left_date),
           corpus_plan:corpus_plan_id(name),
           transaction:transaction_id(id,value_date,description,amount),
+          direct_txns:transactions!expense_id(id,amount,cr_dr,source,row_type,flat_code,plan_id,value_date),
           line_items:expense_line_items(*, category:category_id(id,name,budget_type,is_utility))
         `)
         .order('expense_date', { ascending: false })
@@ -513,9 +518,16 @@ function ExpenseDetailPanel({
         void_reason: voidReason.trim(),
       }).eq('id', e.id)
       if (error) throw error
+      if (directTotalOf(e.direct_txns) > 0) {
+        const { error: dpErr } = await supabase.rpc('void_direct_pairs', { p_expense_id: e.id })
+        if (dpErr) {
+          toast.error('Expense voided, but its direct payment entries could not be voided — open Transactions and contact admin.', { duration: 10000 })
+        }
+      }
       qc.invalidateQueries({ queryKey: ['expenses'] })
       qc.invalidateQueries({ queryKey: ['unreconciled-expenses'] })
       qc.invalidateQueries({ queryKey: ['unreconciled-count'] })
+      qc.invalidateQueries({ queryKey: ['direct-crs', e.id] })
       setVoidOpen(false)
       setVoidReason('')
       onVoidSuccess()
@@ -742,6 +754,26 @@ function ExpenseDetailPanel({
                 <span>{formatINR(lineTotal)}</span>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {directTotalOf(e.direct_txns) > 0 && (
+        <div className="surface !p-4 flex flex-col gap-2">
+          <h4 className="text-sm font-medium">Direct contributions</h4>
+          <div className="flex flex-col gap-1 text-xs">
+            {e.direct_txns
+              .filter(t => t.cr_dr === 'CR' && t.source === 'Direct' && t.row_type !== 'VOIDED')
+              .map(t => (
+                <div key={t.id} className="flex justify-between" style={{ color: 'var(--ink-700)' }}>
+                  <span>{t.flat_code ?? '—'} · {t.plan_id ? 'Corpus' : 'Maintenance'}</span>
+                  <span className="font-medium">{formatINR(t.amount)}</span>
+                </div>
+              ))}
+            <div className="flex justify-between font-semibold pt-1 border-t" style={{ borderColor: 'var(--ink-200)', color: 'var(--ink-700)' }}>
+              <span>Remainder</span>
+              <span>{formatINR(e.amount - directTotalOf(e.direct_txns))}</span>
+            </div>
           </div>
         </div>
       )}
@@ -1541,7 +1573,10 @@ interface UnreconciledExpense {
   id: string; expense_date: string; description: string; amount: number
   payment_mode: string; voucher_no: string | null; payee_name_raw: string | null
   reference_no: string | null
+  direct_txns: { id: string; amount: number; cr_dr: string; source: string; row_type: string; flat_code: string | null; plan_id: string | null; value_date: string }[]
 }
+
+const netOf = (e: UnreconciledExpense) => e.amount - directTotalOf(e.direct_txns)
 interface UnmatchedDR {
   id: string; value_date: string; description: string; amount: number
   txn_id: string | null; category: string | null
@@ -1560,12 +1595,13 @@ function ReconcileTab() {
     queryFn: async () => {
       const { data } = await supabase
         .from('expenses')
-        .select('id,expense_date,description,amount,payment_mode,voucher_no,payee_name_raw,reference_no')
+        .select('id,expense_date,description,amount,payment_mode,voucher_no,payee_name_raw,reference_no,direct_txns:transactions!expense_id(id,amount,cr_dr,source,row_type,flat_code,plan_id,value_date)')
         .neq('payment_mode', 'Cash')
+        .neq('payment_mode', 'Direct')
         .is('transaction_id', null)
         .is('voided_at', null)
         .order('expense_date', { ascending: false })
-      return (data ?? []) as UnreconciledExpense[]
+      return ((data ?? []) as unknown as UnreconciledExpense[]).filter(e => netOf(e) > 0)
     },
   })
 
@@ -1586,7 +1622,7 @@ function ReconcileTab() {
 
   const selExp = expenses.find(e => e.id === selectedExpenseId)
   const selTxn = bankDRs.find(t => t.id === selectedTxnId)
-  const amountMatch = selExp && selTxn && selExp.amount === selTxn.amount
+  const amountMatch = selExp && selTxn && netOf(selExp) === selTxn.amount
   const canMatch    = !!selExp && !!selTxn
 
   function isWithin7Days(expDate: string, txnDate: string) {
@@ -1597,9 +1633,10 @@ function ReconcileTab() {
 
   function getSuggestionTier(t: UnmatchedDR): 'exact' | 'close' | null {
     if (!selExp) return null
-    if (t.amount === selExp.amount) return 'exact'
-    const pctDiff = selExp.amount !== 0 ? Math.abs(t.amount - selExp.amount) / selExp.amount : Infinity
-    const absDiff = Math.abs(t.amount - selExp.amount)
+    const net = netOf(selExp)
+    if (t.amount === net) return 'exact'
+    const pctDiff = net !== 0 ? Math.abs(t.amount - net) / net : Infinity
+    const absDiff = Math.abs(t.amount - net)
     if ((pctDiff <= 0.05 || absDiff <= 500) && isWithin7Days(selExp.expense_date, t.value_date)) return 'close'
     return null
   }
@@ -1647,7 +1684,7 @@ function ReconcileTab() {
           </p>
           {expenses.length > 0 && (
             <p className="text-xs text-amber-600 mt-0.5">
-              {formatINR(expenses.reduce((s, e) => s + e.amount, 0))}
+              {formatINR(expenses.reduce((s, e) => s + netOf(e), 0))}
             </p>
           )}
         </div>
@@ -1664,11 +1701,11 @@ function ReconcileTab() {
           <div className="surface !p-4" style={amountMatch ? { background: 'var(--ok-bg)', border: '1px solid var(--ok)' } : { background: 'var(--warn-bg)', border: '1px solid var(--warn-bd)' }}>
             <p className="text-xs mb-1" style={{ color: 'var(--ink-500)' }}>Selected match</p>
             <p className="text-sm font-medium" style={{ color: 'var(--ink-700)' }}>
-              {formatINR(selExp!.amount)} ↔ {formatINR(selTxn!.amount)}
+              {formatINR(netOf(selExp!))} ↔ {formatINR(selTxn!.amount)}
             </p>
             {!amountMatch && (
               <p className="text-xs text-orange-600 mt-0.5">
-                Diff: {formatINR(Math.abs(selExp!.amount - selTxn!.amount))}
+                Diff: {formatINR(Math.abs(netOf(selExp!) - selTxn!.amount))}
               </p>
             )}
           </div>
@@ -1715,7 +1752,7 @@ function ReconcileTab() {
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold" style={{ color: 'var(--ink-800)' }}>Amount mismatch — match anyway?</p>
             <p className="text-xs mt-1" style={{ color: 'var(--ink-500)' }}>
-              Expense: {formatINR(selExp.amount)} · Bank DR: {formatINR(selTxn.amount)} · Diff: {formatINR(Math.abs(selExp.amount - selTxn.amount))}
+              Expense: {formatINR(netOf(selExp))} · Bank DR: {formatINR(selTxn.amount)} · Diff: {formatINR(Math.abs(netOf(selExp) - selTxn.amount))}
             </p>
             <p className="text-xs mt-0.5" style={{ color: 'var(--ink-400)' }}>
               This will link them as-is. You can edit the expense amount or un-reconcile later.
@@ -1780,7 +1817,12 @@ function ReconcileTab() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-baseline justify-between gap-2">
                         <p className="text-sm font-medium truncate" style={{ color: 'var(--ink-800)' }}>{e.description}</p>
-                        <p className="text-sm font-bold shrink-0" style={{ color: 'var(--ink-800)' }}>{formatINR(e.amount)}</p>
+                        <div className="text-right shrink-0">
+                          <p className="text-sm font-bold" style={{ color: 'var(--ink-800)' }}>{formatINR(netOf(e))}</p>
+                          {directTotalOf(e.direct_txns) > 0 && (
+                            <p className="text-[10px]" style={{ color: 'var(--ink-400)' }}>net of {formatINR(directTotalOf(e.direct_txns))} direct</p>
+                          )}
+                        </div>
                       </div>
                       <div className="flex gap-2 mt-0.5">
                         <span className="text-xs" style={{ color: 'var(--ink-400)' }}>{e.expense_date}</span>
