@@ -405,7 +405,7 @@ function DuesAgingTab() {
           No pending dues for {selectedFy.label}
         </div>
       ) : (
-        <div className="surface !p-0 overflow-hidden">
+        <div className="surface !p-0 overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="border-b hairline" style={{ background: 'var(--ink-50)' }}>
               <tr>
@@ -414,30 +414,37 @@ function DuesAgingTab() {
                 <th className="text-right px-4 py-2.5 font-semibold" style={{ color: 'var(--ink-600)' }}>Annual Due</th>
                 <th className="text-right px-4 py-2.5 font-semibold" style={{ color: 'var(--ink-600)' }}>Collected</th>
                 <th className="text-right px-4 py-2.5 font-semibold" style={{ color: 'var(--ink-600)' }}>Pending</th>
+                <th className="text-right px-4 py-2.5 font-semibold" style={{ color: 'var(--ink-600)' }}>Arrears</th>
+                <th className="text-right px-4 py-2.5 font-semibold" style={{ color: 'var(--ink-600)' }}>Outstanding</th>
                 <th className="text-left px-4 py-2.5 font-semibold" style={{ color: 'var(--ink-600)' }}>Status</th>
               </tr>
             </thead>
             <tbody className="divide-rows">
-              {dues.map((r, i) => (
+              {dues.map((r, i) => {
+                const status = r.total_outstanding <= 0 ? 'Clear' : (r.collected_fy > 0 ? 'Partial' : 'Due')
+                return (
                 <tr key={r.flat_code} className={i % 2 === 1 ? 'bg-slate-50/50' : ''}>
                   <td className="px-4 py-2.5 font-semibold">{r.flat_code}</td>
                   <td className="px-4 py-2.5" style={{ color: 'var(--ink-600)' }}>{r.block}</td>
                   <td className="px-4 py-2.5 text-right">{formatINR(r.annual_due)}</td>
                   <td className="px-4 py-2.5 text-right text-green-700">{r.collected_fy > 0 ? formatINR(r.collected_fy) : '—'}</td>
-                  <td className="px-4 py-2.5 text-right font-semibold text-red-600">{formatINR(r.pending)}</td>
+                  <td className="px-4 py-2.5 text-right">{r.pending > 0 ? formatINR(r.pending) : '—'}</td>
+                  <td className="px-4 py-2.5 text-right">{r.arrears_maintenance > 0 ? formatINR(r.arrears_maintenance) : '—'}</td>
+                  <td className="px-4 py-2.5 text-right font-semibold text-red-600">{formatINR(r.total_outstanding)}</td>
                   <td className="px-4 py-2.5">
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                      r.status === 'Due'     ? 'bg-red-100 text-red-700' :
-                      r.status === 'Partial' ? 'bg-amber-100 text-amber-700' :
-                                               'bg-green-100 text-green-700'
-                    }`}>{r.status}</span>
+                      status === 'Due'     ? 'bg-red-100 text-red-700' :
+                      status === 'Partial' ? 'bg-amber-100 text-amber-700' :
+                                             'bg-green-100 text-green-700'
+                    }`}>{status}</span>
                   </td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
             <tfoot className="border-t-2 hairline" style={{ background: 'var(--ink-50)' }}>
               <tr>
-                <td className="px-4 py-3 font-bold" colSpan={4}>Total outstanding</td>
+                <td className="px-4 py-3 font-bold" colSpan={6}>Total outstanding</td>
                 <td className="px-4 py-3 text-right font-bold text-red-600">{formatINR(totalPending)}</td>
                 <td />
               </tr>
