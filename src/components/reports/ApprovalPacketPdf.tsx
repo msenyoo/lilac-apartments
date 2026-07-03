@@ -30,10 +30,6 @@ const S = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between',
     marginTop: 16, paddingTop: 6, borderTop: '1.5pt solid #7c3aed',
   },
-  approvalNote: {
-    marginTop: 14, padding: 8, backgroundColor: '#f5f3ff',
-    fontSize: 9, fontFamily: 'Helvetica-Bold', color: '#5b21b6', textAlign: 'center',
-  },
   receiptPage: { fontFamily: 'Helvetica', fontSize: 8, padding: 36, color: '#1e293b' },
   receiptCaption: { fontSize: 8, color: '#64748b', marginBottom: 6 },
   receiptImage: { objectFit: 'contain', maxHeight: 660, marginBottom: 12 },
@@ -127,10 +123,6 @@ export function ApprovalPacketDoc({ expenses, generated }: {
             <Text style={[S.bold, { color: '#7c3aed', fontSize: 11 }]}>{inr(grandTotal)}</Text>
           </View>
         )}
-
-        <View style={S.approvalNote} wrap={false}>
-          <Text>Please review and approve the bank transfer.</Text>
-        </View>
 
         <PageFooter generated={generated} />
       </Page>
