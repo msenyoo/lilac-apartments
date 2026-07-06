@@ -96,7 +96,7 @@ function DashboardContent() {
         .from('v_dues_tracker')
         .select('flat_code, block, pending, status, total_outstanding, annual_due')
         .neq('status', 'Clear')
-        .order('pending', { ascending: false })
+        .order('total_outstanding', { ascending: false })
       if (error) throw error
       return (data ?? []) as DuesRow[]
     },
@@ -185,8 +185,9 @@ function DashboardContent() {
     },
   })
 
-  const pendingDuesTotal = duesData.reduce((s, d) => s + Math.max(0, d.pending ?? 0), 0)
-  const overdueFlatCount = duesData.filter(d => d.status !== 'Clear').length
+  const dueFlats = duesData.filter(d => (d.total_outstanding ?? 0) > 0)
+  const pendingDuesTotal = dueFlats.reduce((s, d) => s + d.total_outstanding, 0)
+  const overdueFlatCount = dueFlats.length
 
   const corpusByPlan = new Map<string, { name: string; status: string; collected: number; target: number; spent: number; balance: number }>()
   for (const row of corpusRows) {
@@ -343,7 +344,7 @@ function DashboardContent() {
           </div>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-[11.5px]" style={{ color: 'var(--ink-500)' }}>Pending dues</p>
+              <p className="text-[11.5px]" style={{ color: 'var(--ink-500)' }}>Outstanding dues</p>
               <p className="text-[16px] font-bold tnum" style={{ color: pendingDuesTotal > 0 ? 'var(--bad)' : 'var(--ok)' }}>
                 {formatINR(pendingDuesTotal)}
                 <span className="text-[12px] font-normal ml-1.5" style={{ color: 'var(--ink-400)' }}>
@@ -435,7 +436,7 @@ function DashboardContent() {
               View all <ArrowRight size={12} className="ml-1" />
             </Button>
           </div>
-          {duesData.length === 0 ? (
+          {dueFlats.length === 0 ? (
             <div className="px-5 py-8 text-center">
               <p className="text-[13px]" style={{ color: 'var(--ink-400)' }}>All flats are clear</p>
             </div>
@@ -446,23 +447,23 @@ function DashboardContent() {
                 <span className="text-right">Amount due</span>
                 <span className="text-right">Status</span>
               </div>
-              {duesData.slice(0, 8).map(d => (
+              {dueFlats.slice(0, 8).map(d => (
                 <button key={d.flat_code} className="w-full px-4 py-2.5 grid grid-cols-[1fr_auto_auto] gap-3 items-center text-left hover:bg-[var(--ink-50)] transition-colors" onClick={() => navigate('/dues')}>
                   <div>
                     <p className="text-[13px] font-semibold" style={{ color: 'var(--ink-800)' }}>{d.flat_code}</p>
                     <p className="text-[11px]" style={{ color: 'var(--ink-400)' }}>Block {d.block}</p>
                   </div>
-                  <p className="text-[13px] font-semibold tnum text-right" style={{ color: 'var(--bad)' }}>{formatINR(d.pending)}</p>
+                  <p className="text-[13px] font-semibold tnum text-right" style={{ color: 'var(--bad)' }}>{formatINR(d.total_outstanding)}</p>
                   <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
                     style={d.status === 'Due' ? { background: 'var(--bad-bg)', color: 'var(--bad)' } : { background: 'var(--warn-bg)', color: 'var(--warn)' }}>
                     {d.status}
                   </span>
                 </button>
               ))}
-              {duesData.length > 8 && (
+              {dueFlats.length > 8 && (
                 <div className="px-4 py-2.5 text-center">
                   <button className="text-[12px] font-medium" style={{ color: 'var(--brand-600)' }} onClick={() => navigate('/dues')}>
-                    +{duesData.length - 8} more flats — view all
+                    +{dueFlats.length - 8} more flats — view all
                   </button>
                 </div>
               )}
