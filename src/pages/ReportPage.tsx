@@ -857,7 +857,7 @@ function FlatStatementTab() {
       ['SUMMARY (cumulative since Apr-' + String(duesEntry?.start_fiscal_year ?? '').slice(-2) + ')'],
       ['Maintenance rate/mo', flatInfo?.maintenance_amt ?? ''],
       ['Total collected', duesEntry?.collected_fy ?? ''],
-      ['Outstanding', duesEntry?.pending ?? ''],
+      ['Outstanding', duesEntry?.total_outstanding ?? ''],
       [],
       ['Corpus collected (total)', corpusTotals?.collected ?? ''],
       ['Corpus target (total)', corpusTotals?.target ?? ''],
@@ -2003,10 +2003,10 @@ function BalanceSheetTab() {
     queryFn: async () => {
       const { data } = await supabase
         .from('v_dues_tracker')
-        .select('pending')
+        .select('total_outstanding')
         .eq('fiscal_year', selectedFyYear)
-        .neq('status', 'Clear')
-      return (data ?? []).reduce((s: number, r: any) => s + (r.pending ?? 0), 0)
+        .gt('total_outstanding', 0)
+      return (data ?? []).reduce((s: number, r: any) => s + (r.total_outstanding ?? 0), 0)
     },
   })
 
