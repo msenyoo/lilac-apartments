@@ -287,6 +287,19 @@ test.describe('Flats', () => {
     await page.getByRole('button', { name: /Past residents/ }).click()
     await expect(page.getByText('E2E Past Tenant')).toBeVisible()
   })
+
+  test('Residents tab has Relation column and Add modal relation dropdown', async ({ page }) => {
+    await page.goto('/flats')
+    await page.getByRole('button', { name: 'Residents' }).click()
+    await expect(page.getByText('Relation', { exact: true })).toBeVisible()
+    await page.getByRole('button', { name: /Add resident/ }).click()
+    const relationSelect = page.locator('select#relation')
+    await expect(relationSelect).toBeVisible()
+    await expect(relationSelect.locator('option', { hasText: 'Co-owner' })).toHaveCount(1)
+    // Tenant side must not offer Co-owner
+    await page.locator('select#restype').selectOption('Tenant')
+    await expect(relationSelect.locator('option', { hasText: 'Co-owner' })).toHaveCount(0)
+  })
 })
 
 // ─────────────────────────────────────────────
