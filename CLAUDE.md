@@ -18,6 +18,11 @@ SUPABASE_SERVICE_ROLE_KEY=<get from Supabase dashboard → Settings → API → 
 > The anon key is a publishable browser key — safe to commit.
 > The service role key is secret — get it from Supabase dashboard, never commit it.
 
+For Supabase Management API access (CLI, direct SQL), sessions may have `SUPABASE_ACCESS_TOKEN`
+set — locally via `.claude/settings.local.json`, in cloud sessions via the claude.ai environment
+config. Use it as `SUPABASE_ACCESS_TOKEN=<token> supabase ...` or as a Bearer token against
+`https://api.supabase.com/v1/projects/<ref>/database/query`. Never write its value into repo files.
+
 For Playwright e2e tests, also create `.env.test` (login is mobile-number based):
 ```
 TEST_EMAIL=9999999999
