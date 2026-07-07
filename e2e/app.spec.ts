@@ -273,6 +273,19 @@ test.describe('Flats', () => {
     // Detail panel shows flat code in an h3 (e.g. "AF1") and Rate history h4
     await expect(page.locator('.w-full.lg\\:w-72, .w-72').first()).toBeVisible({ timeout: 5_000 })
   })
+
+  test('People card shows owner group, tenant group, and past residents', async ({ page }) => {
+    await page.goto('/flats')
+    await page.getByText('AG1', { exact: true }).first().click()
+    await expect(page.getByRole('heading', { name: 'People' })).toBeVisible()
+    await expect(page.getByText('E2E Owner One')).toBeVisible()
+    await expect(page.getByText('E2E Owner Spouse')).toBeVisible()
+    await expect(page.getByText('E2E Tenant One')).toBeVisible()
+    // history is collapsed by default
+    await expect(page.getByText('E2E Past Tenant')).toBeHidden()
+    await page.getByRole('button', { name: /Past residents/ }).click()
+    await expect(page.getByText('E2E Past Tenant')).toBeVisible()
+  })
 })
 
 // ─────────────────────────────────────────────

@@ -133,6 +133,8 @@ function FlatsTab() {
             )}
           </div>
 
+          <PeopleCard flatId={selected.id} />
+
           {/* Area details */}
           <div className="surface !p-4 flex flex-col gap-3">
             <div className="flex items-center justify-between">
@@ -198,6 +200,81 @@ function Detail({ label, value }: { label: string; value: string }) {
     <div className="flex justify-between">
       <span style={{ color: 'var(--ink-500)' }}>{label}</span>
       <span className="font-medium" style={{ color: 'var(--ink-800)' }}>{value}</span>
+    </div>
+  )
+}
+
+function PeopleCard({ flatId }: { flatId: string }) {
+  const { isAdmin, role } = useRoleCtx()
+  const canSeePhone = isAdmin || role === 'committee'
+  const [showPast, setShowPast] = useState(false)
+
+  const { data: people } = useQuery({
+    queryKey: ['flat-residents', flatId],
+    queryFn: async () => {
+      const { data } = await supabase.from('residents').select('*').eq('flat_id', flatId)
+      return (data ?? []) as Resident[]
+    },
+  })
+
+  const byRelation = (a: Resident, b: Resident) =>
+    (a.relation === 'Self' ? 0 : 1) - (b.relation === 'Self' ? 0 : 1) || a.name.localeCompare(b.name)
+  const active  = (people ?? []).filter(p => p.is_active)
+  const past    = (people ?? []).filter(p => !p.is_active)
+  const owners  = active.filter(p => p.type === 'Owner').sort(byRelation)
+  const tenants = active.filter(p => p.type === 'Tenant').sort(byRelation)
+
+  return (
+    <div className="surface !p-4 flex flex-col gap-3">
+      <h4 className="font-medium text-sm">People</h4>
+      {owners.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-[10px] font-semibold tracking-wide" style={{ color: 'var(--ink-400)' }}>OWNER</p>
+          {owners.map(p => <PersonRow key={p.id} p={p} canSeePhone={canSeePhone} />)}
+        </div>
+      )}
+      {tenants.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-[10px] font-semibold tracking-wide" style={{ color: 'var(--ink-400)' }}>TENANT</p>
+          {tenants.map(p => <PersonRow key={p.id} p={p} canSeePhone={canSeePhone} />)}
+        </div>
+      )}
+      {active.length === 0 && (
+        <p className="text-[13px]" style={{ color: 'var(--ink-400)' }}>No residents on file</p>
+      )}
+      {past.length > 0 && (
+        <div>
+          <button onClick={() => setShowPast(v => !v)}
+            className="text-[12px] font-medium" style={{ color: 'var(--ink-500)' }}>
+            {showPast ? '▾' : '▸'} Past residents ({past.length})
+          </button>
+          {showPast && (
+            <div className="space-y-1.5 mt-2">
+              {past.map(p => (
+                <div key={p.id} className="flex justify-between text-[13px]">
+                  <span style={{ color: 'var(--ink-500)' }}>{p.name}</span>
+                  <span style={{ color: 'var(--ink-400)' }}>{p.moved_in ?? '—'} → {p.moved_out ?? '—'}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PersonRow({ p, canSeePhone }: { p: Resident; canSeePhone: boolean }) {
+  return (
+    <div className="flex items-center justify-between text-sm gap-2">
+      <div className="flex items-center gap-1.5 min-w-0">
+        <span className="font-medium truncate">{p.name}</span>
+        <span className="text-[10px] px-1.5 py-0.5 rounded-full shrink-0"
+          style={{ background: 'var(--ink-100)', color: 'var(--ink-500)' }}>{p.relation}</span>
+      </div>
+      {canSeePhone && p.phone && (
+        <a href={`tel:${p.phone}`} className="text-[12px] font-medium shrink-0" style={{ color: 'var(--ink-700)' }}>{p.phone}</a>
+      )}
     </div>
   )
 }
