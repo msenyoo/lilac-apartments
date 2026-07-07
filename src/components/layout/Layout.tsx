@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { Fragment, useState, useEffect } from 'react'
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import {
@@ -21,15 +21,15 @@ const ROLE_LABEL: Record<string, string> = {
 
 const NAV = [
   { to: '/dashboard',        icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/dues',             icon: IndianRupee,     label: 'Dues',              badge: 'dues' },
-  { to: '/transactions',     icon: Banknote,        label: 'Transactions',      badge: 'review' },
+  { to: '/dues',             icon: IndianRupee,     label: 'Maintenance Dues',  badge: 'dues', section: 'Money' },
+  { to: '/corpus',           icon: Building2,       label: 'Corpus Fund' },
   { to: '/expenses',         icon: Receipt,         label: 'Expenses' },
-  { to: '/corpus',           icon: Building2,       label: 'Corpus' },
-  { to: '/finance',          icon: PiggyBank,       label: 'Finance' },
+  { to: '/transactions',     icon: Banknote,        label: 'Bank Statement',    badge: 'review' },
+  { to: '/finance',          icon: PiggyBank,       label: 'Fixed Deposits' },
   { to: '/reports',          icon: FileText,        label: 'Reports' },
-  { to: '/announcements',    icon: Megaphone,       label: 'Announcements' },
+  { to: '/announcements',    icon: Megaphone,       label: 'Announcements',     section: 'Community' },
   { to: '/flats',            icon: Users,           label: 'Flats & residents' },
-  { to: '/activity',         icon: History,         label: 'Activity log' },
+  { to: '/activity',         icon: History,         label: 'Activity log',      section: 'Manage' },
   { to: '/users',            icon: Shield,          label: 'Users',             adminOnly: true },
   { to: '/settings',         icon: Settings,        label: 'Settings',          adminOnly: true },
   { to: '/help',             icon: HelpCircle,      label: 'Help Center' },
@@ -154,9 +154,15 @@ export default function Layout() {
         {visibleNav.map(({ to, icon: Icon, label, ...rest }) => {
           const badge = (rest as any).badge as string | undefined
           const badgeCount = badge === 'review' ? reviewCount : 0
+          const section = (rest as any).section as string | undefined
           return (
+            <Fragment key={to}>
+            {section && (
+              <p className="px-3 pt-3 pb-1 text-[10.5px] font-semibold uppercase tracking-wider" style={{ color: 'var(--ink-400)' }}>
+                {section}
+              </p>
+            )}
             <NavLink
-              key={to}
               to={to}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2.5 rounded-[10px] text-[13.5px] font-medium transition-colors text-left ${
@@ -185,6 +191,7 @@ export default function Layout() {
                 </>
               )}
             </NavLink>
+            </Fragment>
           )
         })}
       </nav>
