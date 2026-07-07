@@ -10,6 +10,7 @@ export interface FlatContact {
 // Payer side first: the tenant/guardian actually pays; the owner is notified.
 function rank(c: { type: string; relation: string }) {
   if (c.type === 'Tenant' && c.relation === 'Self') return 0
+  // Guardian ranks payer-side regardless of type: a guardian of a minor owner is the payer
   if (c.relation === 'Guardian') return 1
   if (c.type === 'Tenant') return 2
   if (c.type === 'Owner' && c.relation === 'Self') return 3
