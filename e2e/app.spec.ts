@@ -300,6 +300,21 @@ test.describe('Flats', () => {
     await page.locator('select#restype').selectOption('Tenant')
     await expect(relationSelect.locator('option', { hasText: 'Co-owner' })).toHaveCount(0)
   })
+
+  test('group move-out moves the whole household out with a chosen date', async ({ page }) => {
+    await page.goto('/flats')
+    await page.getByRole('button', { name: 'Residents' }).click()
+    const row = page.locator('.ag-row', { hasText: 'E2E Movable Self' })
+    await row.getByRole('button', { name: /Move out/ }).click()
+    await expect(page.getByRole('heading', { name: /Move out/ })).toBeVisible()
+    // household member offered and pre-ticked
+    const spouseCheck = page.getByRole('checkbox', { name: /E2E Movable Spouse/ })
+    await expect(spouseCheck).toBeChecked()
+    await page.locator('.fixed.inset-0.z-50 input[type="date"]').fill('2026-06-30')
+    await page.getByRole('button', { name: /^Move out$/ }).last().click()
+    await expect(page.locator('.ag-row', { hasText: 'E2E Movable Self' }).getByText('Inactive')).toBeVisible()
+    await expect(page.locator('.ag-row', { hasText: 'E2E Movable Spouse' }).getByText('Inactive')).toBeVisible()
+  })
 })
 
 // ─────────────────────────────────────────────

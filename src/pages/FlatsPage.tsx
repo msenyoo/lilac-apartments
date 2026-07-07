@@ -410,6 +410,7 @@ function ResidentsTab() {
   const { isAdmin, role } = useRoleCtx()
   const qc = useQueryClient()
   const [showAdd, setShowAdd] = useState(false)
+  const [moveOut, setMoveOut] = useState<(Resident & { flat: { code: string; block: string } | null }) | null>(null)
 
   const { data: residents, isLoading } = useQuery({
     queryKey: ['residents'],
@@ -465,7 +466,7 @@ function ResidentsTab() {
       headerName: 'Actions', width: 100, sortable: false, filter: false,
       cellRenderer: (p: any) => (
         <button
-          onClick={() => handleDeactivate(p.data)}
+          onClick={() => p.data.is_active ? setMoveOut(p.data) : handleReactivate(p.data)}
           className="text-xs text-slate-400 hover:text-red-500 flex items-center gap-1"
         >
           <UserMinus size={13} /> {p.data.is_active ? 'Move out' : 'Reactivate'}
@@ -474,15 +475,12 @@ function ResidentsTab() {
     } as ColDef<any>] : []),
   ], [isAdmin])
 
-  async function handleDeactivate(resident: Resident) {
-    const nowActive = resident.is_active
-    const { error } = await supabase.from('residents').update({
-      is_active: !nowActive,
-      moved_out: nowActive ? new Date().toISOString().slice(0, 10) : null,
-    }).eq('id', resident.id)
+  async function handleReactivate(resident: Resident) {
+    const { error } = await supabase.from('residents')
+      .update({ is_active: true, moved_out: null }).eq('id', resident.id)
     if (error) { toast.error(error.message); return }
     qc.invalidateQueries({ queryKey: ['residents'] })
-    toast.success(nowActive ? `${resident.name} moved out` : `${resident.name} reactivated`)
+    toast.success(`${resident.name} reactivated`)
   }
 
   return (
@@ -519,6 +517,21 @@ function ResidentsTab() {
           flats={flats ?? []}
           onClose={() => setShowAdd(false)}
           onSaved={() => { setShowAdd(false); qc.invalidateQueries({ queryKey: ['residents'] }) }}
+        />
+      )}
+
+      {moveOut && (
+        <MoveOutDialog
+          resident={moveOut}
+          household={(residents ?? []).filter(r =>
+            r.flat_id === moveOut.flat_id && r.is_active && r.type === moveOut.type &&
+            r.id !== moveOut.id && moveOut.relation === 'Self')}
+          onClose={() => setMoveOut(null)}
+          onSaved={() => {
+            setMoveOut(null)
+            qc.invalidateQueries({ queryKey: ['residents'] })
+            qc.invalidateQueries({ queryKey: ['flat-residents'] })
+          }}
         />
       )}
     </div>
@@ -608,6 +621,72 @@ function AddResidentModal({ flats, onClose, onSaved }: { flats: any[]; onClose: 
         <div className="flex gap-2 p-5 border-t hairline">
           <button onClick={onClose} className="btn-secondary flex-1">Cancel</button>
           <button onClick={handleSave} disabled={saving} className="btn-primary flex-1">{saving ? 'Saving…' : 'Add resident'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function todayLocal() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function MoveOutDialog({ resident, household, onClose, onSaved }: {
+  resident: Resident & { flat: { code: string; block: string } | null }
+  household: Resident[]
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [date, setDate] = useState(todayLocal())
+  const [checked, setChecked] = useState<Set<string>>(new Set(household.map(h => h.id)))
+  const [saving, setSaving] = useState(false)
+
+  async function handleMoveOut() {
+    setSaving(true)
+    const ids = [resident.id, ...Array.from(checked)]
+    const { error } = await supabase.from('residents')
+      .update({ is_active: false, moved_out: date }).in('id', ids)
+    setSaving(false)
+    if (error) { toast.error(error.message); return }
+    toast.success(`${ids.length > 1 ? `${ids.length} residents` : resident.name} moved out (${date})`)
+    onSaved()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between p-5 border-b hairline">
+          <h3 className="font-semibold">Move out — {resident.name}{resident.flat ? ` (${resident.flat.code})` : ''}</h3>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[var(--ink-100)]"><X size={18} /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div>
+            <label className="ds-lbl">Move-out date</label>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} className="ds-field w-full" />
+          </div>
+          {household.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-[12px]" style={{ color: 'var(--ink-500)' }}>Also move out:</p>
+              {household.map(h => (
+                <label key={h.id} className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={checked.has(h.id)} aria-label={h.name}
+                    onChange={e => setChecked(prev => {
+                      const next = new Set(prev)
+                      if (e.target.checked) next.add(h.id); else next.delete(h.id)
+                      return next
+                    })} />
+                  {h.name} <span className="text-[11px]" style={{ color: 'var(--ink-400)' }}>({h.relation})</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="flex gap-2 p-5 border-t hairline">
+          <button onClick={onClose} className="btn-secondary flex-1">Cancel</button>
+          <button onClick={handleMoveOut} disabled={saving || !date} className="btn-primary flex-1">
+            {saving ? 'Saving…' : 'Move out'}
+          </button>
         </div>
       </div>
     </div>
