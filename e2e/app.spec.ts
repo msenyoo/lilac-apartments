@@ -188,6 +188,19 @@ test.describe('Reports', () => {
     await page.getByRole('button', { name: /^expenditure$/i }).click()
     await expect(page.locator('.card').first()).toBeVisible({ timeout: 10_000 })
   })
+
+  test('advance payer with no outstanding is not listed as pending', async ({ page }) => {
+    // Fixture (scripts/seed-e2e-advance-payer.js): AG1 cleared all dues through
+    // the current month with a payment dated in the previous month. A flat with
+    // total_outstanding <= 0 must not appear in the pending/outstanding list,
+    // even though no money landed in the current month.
+    await expect(page.getByRole('heading', { name: /collections by flat/i })).toBeVisible({ timeout: 10_000 })
+    const pendingCard = page.locator('.surface').filter({
+      has: page.getByRole('heading', { name: /pending maintenance|outstanding dues/i }),
+    })
+    await expect(pendingCard).toBeVisible({ timeout: 10_000 })
+    await expect(pendingCard.getByText('AG1', { exact: true })).toHaveCount(0)
+  })
 })
 
 // ─────────────────────────────────────────────

@@ -18,10 +18,10 @@ SUPABASE_SERVICE_ROLE_KEY=<get from Supabase dashboard → Settings → API → 
 > The anon key is a publishable browser key — safe to commit.
 > The service role key is secret — get it from Supabase dashboard, never commit it.
 
-For Playwright e2e tests, also create `.env.test`:
+For Playwright e2e tests, also create `.env.test` (login is mobile-number based):
 ```
-TEST_EMAIL=admin@lilac.com
-TEST_PASSWORD=44rockersLilac
+TEST_EMAIL=9999999999
+TEST_PASSWORD=lilacadmin
 ```
 
 ---
@@ -34,6 +34,7 @@ npm run build        # Production build
 npx tsc --noEmit     # TypeScript check (run before committing)
 
 # E2e tests (requires dev server running or reuseExistingServer=true)
+node scripts/seed-e2e-advance-payer.js       # Seed dev-DB fixtures (idempotent, re-run monthly)
 npx playwright test --project=setup          # Auth once → saves to e2e/.auth/user.json
 npx playwright test --project="Desktop Chrome"
 npx playwright test --project="Mobile Chrome"
