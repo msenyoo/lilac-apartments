@@ -200,6 +200,13 @@ test.describe('Reports', () => {
     })
     await expect(pendingCard).toBeVisible({ timeout: 10_000 })
     await expect(pendingCard.getByText('AG1', { exact: true })).toHaveCount(0)
+
+    // ...and the collections list must positively show the month is covered
+    const collectionsCard = page.locator('.surface').filter({
+      has: page.getByRole('heading', { name: /collections by flat/i }),
+    })
+    const ag1Row = collectionsCard.locator('div.flex', { hasText: 'AG1' })
+    await expect(ag1Row.getByText(/paid in advance/i)).toBeVisible()
   })
 })
 

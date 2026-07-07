@@ -130,9 +130,14 @@ export default function ReportPage() {
   // A payment made in advance lands in an earlier month's collections, so
   // "no money this month" ≠ "due" — only total outstanding decides that.
   const outstandingFlats = (duesData ?? []).filter(d => d.total_outstanding > 0)
+  const duesByFlat = new Map((duesData ?? []).map(d => [d.flat_code, d]))
+  // Collections settle oldest month first, so zero outstanding today means
+  // every month up to today (incl. the selected one) is covered
+  const isCovered = (f: any) => f.collected <= 0 && (duesByFlat.get(f.flat_code)?.total_outstanding ?? 1) <= 0
+  const advancePaidCount = (flatsData ?? []).filter(isCovered).length
 
   async function handleShare() {
-    const text = buildShareText(month, summary, outstandingFlats, expenses ?? [], totalCorpusCollected, totalCorpusTarget)
+    const text = buildShareText(month, summary, outstandingFlats, expenses ?? [], totalCorpusCollected, totalCorpusTarget, advancePaidCount)
     if (navigator.share) {
       await navigator.share({ title: `Lilac Apartments — ${month}`, text })
     } else {
@@ -157,10 +162,10 @@ export default function ReportPage() {
     ]
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryRows), 'Summary')
 
-    const duesByFlat = new Map((duesData ?? []).map(d => [d.flat_code, d]))
-    const collRows = [['Flat', 'Maintenance Rate', 'Collected (this month)', 'Total Outstanding']]
+    const collRows = [['Flat', 'Maintenance Rate', 'Collected (this month)', 'Total Outstanding', 'Status']]
     ;(flatsData ?? []).forEach((f: any) => {
-      collRows.push([f.flat_code, f.maintenance_amt, f.collected, duesByFlat.get(f.flat_code)?.total_outstanding ?? 0])
+      const status = f.collected > 0 ? 'Received' : isCovered(f) ? 'Paid in advance' : 'Due'
+      collRows.push([f.flat_code, f.maintenance_amt, f.collected, duesByFlat.get(f.flat_code)?.total_outstanding ?? 0, status])
     })
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(collRows), 'Collections')
 
@@ -265,9 +270,13 @@ export default function ReportPage() {
                 <div key={f.flat_code} className="flex justify-between items-center px-5 py-2 text-sm">
                   <span className="font-medium w-12">{f.flat_code}</span>
                   <span className="flex-1 px-2" style={{ color: 'var(--ink-500)' }}>{formatINR(f.maintenance_amt)}</span>
-                  <span className={f.collected > 0 ? 'font-semibold text-green-700' : 'text-slate-300'}>
-                    {f.collected > 0 ? formatINR(f.collected) : '—'}
-                  </span>
+                  {f.collected > 0 ? (
+                    <span className="font-semibold text-green-700">{formatINR(f.collected)}</span>
+                  ) : isCovered(f) ? (
+                    <span className="text-green-700 text-xs font-medium">Paid in advance ✓</span>
+                  ) : (
+                    <span className="text-slate-300">—</span>
+                  )}
                 </div>
               ))}
             </div>
@@ -2202,14 +2211,14 @@ function BalanceSheetTab() {
   )
 }
 
-function buildShareText(month: string, summary: any, outstanding: DuesEntry[], expenses: any[], corpusCollected: number, corpusTarget: number) {
+function buildShareText(month: string, summary: any, outstanding: DuesEntry[], expenses: any[], corpusCollected: number, corpusTarget: number, advancePaidCount: number) {
   return [
     `THE LILAC APARTMENT ASSOCIATION`,
     `Monthly Statement — ${month}`,
     ``,
     `MAINTENANCE`,
     `  Collected: ${formatINR(summary?.maintenance_collected ?? 0)}`,
-    `  Flats paid: ${summary?.flats_paid ?? 0} of 44`,
+    `  Flats paid: ${summary?.flats_paid ?? 0} of 44${advancePaidCount > 0 ? ` (+${advancePaidCount} paid in advance)` : ''}`,
     ``,
     `EXPENSES`,
     ...expenses.map((e: any) => `  ${e.category}: ${formatINR(e.total_amount)}`),
