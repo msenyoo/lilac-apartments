@@ -113,19 +113,6 @@ function DashboardContent() {
     },
   })
 
-  const { data: corpusSpent = 0 } = useQuery({
-    queryKey: ['fo-corpus-spent'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('expenses')
-        .select('amount')
-        .not('corpus_plan_id', 'is', null)
-        .is('voided_at', null)
-      if (error) throw error
-      return (data ?? []).reduce((s: number, e: { amount: number | null }) => s + (e.amount ?? 0), 0)
-    },
-  })
-
   const { data: corpusSpentByPlan = [] } = useQuery<{ corpus_plan_id: string; total: number }[]>({
     queryKey: ['fo-corpus-spent-by-plan'],
     queryFn: async () => {
@@ -206,6 +193,8 @@ function DashboardContent() {
   const corpusPlans     = Array.from(corpusByPlan.entries()).map(([id, p]) => ({ id, ...p }))
   const activePlans     = corpusPlans.filter(p => p.status === 'active')
   const corpusCollected = corpusPlans.reduce((s, p) => s + p.collected, 0)
+  // Spent scoped to the same plans as Collected (tracker = active/draft only)
+  const corpusSpent     = corpusPlans.reduce((s, p) => s + p.spent, 0)
   // Available = bank-ledger balance per fund (v_fund_position), so the net
   // always ties to the actual bank balance. corpusCollected/corpusSpent stay
   // for plan-progress displays only.

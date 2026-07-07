@@ -174,9 +174,12 @@ function UploadTab({ onImported }: { onImported: () => void }) {
       const uploadId = uploadRecord?.id ?? null
 
       const reviewCount = rows.filter(r => r._confidence === 'REVIEW').length
+      const { data: activePlans } = await supabase.from('corpus_plans').select('id').eq('status', 'active')
+      const soleActivePlanId = activePlans?.length === 1 ? activePlans[0].id : null
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const toInsert = rows.map(({ _confidence, ...r }) => ({
         ...r, source: `Import:${renamedFile}`, upload_id: uploadId, row_type: 'Normal' as const,
+        plan_id: r.corpus === 'YES' ? soleActivePlanId : null,
       }))
 
       for (let i = 0; i < toInsert.length; i += 100) {
@@ -737,13 +740,18 @@ function ReviewItem({ item, flats, onSaved }: { item: ReviewEntry; flats: any[];
 
   async function handleSave() {
     if (!flatCode) return
+    let resolvedPlanId = effectiveCorpus === 'YES' ? planId : null
+    if (effectiveCorpus === 'YES' && !resolvedPlanId) {
+      if (activePlans.length === 1) resolvedPlanId = activePlans[0].id
+      else if (activePlans.length > 1) { toast.error('Select a corpus plan for this payment'); return }
+    }
     setSaving(true)
     const flatId = flats.find(f => f.code === flatCode)?.id ?? null
     const { error } = await supabase.from('transactions').update({
       flat_code: flatCode, flat_id: flatId,
       category: isFlat ? category : flatCode,
       corpus: effectiveCorpus,
-      plan_id: effectiveCorpus === 'YES' ? planId : null,
+      plan_id: resolvedPlanId,
       row_type: 'Normal',
     }).eq('id', item.id)
     setSaving(false)
@@ -828,14 +836,13 @@ function ReviewItem({ item, flats, onSaved }: { item: ReviewEntry; flats: any[];
           <div className="flex flex-col gap-1">
             <Label>Corpus plan</Label>
             <Select
-              value={planId ?? '__auto__'}
-              onValueChange={v => setPlanId(v === '__auto__' ? null : v)}
+              value={planId ?? ''}
+              onValueChange={v => setPlanId(v || null)}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Auto (matched by fiscal year)" />
+                <SelectValue placeholder="Select plan…" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__auto__">Auto (matched by fiscal year)</SelectItem>
                 {activePlans.map(p => (
                   <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                 ))}
@@ -947,10 +954,14 @@ function EditModal({ txn, flats, onClose, onSaved, onSplit, onVoided }: {
   }
 
   async function handleSave() {
+    let resolvedPlanId = corpus === 'YES' ? planId : null
+    if (corpus === 'YES' && !resolvedPlanId) {
+      if (activePlans.length === 1) resolvedPlanId = activePlans[0].id
+      else if (activePlans.length > 1) { toast.error('Select a corpus plan for this transaction'); return }
+    }
     setSaving(true)
     const flatId = flats.find(f => f.code === flatCode)?.id ?? null
     const resolvedCategory = isFlat(flatCode) ? category : flatCode
-    const resolvedPlanId = corpus === 'YES' ? planId : null
     const { error } = await supabase.from('transactions').update({
       flat_code: flatCode, flat_id: flatId, category: resolvedCategory, corpus,
       plan_id: resolvedPlanId,
@@ -1027,6 +1038,7 @@ function EditModal({ txn, flats, onClose, onSaved, onSplit, onVoided }: {
               <input type="checkbox" checked={corpus === 'YES'} onChange={e => {
                 const checked = e.target.checked
                 setCorpus(checked ? 'YES' : 'NO')
+                if (checked && !planId && activePlans.length === 1) setPlanId(activePlans[0].id)
                 if (!checked) setPlanId(null)
               }}
                 className="w-4 h-4 rounded" />
@@ -1035,7 +1047,7 @@ function EditModal({ txn, flats, onClose, onSaved, onSplit, onVoided }: {
             </label>
           )}
 
-          {corpus === 'YES' && activePlans.length > 1 && (
+          {corpus === 'YES' && activePlans.length >= 1 && (
             <div className="flex flex-col gap-1">
               <Label>Corpus plan</Label>
               <Select
@@ -1043,10 +1055,9 @@ function EditModal({ txn, flats, onClose, onSaved, onSplit, onVoided }: {
                 onValueChange={v => setPlanId(v || null)}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Auto (matched by fiscal year)" />
+                  <SelectValue placeholder="Select plan…" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Auto (matched by fiscal year)</SelectItem>
                   {activePlans.map(p => (
                     <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                   ))}
@@ -1097,7 +1108,7 @@ function EditModal({ txn, flats, onClose, onSaved, onSplit, onVoided }: {
 }
 
 // ── SPLIT MODAL ───────────────────────────────────────────────
-interface SplitRow { flatCode: string; category: string; corpus: 'YES' | 'NO'; amount: string }
+interface SplitRow { flatCode: string; category: string; corpus: 'YES' | 'NO'; amount: string; planId?: string | null }
 
 function SplitModal({ txn, onClose, onSaved, flats }: {
   txn: Transaction; onClose: () => void; onSaved: () => void; flats: any[]
@@ -1109,6 +1120,18 @@ function SplitModal({ txn, onClose, onSaved, flats }: {
   const [saving, setSaving] = useState(false)
   const [error, setError]   = useState('')
 
+  const { data: activePlans = [] } = useQuery({
+    queryKey: ['active-corpus-plans'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('corpus_plans')
+        .select('id, name')
+        .eq('status', 'active')
+        .order('name')
+      return (data ?? []) as { id: string; name: string }[]
+    },
+  })
+
   const total = rows.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0)
   const remaining = txn.amount - total
 
@@ -1119,6 +1142,9 @@ function SplitModal({ txn, onClose, onSaved, flats }: {
   async function handleSave() {
     if (Math.abs(remaining) > 0.01) { setError(`Amounts must sum to ${formatINR(txn.amount)}`); return }
     if (rows.some(r => !r.flatCode || !r.amount)) { setError('All rows must have flat/category and amount'); return }
+    if (activePlans.length > 1 && rows.some(r => r.corpus === 'YES' && !r.planId)) {
+      setError('Select a corpus plan for each corpus row'); return
+    }
     setSaving(true); setError('')
 
     // Create split_ref
@@ -1138,7 +1164,9 @@ function SplitModal({ txn, onClose, onSaved, flats }: {
       cr_dr: txn.cr_dr, amount: parseFloat(r.amount),
       flat_id: flatMap.get(r.flatCode) ?? null, flat_code: r.flatCode,
       category: FLAT_CODES.includes(r.flatCode) ? r.category : r.flatCode,
-      corpus: r.corpus, fiscal_year: txn.fiscal_year, fiscal_month: txn.fiscal_month,
+      corpus: r.corpus,
+      plan_id: r.corpus === 'YES' ? (r.planId ?? (activePlans.length === 1 ? activePlans[0].id : null)) : null,
+      fiscal_year: txn.fiscal_year, fiscal_month: txn.fiscal_month,
       fiscal_label: txn.fiscal_label, source: txn.source, upload_id: txn.upload_id,
       split_ref_id: splitRef?.id ?? null, split_ref_code: refCode, row_type: 'SPLIT' as const,
     }))
@@ -1191,6 +1219,19 @@ function SplitModal({ txn, onClose, onSaved, flats }: {
                   >
                     <option value="Maintenance">Maintenance</option>
                     <option value="Corpus">Corpus</option>
+                  </select>
+                </div>
+              )}
+              {row.corpus === 'YES' && activePlans.length > 1 && (
+                <div className="w-36">
+                  <label className="ds-lbl">Plan</label>
+                  <select
+                    value={row.planId ?? ''}
+                    onChange={e => updateRow(i, 'planId', e.target.value)}
+                    className="w-full ds-field"
+                  >
+                    <option value="">Select plan…</option>
+                    {activePlans.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 </div>
               )}

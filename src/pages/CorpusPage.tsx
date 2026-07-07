@@ -139,7 +139,7 @@ export default function CorpusPage() {
   })
 
   const { data: expenditures = [] } = useQuery({
-    queryKey: ['corpus-expenditure', selectedPlanId],
+    queryKey: ['corpus-expenditure', selectedPlanId, activePlans.map(p => p.id).join(',')],
     queryFn: async () => {
       let q = supabase.from('expenses')
         .select('id,expense_date,description,amount,voucher_no,payee_name_raw,category:category_id(name)')
@@ -148,9 +148,23 @@ export default function CorpusPage() {
       if (selectedPlanId !== '__all__') {
         q = q.eq('corpus_plan_id', selectedPlanId)
       } else {
-        q = q.not('corpus_plan_id', 'is', null)
+        // Match the tracker's scope (active/draft plans only) so Spent and
+        // Collected cover the same plans
+        if (activePlans.length === 0) return []
+        q = q.in('corpus_plan_id', activePlans.map(p => p.id))
       }
       return (await q).data ?? []
+    },
+  })
+
+  const { data: openCorpusArrears = [] } = useQuery({
+    queryKey: ['corpus-arrears-open'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('flat_arrears')
+        .select('amount, source_label, flat:flat_id(code)')
+        .eq('arrears_type', 'corpus')
+      return (data ?? []) as unknown as { amount: number; source_label: string; flat: { code: string } | null }[]
     },
   })
 
@@ -279,6 +293,25 @@ export default function CorpusPage() {
         <ParallelPlanWarning plans={trulyActivePlans} onDismiss={() => setOverlapDismissed(true)} />
       )}
 
+      {openCorpusArrears.length > 0 && (
+        <div className="flex items-start gap-2 px-4 py-3 rounded-xl bg-violet-50 border border-violet-200 text-sm">
+          <span className="mt-0.5 text-violet-600 shrink-0">↪</span>
+          <p className="flex-1 text-violet-800">
+            <span className="font-semibold">
+              {formatINR(openCorpusArrears.reduce((s, a) => s + a.amount, 0))} unpaid from closed plans
+            </span>{' '}
+            ({[...new Set(openCorpusArrears.map(a => a.source_label))].join(', ')}) across{' '}
+            {new Set(openCorpusArrears.map(a => a.flat?.code)).size} flats:{' '}
+            {openCorpusArrears
+              .slice()
+              .sort((a, b) => (a.flat?.code ?? '').localeCompare(b.flat?.code ?? ''))
+              .map(a => `${a.flat?.code ?? '?'} ${formatINR(a.amount)}`)
+              .join(' · ')}.
+            {' '}These will be offered as carry-forward when you create the next plan.
+          </p>
+        </div>
+      )}
+
       {/* Consolidated view banner when showing all */}
       {selectedPlanId === '__all__' && activePlans.length > 1 && (
         <ConsolidatedBanner plans={activePlans} allCorpus={allCorpus} />
@@ -349,7 +382,12 @@ export default function CorpusPage() {
 
       {tab === 'collection'  && <CollectionGrid corpus={corpus} isLoading={isLoading} multiPlan={selectedPlanId === '__all__'} />}
       {tab === 'plan'        && <PlanGrid planFlats={planFlats} installments={installments} flatInstallments={flatInstallments} corpus={corpus} />}
-      {tab === 'expenditure' && <ExpenditureView expenditures={expenditures} plan={selectedPlan} />}
+      {tab === 'expenditure' && (
+        <ExpenditureView
+          expenditures={expenditures}
+          plan={selectedPlan ?? (activePlans.length === 1 ? activePlans[0] : null)}
+        />
+      )}
       {tab === 'calendar' && (
         <CollectionCalendar
           activePlans={trulyActivePlans}
@@ -859,6 +897,34 @@ function ExpenditureView({ expenditures, plan }: { expenditures: any[]; plan: Co
   const budget: { category: string; budget: number }[] = plan?.planned_budget ?? []
   const totalBudget = budget.reduce((s, b) => s + b.budget, 0)
 
+  // Budget vs actual by category. Budget lines are free text, so match
+  // case-insensitively, falling back to prefix ("Civil" ↔ "Civil Work").
+  const actualByCat = new Map<string, number>()
+  for (const e of expenditures) {
+    const name = e.category?.name ?? 'Uncategorised'
+    actualByCat.set(name, (actualByCat.get(name) ?? 0) + e.amount)
+  }
+  function matchesBudget(budgetCat: string, actualCat: string) {
+    const b = budgetCat.trim().toLowerCase()
+    const a = actualCat.trim().toLowerCase()
+    return b === a || a.startsWith(b) || b.startsWith(a)
+  }
+  const catRows: { category: string; budget: number | null; actual: number }[] = []
+  const claimed = new Set<string>()
+  for (const b of budget) {
+    const actualCat = [...actualByCat.keys()].find(a => !claimed.has(a) && matchesBudget(b.category, a))
+    if (actualCat) claimed.add(actualCat)
+    catRows.push({
+      category: actualCat && actualCat.toLowerCase() !== b.category.toLowerCase() ? `${actualCat} (${b.category})` : (actualCat ?? b.category),
+      budget: b.budget,
+      actual: actualCat ? actualByCat.get(actualCat)! : 0,
+    })
+  }
+  for (const [name, amount] of actualByCat) {
+    if (!claimed.has(name)) catRows.push({ category: name, budget: null, actual: amount })
+  }
+  catRows.sort((a, b) => b.actual - a.actual)
+
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -876,18 +942,56 @@ function ExpenditureView({ expenditures, plan }: { expenditures: any[]; plan: Co
         </div>
       </div>
 
-      {budget.length > 0 && (
+      {catRows.length > 0 && (
         <div className="surface !p-0">
           <div className="px-4 py-3 border-b hairline">
-            <h3 className="font-semibold text-sm">Budget breakdown</h3>
+            <h3 className="font-semibold text-sm">By category — budget vs actual</h3>
           </div>
-          <div className="divide-rows">
-            {budget.map(b => (
-              <div key={b.category} className="flex justify-between px-4 py-3 text-sm">
-                <span style={{ color: 'var(--ink-600)' }}>{b.category}</span>
-                <span className="font-semibold">{formatINR(b.budget)}</span>
-              </div>
-            ))}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left border-b hairline">
+                  <th className="px-4 py-2 font-medium" style={{ color: 'var(--ink-500)' }}>Category</th>
+                  <th className="px-4 py-2 font-medium text-right" style={{ color: 'var(--ink-500)' }}>Budget</th>
+                  <th className="px-4 py-2 font-medium text-right" style={{ color: 'var(--ink-500)' }}>Actual</th>
+                  <th className="px-4 py-2 font-medium text-right" style={{ color: 'var(--ink-500)' }}>Remaining</th>
+                </tr>
+              </thead>
+              <tbody className="divide-rows">
+                {catRows.map(r => {
+                  const remaining = r.budget != null ? r.budget - r.actual : null
+                  return (
+                    <tr key={r.category}>
+                      <td className="px-4 py-2.5" style={{ color: 'var(--ink-700)' }}>
+                        {r.category}
+                        {r.budget == null && (
+                          <span className="ml-2 text-[11px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">unbudgeted</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 text-right" style={{ color: 'var(--ink-600)' }}>
+                        {r.budget != null ? formatINR(r.budget) : '—'}
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-semibold text-red-600">
+                        {r.actual > 0 ? formatINR(r.actual) : '—'}
+                      </td>
+                      <td className={`px-4 py-2.5 text-right font-medium ${remaining == null ? '' : remaining < 0 ? 'text-red-600' : 'text-green-700'}`}>
+                        {remaining == null ? '—' : remaining < 0 ? `${formatINR(-remaining)} over` : formatINR(remaining)}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="border-t hairline font-semibold">
+                  <td className="px-4 py-2.5">Total</td>
+                  <td className="px-4 py-2.5 text-right">{totalBudget > 0 ? formatINR(totalBudget) : '—'}</td>
+                  <td className="px-4 py-2.5 text-right text-red-600">{formatINR(totalSpent)}</td>
+                  <td className={`px-4 py-2.5 text-right ${totalBudget > 0 && totalBudget - totalSpent < 0 ? 'text-red-600' : 'text-green-700'}`}>
+                    {totalBudget > 0 ? (totalBudget - totalSpent < 0 ? `${formatINR(totalSpent - totalBudget)} over` : formatINR(totalBudget - totalSpent)) : '—'}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
           </div>
         </div>
       )}
@@ -1114,6 +1218,7 @@ interface FlatAmountRow {
   bhkType: string
   targetAmount: number
   prePayment: number
+  carryForward: number
 }
 
 const FY_RANGE = [2024, 2025, 2026, 2027, 2028, 2029, 2030]
@@ -1134,6 +1239,7 @@ function CreatePlanWizard({ open, onClose, onSuccess }: {
     { id: crypto.randomUUID(), label: '', dueDate: '', amount: 0 },
   ])
   const [flatAmounts, setFlatAmounts] = useState<FlatAmountRow[]>([])
+  const [applyCarryForward, setApplyCarryForward] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -1148,6 +1254,23 @@ function CreatePlanWizard({ open, onClose, onSuccess }: {
     },
   })
 
+  // Unpaid balances saved as corpus arrears when earlier plans were closed
+  const { data: corpusArrears = [] } = useQuery({
+    queryKey: ['corpus-arrears-for-wizard'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('flat_arrears')
+        .select('id, flat_id, amount, source_label')
+        .eq('arrears_type', 'corpus')
+      return (data ?? []) as { id: string; flat_id: string; amount: number; source_label: string }[]
+    },
+    enabled: open,
+  })
+  const carryByFlat = new Map<string, number>()
+  for (const a of corpusArrears) carryByFlat.set(a.flat_id, (carryByFlat.get(a.flat_id) ?? 0) + a.amount)
+  const carryTotal = corpusArrears.reduce((s, a) => s + a.amount, 0)
+  const carrySources = [...new Set(corpusArrears.map(a => a.source_label))].join(', ')
+
   const instTotal = installments.reduce((s, i) => s + (i.amount || 0), 0)
 
   function goToStep3() {
@@ -1157,6 +1280,7 @@ function CreatePlanWizard({ open, onClose, onSuccess }: {
       bhkType: f.bhk_type ?? '',
       targetAmount: instTotal,
       prePayment: 0,
+      carryForward: carryByFlat.get(f.id) ?? 0,
     }))
     setFlatAmounts(defaultRows)
     setStep(3)
@@ -1182,7 +1306,8 @@ function CreatePlanWizard({ open, onClose, onSuccess }: {
     setSaving(true)
     setError(null)
     try {
-      const totalTarget = flatAmounts.reduce((s, f) => s + (f.targetAmount || 0), 0)
+      const carryApplied = applyCarryForward ? flatAmounts.reduce((s, f) => s + (f.carryForward || 0), 0) : 0
+      const totalTarget = flatAmounts.reduce((s, f) => s + (f.targetAmount || 0), 0) + carryApplied
       const totalPrePayments = flatAmounts.reduce((s, f) => s + (f.prePayment || 0), 0)
 
       const { data: plan, error: planErr } = await supabase
@@ -1223,10 +1348,20 @@ function CreatePlanWizard({ open, onClose, onSuccess }: {
             flat_id: fa.flatId,
             target_amount: fa.targetAmount,
             pre_payment: fa.prePayment,
-            carry_forward_amount: 0,
+            carry_forward_amount: applyCarryForward ? fa.carryForward : 0,
           }))
         )
       if (flatsErr) throw new Error(flatsErr.message)
+
+      if (applyCarryForward && corpusArrears.length > 0) {
+        // The debt now lives on the new plan's carry_forward_amount — remove
+        // the arrears rows so it isn't tracked twice
+        const { error: arrErr } = await supabase
+          .from('flat_arrears')
+          .delete()
+          .in('id', corpusArrears.map(a => a.id))
+        if (arrErr) toast.error(`Plan created, but clearing old corpus arrears failed: ${arrErr.message}`)
+      }
 
       toast.success(`Plan "${name}" ${status === 'active' ? 'created and activated' : 'saved as draft'}`)
       onSuccess()
@@ -1385,6 +1520,20 @@ function CreatePlanWizard({ open, onClose, onSuccess }: {
         {/* Step 3 */}
         {step === 3 && (
           <div className="space-y-3 mt-2">
+            {carryTotal > 0 && (
+              <label className="flex items-start gap-2 text-sm cursor-pointer rounded-lg px-3 py-2 bg-violet-50 border border-violet-200">
+                <input
+                  type="checkbox"
+                  checked={applyCarryForward}
+                  onChange={e => setApplyCarryForward(e.target.checked)}
+                  className="w-4 h-4 rounded mt-0.5"
+                />
+                <span className="text-violet-800">
+                  Carry forward <strong>{formatINR(carryTotal)}</strong> of unpaid balances from {carrySources} ({carryByFlat.size} flat{carryByFlat.size !== 1 ? 's' : ''}).
+                  Adds to each flat's target here and clears the old arrears records.
+                </span>
+              </label>
+            )}
             <div className="overflow-auto max-h-80">
               <table className="w-full text-sm">
                 <thead>
@@ -1392,7 +1541,10 @@ function CreatePlanWizard({ open, onClose, onSuccess }: {
                     <th className="pb-2 pr-3 font-medium" style={{ color: 'var(--ink-500)' }}>Flat</th>
                     <th className="pb-2 pr-3 font-medium" style={{ color: 'var(--ink-500)' }}>BHK</th>
                     <th className="pb-2 pr-3 font-medium" style={{ color: 'var(--ink-500)' }}>Target (₹)</th>
-                    <th className="pb-2 font-medium" style={{ color: 'var(--ink-500)' }}>Pre-payment (₹)</th>
+                    <th className="pb-2 pr-3 font-medium" style={{ color: 'var(--ink-500)' }}>Pre-payment (₹)</th>
+                    {applyCarryForward && carryTotal > 0 && (
+                      <th className="pb-2 font-medium" style={{ color: 'var(--ink-500)' }}>Carry-fwd (₹)</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -1409,7 +1561,7 @@ function CreatePlanWizard({ open, onClose, onSuccess }: {
                           className="h-8 text-sm"
                         />
                       </td>
-                      <td className="py-1.5">
+                      <td className="py-1.5 pr-3">
                         <Input
                           type="number"
                           min={0}
@@ -1418,6 +1570,11 @@ function CreatePlanWizard({ open, onClose, onSuccess }: {
                           className="h-8 text-sm"
                         />
                       </td>
+                      {applyCarryForward && carryTotal > 0 && (
+                        <td className="py-1.5 font-medium text-violet-600">
+                          {fa.carryForward > 0 ? `+${formatINR(fa.carryForward)}` : '—'}
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -1431,6 +1588,12 @@ function CreatePlanWizard({ open, onClose, onSuccess }: {
               <span style={{ color: 'var(--ink-500)' }}>Total pre-payments</span>
               <span className="font-semibold text-green-700">{formatINR(totalFlatPrePayment)}</span>
             </div>
+            {applyCarryForward && carryTotal > 0 && (
+              <div className="flex justify-between text-sm">
+                <span style={{ color: 'var(--ink-500)' }}>Total carry-forward</span>
+                <span className="font-semibold text-violet-600">+{formatINR(carryTotal)}</span>
+              </div>
+            )}
           </div>
         )}
 
@@ -1458,6 +1621,12 @@ function CreatePlanWizard({ open, onClose, onSuccess }: {
                 <div className="flex justify-between">
                   <span style={{ color: 'var(--ink-500)' }}>Total pre-payments</span>
                   <span className="font-semibold text-green-700">{formatINR(totalFlatPrePayment)}</span>
+                </div>
+              )}
+              {applyCarryForward && carryTotal > 0 && (
+                <div className="flex justify-between">
+                  <span style={{ color: 'var(--ink-500)' }}>Carry-forward from closed plans</span>
+                  <span className="font-semibold text-violet-600">+{formatINR(carryTotal)}</span>
                 </div>
               )}
             </div>
@@ -1652,7 +1821,8 @@ function ClosePlanDialog({ open, planId, onClose, onSuccess }: {
               ) : preview.length > 0 ? (
                 <>
                   <span className="block mb-2">
-                    {preview.length} flat(s) have outstanding balances that will be saved as corpus arrears:
+                    {preview.length} flat(s) have outstanding balances that will be saved as corpus arrears
+                    (you can roll them into the next plan as carry-forward when creating it):
                   </span>
                   <div className="flex flex-col gap-1 max-h-40 overflow-y-auto">
                     {preview.map(r => (
