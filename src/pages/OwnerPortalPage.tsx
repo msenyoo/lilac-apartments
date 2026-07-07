@@ -362,13 +362,12 @@ export default function OwnerPortalPage() {
       let ownerName = ''
       const { data: resData } = await supabase
         .from('residents')
-        .select('name')
+        .select('name, relation')
         .eq('flat_id', (myFlat as any).id)
         .eq('type', 'Owner')
         .eq('is_active', true)
-        .limit(1)
-        .maybeSingle()
-      if (resData) ownerName = (resData as { name: string }).name
+      const owners = (resData ?? []) as { name: string; relation: string }[]
+      ownerName = (owners.find(o => o.relation === 'Self') ?? owners[0])?.name ?? ''
 
       const generated = new Date().toLocaleDateString('en-IN', {
         day: '2-digit', month: 'short', year: 'numeric',

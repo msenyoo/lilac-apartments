@@ -2,10 +2,12 @@ import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { formatINR, FLAT_CODES } from '@/lib/tagger'
-import { Share2, CheckCircle, AlertTriangle, Download, FileText, Loader2, Zap, MessageCircle, Check, Send } from 'lucide-react'
+import { Share2, CheckCircle, AlertTriangle, Download, FileText, Loader2, Zap, MessageCircle, Check } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import type { DuesEntry } from '@/lib/supabase'
+import { fetchFlatContactsByCode } from '@/lib/contacts'
+import { WhatsAppSendButtons } from '@/components/WhatsAppSendButtons'
 
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
@@ -907,18 +909,10 @@ function FlatStatementTab() {
     },
   })
 
-  const { data: ownerPhone } = useQuery({
-    queryKey: ['flat-owner-phone', flatCode],
-    queryFn: async () => {
-      if (!flatInfo?.id) return null
-      const { data: r } = await supabase
-        .from('residents').select('phone, type')
-        .eq('flat_id', flatInfo.id).eq('is_active', true).order('type').maybeSingle()
-      const raw = r?.phone?.trim().replace(/\D/g, '') ?? ''
-      if (!raw) return null
-      return raw.length === 10 ? `91${raw}` : raw
-    },
-    enabled: !!flatInfo?.id,
+  const { data: contacts } = useQuery({
+    queryKey: ['flat-contacts', flatCode],
+    queryFn: () => fetchFlatContactsByCode(flatCode),
+    enabled: !!flatCode,
   })
 
   const maintOutstanding = outstandingAmt ?? 0
@@ -956,14 +950,6 @@ function FlatStatementTab() {
     await navigator.clipboard.writeText(buildConsolidatedReminder())
     setCopied(true)
     setTimeout(() => setCopied(false), 2500)
-  }
-
-  function handleSendConsolidated() {
-    const text = buildConsolidatedReminder()
-    const url = ownerPhone
-      ? `https://wa.me/${ownerPhone}?text=${encodeURIComponent(text)}`
-      : `https://wa.me/?text=${encodeURIComponent(text)}`
-    window.open(url, '_blank', 'noopener')
   }
 
   return (
@@ -1013,12 +999,7 @@ function FlatStatementTab() {
                   ? <><Check size={14} /> Copied!</>
                   : <><MessageCircle size={14} /> Copy reminder</>}
               </button>
-              <button onClick={handleSendConsolidated}
-                className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border font-medium hover:opacity-80"
-                style={{ borderColor: 'var(--ok-bd)', background: 'var(--ok-bg)', color: 'var(--ok)' }}
-                title={ownerPhone ? `Opens WhatsApp chat with owner (+${ownerPhone})` : 'Owner phone not on file — opens WhatsApp share to pick a contact'}>
-                <Send size={14} /> {ownerPhone ? 'Send' : 'Share'} reminder
-              </button>
+              <WhatsAppSendButtons contacts={contacts ?? []} text={buildConsolidatedReminder()} />
             </>
           )}
           <button onClick={handleExport} disabled={!txns?.length}
