@@ -11,6 +11,8 @@ import { toast } from 'sonner'
 
 type Tab = 'flats' | 'residents'
 
+const RELATIONS = ['Self', 'Co-owner', 'Spouse', 'Parent', 'Child', 'Guardian', 'Other'] as const
+
 export default function FlatsPage() {
   const [tab, setTab] = useState<Tab>('flats')
 
@@ -441,6 +443,11 @@ function ResidentsTab() {
         </span>
       ),
     },
+    { field: 'relation', headerName: 'Relation', width: 110, filter: true,
+      cellRenderer: (p: any) => (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600">{p.value}</span>
+      ),
+    },
     // Phone: admin + committee only (needed for dues communication)
     ...(isAdmin || role === 'committee' ? [{ field: 'phone', headerName: 'Phone', width: 130 } as ColDef<any>] : []),
     // UPI IDs: admin only — payment method is sensitive financial data
@@ -522,6 +529,7 @@ function AddResidentModal({ flats, onClose, onSaved }: { flats: any[]; onClose: 
   const [flatId, setFlatId]   = useState('')
   const [name, setName]       = useState('')
   const [type, setType]       = useState<'Owner' | 'Tenant'>('Owner')
+  const [relation, setRelation] = useState<string>('Self')
   const [phone, setPhone]     = useState('')
   const [email, setEmail]     = useState('')
   const [upiRaw, setUpiRaw]   = useState('')
@@ -535,7 +543,7 @@ function AddResidentModal({ flats, onClose, onSaved }: { flats: any[]; onClose: 
     setSaving(true); setError('')
     const upi_ids = upiRaw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
     const { error: err } = await supabase.from('residents').insert({
-      flat_id: flatId, name, type, phone: phone || null, email: email || null,
+      flat_id: flatId, name, type, relation, phone: phone || null, email: email || null,
       upi_ids, moved_in: movedIn || null, notes: notes || null, is_active: true,
     })
     setSaving(false)
@@ -562,11 +570,24 @@ function AddResidentModal({ flats, onClose, onSaved }: { flats: any[]; onClose: 
             </div>
             <div>
               <label className="ds-lbl">Type</label>
-              <select value={type} onChange={e => setType(e.target.value as 'Owner' | 'Tenant')} className="ds-field w-full">
+              <select id="restype" value={type} onChange={e => {
+                const t = e.target.value as 'Owner' | 'Tenant'
+                setType(t)
+                if (t === 'Tenant' && relation === 'Co-owner') setRelation('Self')
+              }} className="ds-field w-full">
                 <option value="Owner">Owner</option>
                 <option value="Tenant">Tenant</option>
               </select>
             </div>
+          </div>
+          <div>
+            <label className="ds-lbl">Relation</label>
+            <select id="relation" value={relation} onChange={e => setRelation(e.target.value)} className="ds-field w-full">
+              {RELATIONS.filter(r => type === 'Owner' || r !== 'Co-owner').map(r => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
+            <p className="text-[11px] mt-1" style={{ color: 'var(--ink-400)' }}>Who this person is — e.g. the owner's spouse, or the tenant themself (Self)</p>
           </div>
           <Field label="Full name *" value={name} onChange={setName} placeholder="e.g. Ramesh Kumar" />
           <div className="grid grid-cols-2 gap-3">
