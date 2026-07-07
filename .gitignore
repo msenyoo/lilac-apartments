@@ -17,6 +17,7 @@ supabase/.temp/
 # Playwright output
 playwright-report/
 test-results/
+e2e/fixtures.json
 
 # Screenshots / temp images
 *.png
