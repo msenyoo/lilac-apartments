@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AgGridReact } from 'ag-grid-react'
 import type { ColDef } from 'ag-grid-community'
-import { X, Edit2, UserMinus, UserPlus } from 'lucide-react'
+import { X, Edit2, Ruler, UserMinus, UserPlus } from 'lucide-react'
 import { supabase, Flat, Resident } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
 import { useRoleCtx } from '@/contexts/RoleContext'
@@ -44,6 +44,7 @@ function FlatsTab() {
   const qc = useQueryClient()
   const [selected, setSelected] = useState<Flat | null>(null)
   const [editRate, setEditRate] = useState(false)
+  const [editArea, setEditArea] = useState(false)
 
   const { data: flats, isLoading } = useQuery({
     queryKey: ['flats-full'],
@@ -67,6 +68,9 @@ function FlatsTab() {
   const colDefs = useMemo((): ColDef<any>[] => [
     { field: 'code',                headerName: 'Flat',         width: 90 },
     { field: 'block',               headerName: 'Block',        width: 80, filter: true },
+    { field: 'floor',               headerName: 'Floor',        width: 100, filter: true,
+      valueFormatter: (p: any) => p.value ?? '—',
+    },
     { field: 'flat_type',           headerName: 'Unit Type',    width: 120, filter: true },
     { field: 'bhk_type',            headerName: 'BHK',          width: 120, filter: true },
     { field: 'has_private_terrace', headerName: 'P.T.',         width: 70,
@@ -77,6 +81,11 @@ function FlatsTab() {
     },
     { field: 'corpus_target',       headerName: 'Corpus Target', width: 130, type: 'numericColumn',
       valueFormatter: (p: any) => formatINR(p.value),
+    },
+    { field: 'saleable_area',       headerName: 'Area',         width: 110,
+      cellRenderer: (p: any) => p.value
+        ? <span>{p.value} sq.ft</span>
+        : <span className="text-xs" style={{ color: 'var(--ink-400)' }}>Pending</span>,
     },
   ], [])
 
@@ -109,6 +118,7 @@ function FlatsTab() {
             </div>
             <div className="space-y-1.5 text-sm">
               <Detail label="Block"       value={selected.block} />
+              <Detail label="Floor"       value={selected.floor ?? '—'} />
               <Detail label="Unit type"   value={selected.flat_type} />
               <Detail label="BHK"         value={selected.bhk_type ?? '—'} />
               <Detail label="Private terrace" value={selected.has_private_terrace ? 'Yes' : 'No'} />
@@ -119,6 +129,30 @@ function FlatsTab() {
               <button onClick={() => setEditRate(true)}
                 className="w-full btn-secondary text-sm flex items-center justify-center gap-1.5">
                 <Edit2 size={13} /> Change maintenance rate
+              </button>
+            )}
+          </div>
+
+          {/* Area details */}
+          <div className="surface !p-4 flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <h4 className="font-medium text-sm">Area details</h4>
+              {!selected.carpet_area && (
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">Pending</span>
+              )}
+            </div>
+            <div className="space-y-1.5 text-sm">
+              <Detail label="Carpet area"   value={fmtArea(selected.carpet_area)} />
+              <Detail label="Plinth area"   value={fmtArea(selected.plinth_area)} />
+              <Detail label="Common area"   value={fmtArea(selected.common_area)} />
+              <Detail label="Saleable area" value={fmtArea(selected.saleable_area)} />
+              <Detail label="P.O.T. area"   value={fmtArea(selected.pot_area)} />
+              <Detail label="U.D.S total"   value={fmtArea(selected.uds_total)} />
+            </div>
+            {isAdmin && (
+              <button onClick={() => setEditArea(true)}
+                className="w-full btn-secondary text-sm flex items-center justify-center gap-1.5">
+                <Ruler size={13} /> {selected.carpet_area ? 'Edit area details' : 'Add area details'}
               </button>
             )}
           </div>
@@ -146,8 +180,17 @@ function FlatsTab() {
       {isAdmin && editRate && selected && (
         <RateChangeModal flat={selected} onClose={() => setEditRate(false)} onSaved={() => { setEditRate(false); qc.invalidateQueries() }} />
       )}
+
+      {isAdmin && editArea && selected && (
+        <AreaDetailsModal flat={selected} onClose={() => setEditArea(false)}
+          onSaved={updated => { setEditArea(false); setSelected(updated); qc.invalidateQueries({ queryKey: ['flats-full'] }) }} />
+      )}
     </div>
   )
+}
+
+function fmtArea(v: number | null) {
+  return v != null ? `${v} sq.ft` : '—'
 }
 
 function Detail({ label, value }: { label: string; value: string }) {
@@ -212,6 +255,65 @@ function RateChangeModal({ flat, onClose, onSaved }: { flat: Flat; onClose: () =
               placeholder="e.g. Annual revision FY2027-28"
               className="ds-field w-full" />
           </div>
+          {error && <p className="text-sm text-red-600">{error}</p>}
+        </div>
+        <div className="flex gap-2 p-5 border-t hairline">
+          <button onClick={onClose} className="btn-secondary flex-1">Cancel</button>
+          <button onClick={handleSave} disabled={saving} className="btn-primary flex-1">{saving ? 'Saving…' : 'Save'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AreaDetailsModal({ flat, onClose, onSaved }: { flat: Flat; onClose: () => void; onSaved: (updated: Flat) => void }) {
+  const [floor, setFloor]             = useState(flat.floor ?? '')
+  const [carpetArea, setCarpetArea]   = useState(flat.carpet_area?.toString() ?? '')
+  const [plinthArea, setPlinthArea]   = useState(flat.plinth_area?.toString() ?? '')
+  const [commonArea, setCommonArea]   = useState(flat.common_area?.toString() ?? '')
+  const [saleableArea, setSaleableArea] = useState(flat.saleable_area?.toString() ?? '')
+  const [potArea, setPotArea]         = useState(flat.pot_area?.toString() ?? '')
+  const [udsTotal, setUdsTotal]       = useState(flat.uds_total?.toString() ?? '')
+  const [saving, setSaving]           = useState(false)
+  const [error, setError]             = useState('')
+
+  async function handleSave() {
+    setSaving(true); setError('')
+    const toNum = (s: string) => s.trim() === '' ? null : Number(s)
+    const payload = {
+      floor: floor.trim() || null,
+      carpet_area: toNum(carpetArea),
+      plinth_area: toNum(plinthArea),
+      common_area: toNum(commonArea),
+      saleable_area: toNum(saleableArea),
+      pot_area: toNum(potArea),
+      uds_total: toNum(udsTotal),
+    }
+    const { error: err } = await supabase.from('flats').update(payload).eq('id', flat.id)
+    setSaving(false)
+    if (err) { setError(err.message); toast.error(err.message); return }
+    toast.success(`Area details saved for ${flat.code}`)
+    onSaved({ ...flat, ...payload })
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[85vh] overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between p-5 border-b hairline shrink-0">
+          <h3 className="font-semibold">Area details — {flat.code}</h3>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[var(--ink-100)]"><X size={18} /></button>
+        </div>
+        <div className="p-5 space-y-4 overflow-y-auto flex-1 min-h-0">
+          <Field label="Floor" value={floor} onChange={setFloor} placeholder="e.g. Ground, First, Second" />
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Carpet area (sq.ft)"   value={carpetArea}   onChange={setCarpetArea}   type="number" />
+            <Field label="Plinth area (sq.ft)"   value={plinthArea}   onChange={setPlinthArea}   type="number" />
+            <Field label="Common area (sq.ft)"   value={commonArea}   onChange={setCommonArea}   type="number" />
+            <Field label="Saleable area (sq.ft)" value={saleableArea} onChange={setSaleableArea} type="number" />
+            <Field label="P.O.T. area (sq.ft)"   value={potArea}      onChange={setPotArea}      type="number" />
+            <Field label="U.D.S total (sq.ft)"   value={udsTotal}     onChange={setUdsTotal}     type="number" />
+          </div>
+          <p className="text-[11px]" style={{ color: 'var(--ink-400)' }}>Values will typically come from the sale deed / builder's area statement, shared by each owner.</p>
           {error && <p className="text-sm text-red-600">{error}</p>}
         </div>
         <div className="flex gap-2 p-5 border-t hairline">
