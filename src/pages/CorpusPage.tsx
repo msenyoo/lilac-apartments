@@ -6,6 +6,8 @@ import { Download, X, TrendingDown, ChevronDown, Layers, Plus, Trash2, Send, Mes
 import * as XLSX from 'xlsx'
 import { supabase, CorpusEntry, CorpusPlan, Flat } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
+import { fetchFlatContactsByCode } from '@/lib/contacts'
+import { WhatsAppSendButtons } from '@/components/WhatsAppSendButtons'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog'
@@ -737,18 +739,9 @@ function FlatCorpusPanel({ flat, onClose }: { flat: CorpusEntry; onClose: () => 
     },
   })
 
-  const { data: ownerPhone } = useQuery({
-    queryKey: ['flat-owner-phone', flat.flat_code],
-    queryFn: async () => {
-      const { data: f } = await supabase.from('flats').select('id').eq('code', flat.flat_code).maybeSingle()
-      if (!f) return null
-      const { data: r } = await supabase
-        .from('residents').select('phone, type')
-        .eq('flat_id', f.id).eq('is_active', true).order('type').maybeSingle()
-      const raw = r?.phone?.trim().replace(/\D/g, '') ?? ''
-      if (!raw) return null
-      return raw.length === 10 ? `91${raw}` : raw
-    },
+  const { data: contacts } = useQuery({
+    queryKey: ['flat-contacts', flat.flat_code],
+    queryFn: () => fetchFlatContactsByCode(flat.flat_code),
   })
 
   function buildReminderText() {
@@ -782,14 +775,6 @@ function FlatCorpusPanel({ flat, onClose }: { flat: CorpusEntry; onClose: () => 
     await navigator.clipboard.writeText(buildReminderText())
     setCopied(true)
     setTimeout(() => setCopied(false), 2500)
-  }
-
-  function handleSend() {
-    const text = buildReminderText()
-    const url = ownerPhone
-      ? `https://wa.me/${ownerPhone}?text=${encodeURIComponent(text)}`
-      : `https://wa.me/?text=${encodeURIComponent(text)}`
-    window.open(url, '_blank', 'noopener')
   }
 
   return (
@@ -852,14 +837,7 @@ function FlatCorpusPanel({ flat, onClose }: { flat: CorpusEntry; onClose: () => 
                 ? <><Check size={14} /> Copied!</>
                 : <><MessageCircle size={14} /> Copy</>}
             </button>
-            <button
-              onClick={handleSend}
-              className="flex-1 flex items-center justify-center gap-2 py-2 rounded-[10px] border font-medium text-[13px] transition-colors"
-              style={{ borderColor: 'var(--ok-bd)', background: 'var(--ok-bg)', color: 'var(--ok)' }}
-              title={ownerPhone ? `Opens WhatsApp chat with owner (+${ownerPhone})` : 'Owner phone not on file — opens WhatsApp share to pick a contact'}
-            >
-              <Send size={14} /> {ownerPhone ? 'Send' : 'Share'}
-            </button>
+            <WhatsAppSendButtons contacts={contacts ?? []} text={buildReminderText()} />
           </div>
         )}
       </div>

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { readFileSync, existsSync } from 'fs'
 
 // All tab bars in this app are custom <button> elements, NOT Radix/ARIA tabs.
 // Use getByRole('button', { name: /label/i }) to click them.
@@ -60,6 +61,15 @@ test.describe('Dues', () => {
   test('FY label is shown in page', async ({ page }) => {
     // DuesPage shows an FY label in the heading area
     await expect(page.getByText(/FY \d{4}/)).toBeVisible({ timeout: 5_000 })
+  })
+
+  test('dues reminder lists every active contact with a phone', async ({ page }) => {
+    test.skip(!existsSync('e2e/fixtures.json'), 'run scripts/seed-e2e-residents.js first')
+    const { contactsFlat } = JSON.parse(readFileSync('e2e/fixtures.json', 'utf-8'))
+    await page.goto('/dues')
+    await page.getByText(contactsFlat, { exact: true }).first().click()
+    await expect(page.getByRole('button', { name: /Send · E2E Contact Tenant/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Send · E2E Contact Owner/ })).toBeVisible()
   })
 })
 

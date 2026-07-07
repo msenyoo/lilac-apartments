@@ -6,6 +6,8 @@ import { TrendingDown, Download, MessageCircle, Check, Pencil, Trash2, Search, S
 import * as XLSX from 'xlsx'
 import { supabase, DuesEntry, Transaction } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
+import { fetchFlatContactsByCode } from '@/lib/contacts'
+import { WhatsAppSendButtons } from '@/components/WhatsAppSendButtons'
 import { useRoleCtx } from '@/contexts/RoleContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -320,19 +322,9 @@ function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat
     },
   })
 
-  const { data: ownerPhone } = useQuery({
-    queryKey: ['flat-owner-phone', flat.flat_code],
-    queryFn: async () => {
-      const { data: f } = await supabase.from('flats').select('id').eq('code', flat.flat_code).maybeSingle()
-      if (!f) return null
-      const { data: r } = await supabase
-        .from('residents').select('phone, type')
-        .eq('flat_id', f.id).eq('is_active', true).order('type').maybeSingle()
-      const raw = r?.phone?.trim().replace(/\D/g, '') ?? ''
-      if (!raw) return null
-      // Add +91 country code if 10-digit local number
-      return raw.length === 10 ? `91${raw}` : raw
-    },
+  const { data: contacts } = useQuery({
+    queryKey: ['flat-contacts', flat.flat_code],
+    queryFn: () => fetchFlatContactsByCode(flat.flat_code),
   })
 
   const fyLabel = `FY ${fiscalYear}-${String(fiscalYear + 1).slice(-2)}`
@@ -372,14 +364,6 @@ function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat
     await navigator.clipboard.writeText(buildReminderText())
     setCopied(true)
     setTimeout(() => setCopied(false), 2500)
-  }
-
-  function handleSendWhatsApp() {
-    const text = buildReminderText()
-    const url = ownerPhone
-      ? `https://wa.me/${ownerPhone}?text=${encodeURIComponent(text)}`
-      : `https://wa.me/?text=${encodeURIComponent(text)}`
-    window.open(url, '_blank', 'noopener')
   }
 
   return (
@@ -460,14 +444,7 @@ function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat
                 ? <><Check size={14} /> Copied!</>
                 : <><MessageCircle size={14} /> Copy</>}
             </button>
-            <button
-              onClick={handleSendWhatsApp}
-              className="flex-1 flex items-center justify-center gap-2 py-2 rounded-[10px] border font-medium text-[13px] transition-colors"
-              style={{ borderColor: 'var(--ok-bd)', background: 'var(--ok-bg)', color: 'var(--ok)' }}
-              title={ownerPhone ? `Opens WhatsApp chat with owner (+${ownerPhone})` : 'Owner phone not on file — opens WhatsApp share to pick a contact'}
-            >
-              <Send size={14} /> {ownerPhone ? 'Send' : 'Share'}
-            </button>
+            <WhatsAppSendButtons contacts={contacts ?? []} text={buildReminderText()} />
           </div>
         )}
 
