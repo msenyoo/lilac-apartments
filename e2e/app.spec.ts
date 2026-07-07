@@ -279,6 +279,7 @@ test.describe('Flats', () => {
     await page.getByText('AG1', { exact: true }).first().click()
     await expect(page.getByRole('heading', { name: 'People' })).toBeVisible()
     await expect(page.getByText('E2E Owner One')).toBeVisible()
+    await expect(page.getByRole('link', { name: '9000000001' })).toBeVisible()
     await expect(page.getByText('E2E Owner Spouse')).toBeVisible()
     await expect(page.getByText('E2E Tenant One')).toBeVisible()
     // history is collapsed by default
