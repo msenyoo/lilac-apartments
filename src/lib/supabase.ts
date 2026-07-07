@@ -17,6 +17,13 @@ export interface Flat {
   maintenance_amt: number
   corpus_target: number
   flat_notes: string | null
+  floor: string | null
+  carpet_area: number | null
+  plinth_area: number | null
+  common_area: number | null
+  saleable_area: number | null
+  pot_area: number | null
+  uds_total: number | null
 }
 
 export interface Resident {
