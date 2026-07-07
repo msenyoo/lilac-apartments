@@ -1,6 +1,7 @@
 import {
   Document, Page, Text, View, StyleSheet,
 } from '@react-pdf/renderer'
+import { LetterheadHeader, LetterheadFooter } from './Letterhead'
 
 const S = StyleSheet.create({
   page:        { fontFamily: 'Helvetica', fontSize: 9, padding: 36, color: '#1e293b' },
@@ -34,14 +35,6 @@ function fmtINR(n: number): string {
   const rest  = s.slice(0, -3)
   const grouped = rest ? rest.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + ',' + last3 : last3
   return (n < 0 ? '-' : '') + 'Rs.' + grouped
-}
-
-function PageFooter({ generated }: { generated: string }) {
-  return (
-    <Text style={S.footer} fixed>
-      Lilac Apartment Association · Rajakil Pakkam, Chennai · Generated {generated}
-    </Text>
-  )
 }
 
 function TableHead({ cols }: { cols: { label: string; right?: boolean; flex?: number }[] }) {
@@ -86,14 +79,13 @@ export function OwnerStatementDoc({ data }: { data: OwnerStatementData }) {
   return (
     <Document>
       <Page size="A4" style={S.page}>
-        <View style={S.header}>
+        <LetterheadHeader style={S.header}>
           <Text style={S.title}>Annual Maintenance Statement — {data.fyLabel}</Text>
-          <Text style={S.subtitle}>The Lilac Apartment Association · Rajakil Pakkam, Chennai</Text>
-          <Text style={[S.subtitle, { marginTop: 2 }]}>
+          <Text style={S.subtitle}>
             Flat {data.flatCode} · Block {data.block}
             {data.ownerName ? ` · ${data.ownerName}` : ''}
           </Text>
-        </View>
+        </LetterheadHeader>
 
         <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
           {[
@@ -168,7 +160,7 @@ export function OwnerStatementDoc({ data }: { data: OwnerStatementData }) {
           </>
         )}
 
-        <PageFooter generated={data.generated} />
+        <LetterheadFooter style={S.footer} generated={data.generated} />
       </Page>
     </Document>
   )

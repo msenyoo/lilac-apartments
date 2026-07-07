@@ -3,6 +3,7 @@ import {
   Document, Page, Text, View, Image, StyleSheet,
 } from '@react-pdf/renderer'
 import type { PacketExpense } from '@/lib/approvalPacket'
+import { LetterheadHeader, LetterheadFooter } from './Letterhead'
 
 const S = StyleSheet.create({
   page: { fontFamily: 'Helvetica', fontSize: 9, padding: 36, color: '#1e293b' },
@@ -50,14 +51,6 @@ function fmtDate(d: string | null) {
   return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-function PageFooter({ generated }: { generated: string }) {
-  return (
-    <Text style={S.footer} fixed>
-      Lilac Apartment Association · Rajakil Pakkam, Chennai · Generated {generated}
-    </Text>
-  )
-}
-
 export function ApprovalPacketDoc({ expenses, generated }: {
   expenses: PacketExpense[]
   generated: string
@@ -67,12 +60,12 @@ export function ApprovalPacketDoc({ expenses, generated }: {
   return (
     <Document>
       <Page size="A4" style={S.page}>
-        <View style={S.header}>
-          <Text style={S.title}>Lilac Apartments — Expense approval request</Text>
+        <LetterheadHeader style={S.header}>
+          <Text style={S.title}>Expense approval request</Text>
           <Text style={S.subtitle}>
             {expenses.length} expense{expenses.length !== 1 ? 's' : ''} · Total {inr(grandTotal)} · Generated {generated}
           </Text>
-        </View>
+        </LetterheadHeader>
 
         {expenses.map((e, i) => (
           <View key={i}>
@@ -124,22 +117,22 @@ export function ApprovalPacketDoc({ expenses, generated }: {
           </View>
         )}
 
-        <PageFooter generated={generated} />
+        <LetterheadFooter style={S.footer} generated={generated} />
       </Page>
 
       {allImages.length > 0 && (
         <Page size="A4" style={S.receiptPage}>
-          <View style={S.header}>
+          <LetterheadHeader style={S.header}>
             <Text style={S.title}>Receipts</Text>
             <Text style={S.subtitle}>{allImages.length} image{allImages.length !== 1 ? 's' : ''}</Text>
-          </View>
+          </LetterheadHeader>
           {allImages.map((img, i) => (
             <View key={i} wrap={false}>
               <Text style={S.receiptCaption}>{img.caption}</Text>
               <Image src={img.dataUrl} style={S.receiptImage} />
             </View>
           ))}
-          <PageFooter generated={generated} />
+          <LetterheadFooter style={S.footer} generated={generated} />
         </Page>
       )}
     </Document>

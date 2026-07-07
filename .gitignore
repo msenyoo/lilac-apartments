@@ -20,6 +20,7 @@ test-results/
 
 # Screenshots / temp images
 *.png
+!src/assets/**/*.png
 
 # Claude Code local settings
 .claude/settings.local.json
