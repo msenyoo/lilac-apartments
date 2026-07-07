@@ -26,11 +26,14 @@ export interface Flat {
   uds_total: number | null
 }
 
+export type Relation = 'Self' | 'Co-owner' | 'Spouse' | 'Parent' | 'Child' | 'Guardian' | 'Other'
+
 export interface Resident {
   id: string
   flat_id: string
   name: string
   type: 'Owner' | 'Tenant'
+  relation: Relation
   phone: string | null
   email: string | null
   upi_ids: string[]
