@@ -2,6 +2,7 @@
 import {
   Document, Page, Text, View, StyleSheet,
 } from '@react-pdf/renderer'
+import { LetterheadHeader, LetterheadFooter } from './Letterhead'
 
 // ── Shared styles ──────────────────────────────────────────────
 
@@ -40,14 +41,6 @@ function formatINR(n: number) {
   return (n < 0 ? '-' : '') + 'Rs.' + grouped
 }
 
-function PageFooter({ generated }: { generated: string }) {
-  return (
-    <Text style={S.footer} fixed>
-      Lilac Apartment Association · Rajakil Pakkam, Chennai · Generated {generated}
-    </Text>
-  )
-}
-
 function TableHead({ cols }: { cols: { label: string; right?: boolean; flex?: number }[] }) {
   return (
     <View style={[S.row, { backgroundColor: '#f1f5f9' }]}>
@@ -78,11 +71,10 @@ export function DefaultersListDoc({ rows, fyLabel, generated }: {
   return (
     <Document>
       <Page size="A4" style={S.page}>
-        <View style={S.header}>
+        <LetterheadHeader style={S.header}>
           <Text style={S.title}>Defaulters List — {fyLabel}</Text>
-          <Text style={S.subtitle}>The Lilac Apartment Association · Rajakil Pakkam, Chennai</Text>
-          <Text style={[S.subtitle, { marginTop: 2 }]}>{rows.length} flat(s) with outstanding maintenance dues</Text>
-        </View>
+          <Text style={S.subtitle}>{rows.length} flat(s) with outstanding maintenance dues</Text>
+        </LetterheadHeader>
 
         <View style={S.table}>
           <TableHead cols={[
@@ -110,7 +102,7 @@ export function DefaultersListDoc({ rows, fyLabel, generated }: {
           </View>
         </View>
 
-        <PageFooter generated={generated} />
+        <LetterheadFooter style={S.footer} generated={generated} />
       </Page>
     </Document>
   )
@@ -133,10 +125,9 @@ export function IEStatementDoc({ income, expenditure, fyLabel, generated }: {
   return (
     <Document>
       <Page size="A4" style={S.page}>
-        <View style={S.header}>
+        <LetterheadHeader style={S.header}>
           <Text style={S.title}>Income &amp; Expenditure Statement — {fyLabel}</Text>
-          <Text style={S.subtitle}>The Lilac Apartment Association · Rajakil Pakkam, Chennai</Text>
-        </View>
+        </LetterheadHeader>
 
         <View style={S.twoCol}>
           {/* Income */}
@@ -184,7 +175,7 @@ export function IEStatementDoc({ income, expenditure, fyLabel, generated }: {
           </Text>
         </View>
 
-        <PageFooter generated={generated} />
+        <LetterheadFooter style={S.footer} generated={generated} />
       </Page>
     </Document>
   )
@@ -216,13 +207,12 @@ export function ReceiptsPaymentsDoc({ receipts, payments, fyLabel, generated }: 
   return (
     <Document>
       <Page size="A4" style={S.page}>
-        <View style={S.header}>
+        <LetterheadHeader style={S.header}>
           <Text style={S.title}>Receipts &amp; Payments Account — {fyLabel}</Text>
-          <Text style={S.subtitle}>The Lilac Apartment Association · Rajakil Pakkam, Chennai</Text>
-          <Text style={[S.subtitle, { marginTop: 2 }]}>
+          <Text style={S.subtitle}>
             Cash basis · All monetary transactions for the financial year
           </Text>
-        </View>
+        </LetterheadHeader>
 
         <View style={S.twoCol}>
           {/* Receipts */}
@@ -276,7 +266,7 @@ export function ReceiptsPaymentsDoc({ receipts, payments, fyLabel, generated }: 
           </Text>
         </View>
 
-        <PageFooter generated={generated} />
+        <LetterheadFooter style={S.footer} generated={generated} />
       </Page>
     </Document>
   )
@@ -315,13 +305,12 @@ export function RPStatementDoc({
   return (
     <Document>
       <Page size="A4" style={S.page}>
-        <View style={S.header}>
+        <LetterheadHeader style={S.header}>
           <Text style={S.title}>Receipts &amp; Payments Statement — {fyLabel}</Text>
-          <Text style={S.subtitle}>The Lilac Apartment Association · Rajakil Pakkam, Chennai</Text>
-          <Text style={[S.subtitle, { marginTop: 2 }]}>
+          <Text style={S.subtitle}>
             Cash basis · Financial year 1 April to 31 March
           </Text>
-        </View>
+        </LetterheadHeader>
 
         <View style={S.twoCol}>
           <View style={S.half}>
@@ -368,7 +357,7 @@ export function RPStatementDoc({
           </View>
         )}
 
-        <PageFooter generated={generated} />
+        <LetterheadFooter style={S.footer} generated={generated} />
       </Page>
     </Document>
   )
@@ -397,11 +386,10 @@ export function BalanceSheetDoc({
   return (
     <Document>
       <Page size="A4" style={S.page}>
-        <View style={S.header}>
+        <LetterheadHeader style={S.header}>
           <Text style={S.title}>Balance Sheet — {fyLabel}</Text>
-          <Text style={S.subtitle}>The Lilac Apartment Association · Rajakil Pakkam, Chennai</Text>
-          <Text style={[S.subtitle, { marginTop: 2 }]}>As at {asAtDate}</Text>
-        </View>
+          <Text style={S.subtitle}>As at {asAtDate}</Text>
+        </LetterheadHeader>
 
         <View style={S.twoCol}>
           <View style={S.half}>
@@ -451,7 +439,7 @@ export function BalanceSheetDoc({
           </Text>
         </View>
 
-        <PageFooter generated={generated} />
+        <LetterheadFooter style={S.footer} generated={generated} />
       </Page>
     </Document>
   )
@@ -465,12 +453,12 @@ export function CorpusFundDoc({ plans, generated }: {
     <Document>
       {plans.map(plan => (
         <Page key={plan.plan_name} size="A4" style={S.page}>
-          <View style={S.header}>
+          <LetterheadHeader style={S.header}>
             <Text style={S.title}>Corpus Fund Statement — {plan.plan_name}</Text>
             <Text style={S.subtitle}>
-              The Lilac Apartment Association · FY {plan.start_fiscal_year}-{String(plan.start_fiscal_year + 1).slice(-2)} to FY {plan.end_fiscal_year}-{String(plan.end_fiscal_year + 1).slice(-2)}
+              FY {plan.start_fiscal_year}-{String(plan.start_fiscal_year + 1).slice(-2)} to FY {plan.end_fiscal_year}-{String(plan.end_fiscal_year + 1).slice(-2)}
             </Text>
-          </View>
+          </LetterheadHeader>
 
           {/* Plan summary */}
           <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
@@ -516,7 +504,7 @@ export function CorpusFundDoc({ plans, generated }: {
             </View>
           </View>
 
-          <PageFooter generated={generated} />
+          <LetterheadFooter style={S.footer} generated={generated} />
         </Page>
       ))}
     </Document>
