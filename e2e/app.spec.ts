@@ -1,5 +1,23 @@
 import { test, expect } from '@playwright/test'
 import { readFileSync, existsSync } from 'fs'
+import { createClient } from '@supabase/supabase-js'
+
+// The move-out test mutates the AF1 "movable" fixture pair to Inactive.
+// Both Desktop and Mobile projects share the same dev-DB rows, so whichever
+// project's copy of this test runs second needs them reset back to Active first.
+async function resetMovableFixture() {
+  const raw = readFileSync('.env.dev.local', 'utf-8')
+  const env = Object.fromEntries(
+    raw.split('\n').filter(l => l.includes('=') && !l.startsWith('#'))
+      .map(l => { const [k, ...v] = l.split('='); return [k.trim(), v.join('=').trim()] })
+  )
+  const supabase = createClient(env.VITE_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  })
+  const { data: flat } = await supabase.from('flats').select('id').eq('code', 'AF1').single()
+  await supabase.from('residents').update({ is_active: true, moved_out: null })
+    .eq('flat_id', flat.id).in('name', ['E2E Movable Self', 'E2E Movable Spouse'])
+}
 
 // All tab bars in this app are custom <button> elements, NOT Radix/ARIA tabs.
 // Use getByRole('button', { name: /label/i }) to click them.
@@ -315,6 +333,12 @@ test.describe('Flats', () => {
   })
 
   test('group move-out moves the whole household out with a chosen date', async ({ page }) => {
+    await resetMovableFixture()
+    // The residents grid has 9+ columns; on narrow (mobile) viewports the
+    // Actions column is virtualized out of the DOM until scrolled into view.
+    // This test is about the move-out flow, not column virtualization, so
+    // widen the viewport to keep the Actions column reachable everywhere.
+    await page.setViewportSize({ width: 1280, height: 800 })
     await page.goto('/flats')
     await page.getByRole('button', { name: 'Residents' }).click()
     const row = page.locator('.ag-row', { hasText: 'E2E Movable Self' })

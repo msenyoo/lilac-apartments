@@ -40,6 +40,7 @@ npx tsc --noEmit     # TypeScript check (run before committing)
 
 # E2e tests (requires dev server running or reuseExistingServer=true)
 node scripts/seed-e2e-advance-payer.js       # Seed dev-DB fixtures (idempotent, re-run monthly)
+node scripts/seed-e2e-residents.js           # Seed synthetic residents fixtures (idempotent, re-run before suite)
 npx playwright test --project=setup          # Auth once → saves to e2e/.auth/user.json
 npx playwright test --project="Desktop Chrome"
 npx playwright test --project="Mobile Chrome"
