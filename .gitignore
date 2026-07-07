@@ -32,6 +32,11 @@ scripts/migrate-history.js
 scripts/verify-migration.js
 .worktrees
 
+# Resident-level data — repo is public, never commit per-flat figures
+scripts/seed-uds-totals.js
+scripts/tmp-reconcile-corpus-mom.js
+scripts/tmp-reconcile-corpus-revised.js
+
 # Transient audit script outputs (regenerate via `node scripts/audit-review.js > docs/audits/...`)
 /audit-*.md
 /audit-*-output.md
