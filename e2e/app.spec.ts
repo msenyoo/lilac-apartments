@@ -70,6 +70,9 @@ test.describe('Dues', () => {
     await page.getByText(contactsFlat, { exact: true }).first().click()
     await expect(page.getByRole('button', { name: /Send · E2E Contact Tenant/ })).toBeVisible()
     await expect(page.getByRole('button', { name: /Send · E2E Contact Owner/ })).toBeVisible()
+    // Payer-first ordering: tenant button must precede the owner button
+    const sendButtons = page.getByRole('button', { name: /Send · E2E Contact/ })
+    await expect(sendButtons.first()).toHaveText(/Tenant/)
   })
 })
 
