@@ -1094,21 +1094,33 @@ function FlatStatementTab() {
 
 type ExpSubTab = 'category' | 'vendor' | 'trend' | 'tds'
 
+type ExpFund = 'all' | 'maintenance' | 'corpus'
+
 function ExpenditureReportsTab() {
   const fy = getCurrentFy()
   const [selectedFyYear, setSelectedFyYear] = useState(fy.year)
   const [subTab, setSubTab] = useState<ExpSubTab>('category')
+  const [fund, setFund] = useState<ExpFund>('all')
   const selectedFy = getFyRange(selectedFyYear)
+  const fundLabel = fund === 'all' ? '' : fund === 'corpus' ? ' (Corpus)' : ' (Maintenance)'
+
+  function applyFund<T extends { is: any; not: any }>(q: T): T {
+    if (fund === 'corpus') return q.not('corpus_plan_id', 'is', null)
+    if (fund === 'maintenance') return q.is('corpus_plan_id', null)
+    return q
+  }
 
   // Category-wise expenses
   const { data: catExpenses, isLoading: loadingCat } = useQuery({
-    queryKey: ['exp-by-category', selectedFyYear],
+    queryKey: ['exp-by-category', selectedFyYear, fund],
     queryFn: async () => {
       const [{ data: exps }, { data: cats }] = await Promise.all([
-        supabase.from('expenses').select('amount, category_id')
-          .gte('expense_date', selectedFy.start)
-          .lte('expense_date', selectedFy.end)
-          .is('voided_at', null),
+        applyFund(
+          supabase.from('expenses').select('amount, category_id')
+            .gte('expense_date', selectedFy.start)
+            .lte('expense_date', selectedFy.end)
+            .is('voided_at', null)
+        ),
         supabase.from('expense_categories').select('id, name, budget_type'),
       ])
       const catMap = new Map((cats ?? []).map((c: any) => [c.id, { name: c.name as string, budget_type: c.budget_type as string }]))
@@ -1126,13 +1138,15 @@ function ExpenditureReportsTab() {
 
   // Vendor-wise expenses
   const { data: vendorExpenses, isLoading: loadingVendor } = useQuery({
-    queryKey: ['exp-by-vendor', selectedFyYear],
+    queryKey: ['exp-by-vendor', selectedFyYear, fund],
     queryFn: async () => {
       const [{ data: exps }, { data: vendors }] = await Promise.all([
-        supabase.from('expenses').select('amount, vendor_id, payee_name_raw, payment_mode')
-          .gte('expense_date', selectedFy.start)
-          .lte('expense_date', selectedFy.end)
-          .is('voided_at', null),
+        applyFund(
+          supabase.from('expenses').select('amount, vendor_id, payee_name_raw, payment_mode')
+            .gte('expense_date', selectedFy.start)
+            .lte('expense_date', selectedFy.end)
+            .is('voided_at', null)
+        ),
         supabase.from('vendors').select('id, name'),
       ])
       const vendorMap = new Map((vendors ?? []).map((v: any) => [v.id, v.name as string]))
@@ -1151,13 +1165,15 @@ function ExpenditureReportsTab() {
 
   // Monthly trend
   const { data: monthlyTrend, isLoading: loadingTrend } = useQuery({
-    queryKey: ['exp-monthly-trend', selectedFyYear],
+    queryKey: ['exp-monthly-trend', selectedFyYear, fund],
     queryFn: async () => {
-      const { data: exps } = await supabase
-        .from('expenses')
-        .select('expense_date, amount')
-        .gte('expense_date', selectedFy.start)
-        .lte('expense_date', selectedFy.end)
+      const { data: exps } = await applyFund(
+        supabase
+          .from('expenses')
+          .select('expense_date, amount')
+          .gte('expense_date', selectedFy.start)
+          .lte('expense_date', selectedFy.end)
+      )
       const monthly = new Map<string, number>()
       const MONTHS_S = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
       for (const e of exps ?? []) {
@@ -1223,7 +1239,7 @@ function ExpenditureReportsTab() {
     if (!catExpenses?.length) return
     const wb = XLSX.utils.book_new()
     const rows: any[][] = [
-      [`Expenditure by Category — ${selectedFy.label}`], [],
+      [`Expenditure by Category — ${selectedFy.label}${fundLabel}`], [],
       ['Category', 'Type', 'Amount'],
       ...(catExpenses).map(r => [r.category, r.budget_type, r.amount]),
       [],
@@ -1237,7 +1253,7 @@ function ExpenditureReportsTab() {
     if (!vendorExpenses?.length) return
     const wb = XLSX.utils.book_new()
     const rows: any[][] = [
-      [`Expenditure by Vendor — ${selectedFy.label}`], [],
+      [`Expenditure by Vendor — ${selectedFy.label}${fundLabel}`], [],
       ['Vendor / Payee', 'Amount', 'TDS Required (>₹30K)'],
       ...(vendorExpenses).map(r => [r.vendor, r.amount, r.tdsRequired ? 'Yes' : 'No']),
     ]
@@ -1272,6 +1288,19 @@ function ExpenditureReportsTab() {
           className="ds-field">
           {FISCAL_YEARS.map(f => <option key={f.year} value={f.year}>{f.label}</option>)}
         </select>
+        <div className="flex gap-1 bg-slate-100 rounded-lg p-0.5 text-sm">
+          {([
+            { key: 'all',         label: 'All funds' },
+            { key: 'maintenance', label: 'Maintenance' },
+            { key: 'corpus',      label: 'Corpus' },
+          ] as { key: ExpFund; label: string }[]).map(({ key, label }) => (
+            <button key={key} onClick={() => setFund(key)}
+              className={`px-3 py-1 rounded-md font-medium transition-colors
+                ${fund === key ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* KPI strip */}
