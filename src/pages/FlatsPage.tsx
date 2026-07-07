@@ -267,7 +267,6 @@ function RateChangeModal({ flat, onClose, onSaved }: { flat: Flat; onClose: () =
 }
 
 function AreaDetailsModal({ flat, onClose, onSaved }: { flat: Flat; onClose: () => void; onSaved: (updated: Flat) => void }) {
-  const [floor, setFloor]             = useState(flat.floor ?? '')
   const [carpetArea, setCarpetArea]   = useState(flat.carpet_area?.toString() ?? '')
   const [plinthArea, setPlinthArea]   = useState(flat.plinth_area?.toString() ?? '')
   const [commonArea, setCommonArea]   = useState(flat.common_area?.toString() ?? '')
@@ -281,7 +280,6 @@ function AreaDetailsModal({ flat, onClose, onSaved }: { flat: Flat; onClose: () 
     setSaving(true); setError('')
     const toNum = (s: string) => s.trim() === '' ? null : Number(s)
     const payload = {
-      floor: floor.trim() || null,
       carpet_area: toNum(carpetArea),
       plinth_area: toNum(plinthArea),
       common_area: toNum(commonArea),
@@ -304,7 +302,10 @@ function AreaDetailsModal({ flat, onClose, onSaved }: { flat: Flat; onClose: () 
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[var(--ink-100)]"><X size={18} /></button>
         </div>
         <div className="p-5 space-y-4 overflow-y-auto flex-1 min-h-0">
-          <Field label="Floor" value={floor} onChange={setFloor} placeholder="e.g. Ground, First, Second" />
+          <div className="flex justify-between text-sm">
+            <span style={{ color: 'var(--ink-500)' }}>Floor</span>
+            <span className="font-medium">{flat.floor ?? '—'}</span>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Carpet area (sq.ft)"   value={carpetArea}   onChange={setCarpetArea}   type="number" />
             <Field label="Plinth area (sq.ft)"   value={plinthArea}   onChange={setPlinthArea}   type="number" />
