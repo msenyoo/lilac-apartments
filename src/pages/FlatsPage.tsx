@@ -2,11 +2,12 @@ import { useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AgGridReact } from 'ag-grid-react'
 import type { ColDef } from 'ag-grid-community'
-import { X, Edit2, Ruler, UserMinus, UserPlus } from 'lucide-react'
+import { X, Edit2, Ruler, UserMinus, UserPlus, Pencil, Trash2 } from 'lucide-react'
 import { supabase, Flat, Resident } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
 import { useRoleCtx } from '@/contexts/RoleContext'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog'
 import { toast } from 'sonner'
 
 
@@ -412,6 +413,8 @@ function ResidentsTab() {
   const qc = useQueryClient()
   const [showAdd, setShowAdd] = useState(false)
   const [moveOut, setMoveOut] = useState<(Resident & { flat: { code: string; block: string } | null }) | null>(null)
+  const [editResident, setEditResident] = useState<(Resident & { flat: { code: string; block: string } | null }) | null>(null)
+  const [deleteResident, setDeleteResident] = useState<(Resident & { flat: { code: string; block: string } | null }) | null>(null)
 
   const { data: residents, isLoading } = useQuery({
     queryKey: ['residents'],
@@ -464,14 +467,22 @@ function ResidentsTab() {
         : <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500">Inactive</span>,
     },
     ...(isAdmin ? [{
-      headerName: 'Actions', width: 100, sortable: false, filter: false,
+      headerName: 'Actions', width: 190, sortable: false, filter: false,
       cellRenderer: (p: any) => (
-        <button
-          onClick={() => p.data.is_active ? setMoveOut(p.data) : handleReactivate(p.data)}
-          className="text-xs text-slate-400 hover:text-red-500 flex items-center gap-1"
-        >
-          <UserMinus size={13} /> {p.data.is_active ? 'Move out' : 'Reactivate'}
-        </button>
+        <div className="flex items-center gap-2 h-full">
+          <button onClick={() => setEditResident(p.data)} className="text-slate-400 hover:text-slate-700" aria-label={`Edit ${p.data.name}`}>
+            <Pencil size={13} />
+          </button>
+          <button onClick={() => setDeleteResident(p.data)} className="text-slate-400 hover:text-red-600" aria-label={`Delete ${p.data.name}`}>
+            <Trash2 size={13} />
+          </button>
+          <button
+            onClick={() => p.data.is_active ? setMoveOut(p.data) : handleReactivate(p.data)}
+            className="text-xs text-slate-400 hover:text-red-500 flex items-center gap-1"
+          >
+            <UserMinus size={13} /> {p.data.is_active ? 'Move out' : 'Reactivate'}
+          </button>
+        </div>
       ),
     } as ColDef<any>] : []),
   ], [isAdmin])
@@ -481,6 +492,7 @@ function ResidentsTab() {
       .update({ is_active: true, moved_out: null }).eq('id', resident.id)
     if (error) { toast.error(error.message); return }
     qc.invalidateQueries({ queryKey: ['residents'] })
+    qc.invalidateQueries({ queryKey: ['flat-residents'] })
     toast.success(`${resident.name} reactivated`)
   }
 
@@ -530,6 +542,32 @@ function ResidentsTab() {
           onClose={() => setMoveOut(null)}
           onSaved={() => {
             setMoveOut(null)
+            qc.invalidateQueries({ queryKey: ['residents'] })
+            qc.invalidateQueries({ queryKey: ['flat-residents'] })
+          }}
+        />
+      )}
+
+      {isAdmin && editResident && (
+        <ResidentModal
+          flats={flats ?? []}
+          resident={editResident}
+          onClose={() => setEditResident(null)}
+          onSaved={() => {
+            setEditResident(null)
+            qc.invalidateQueries({ queryKey: ['residents'] })
+            qc.invalidateQueries({ queryKey: ['flat-residents'] })
+          }}
+        />
+      )}
+
+      {isAdmin && deleteResident && (
+        <DeleteResidentDialog
+          resident={deleteResident}
+          flatCode={deleteResident.flat?.code ?? '—'}
+          onClose={() => setDeleteResident(null)}
+          onSaved={() => {
+            setDeleteResident(null)
             qc.invalidateQueries({ queryKey: ['residents'] })
             qc.invalidateQueries({ queryKey: ['flat-residents'] })
           }}
@@ -635,6 +673,46 @@ function ResidentModal({ flats, resident, onClose, onSaved }: {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function DeleteResidentDialog({ resident, flatCode, onClose, onSaved }: {
+  resident: Resident
+  flatCode: string
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [deleting, setDeleting] = useState(false)
+
+  async function handleDelete() {
+    setDeleting(true)
+    const { error } = await supabase.from('residents').delete().eq('id', resident.id)
+    setDeleting(false)
+    if (error) { toast.error(error.message); return }
+    toast.success(`${resident.name} deleted`)
+    onSaved()
+  }
+
+  return (
+    <AlertDialog open onOpenChange={v => { if (!v) onClose() }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete {resident.name}?</AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div className="space-y-2">
+              <p>This permanently removes the record for <strong>{resident.name}</strong> ({resident.relation}) from {flatCode}.</p>
+              <p>If this person actually lived here and left, use <strong>Move out</strong> instead so occupancy history is kept.</p>
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={onClose} disabled={deleting}>Cancel</AlertDialogCancel>
+          <AlertDialogAction onClick={handleDelete} disabled={deleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            {deleting ? 'Deleting…' : 'Delete'}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }
 
