@@ -445,6 +445,109 @@ export function BalanceSheetDoc({
   )
 }
 
+// ── Monthly Report ────────────────────────────────────────────
+
+interface MonthlyFlatRow { flat_code: string; maintenance_amt: number; collected: number }
+interface MonthlyExpenseRow { category: string; total_amount: number }
+
+export function MonthlyReportDoc({
+  month, maintenanceCollected, flatsPaid, totalFlats, totalExpenses,
+  corpusCollected, corpusTarget, flats, expenses, generated,
+}: {
+  month: string
+  maintenanceCollected: number
+  flatsPaid: number
+  totalFlats: number
+  totalExpenses: number
+  corpusCollected: number
+  corpusTarget: number
+  flats: MonthlyFlatRow[]
+  expenses: MonthlyExpenseRow[]
+  generated: string
+}) {
+  return (
+    <Document>
+      <Page size="A4" style={S.page}>
+        <LetterheadHeader style={S.header}>
+          <Text style={S.title}>Monthly Statement — {month}</Text>
+          <Text style={S.subtitle}>Maintenance collections &amp; expenses for {month} only</Text>
+        </LetterheadHeader>
+
+        {/* Summary */}
+        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+          {[
+            { label: 'Maintenance collected', value: formatINR(maintenanceCollected) },
+            { label: 'Flats paid', value: `${flatsPaid} of ${totalFlats}` },
+            { label: 'Total expenses', value: formatINR(totalExpenses) },
+            { label: 'Corpus collected (total)', value: formatINR(corpusCollected) },
+          ].map(({ label, value }) => (
+            <View key={label} style={{ flex: 1, backgroundColor: '#f8fafc', borderRadius: 4, padding: 6, border: '0.5pt solid #e2e8f0' }}>
+              <Text style={[S.small, { marginBottom: 2 }]}>{label}</Text>
+              <Text style={[S.bold, { fontSize: 10 }]}>{value}</Text>
+            </View>
+          ))}
+        </View>
+
+        <View style={S.twoCol}>
+          {/* Collections by flat */}
+          <View style={S.half}>
+            <Text style={S.sectionHead}>COLLECTIONS BY FLAT</Text>
+            <View style={S.table}>
+              <TableHead cols={[
+                { label: 'Flat' }, { label: 'Rate', right: true }, { label: 'Collected', right: true },
+              ]} />
+              {flats.map((f, i) => (
+                <View key={f.flat_code} style={[S.row, i % 2 === 1 ? S.rowAlt : {}]}>
+                  <Text style={[S.col, S.bold]}>{f.flat_code}</Text>
+                  <Text style={S.colR}>{formatINR(f.maintenance_amt)}</Text>
+                  <Text style={[S.colR, f.collected > 0 ? { color: '#16a34a' } : {}]}>
+                    {f.collected > 0 ? formatINR(f.collected) : '-'}
+                  </Text>
+                </View>
+              ))}
+              <View style={S.rowTotal}>
+                <Text style={[S.col, S.bold, { flex: 2 }]}>Total collected</Text>
+                <Text style={[S.colR, S.bold]}>{formatINR(maintenanceCollected)}</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Expenses */}
+          <View style={S.half}>
+            <Text style={S.sectionHead}>EXPENSES</Text>
+            <View style={S.table}>
+              {expenses.length === 0 ? (
+                <Text style={[S.small, { paddingVertical: 4 }]}>No expenses recorded for {month}</Text>
+              ) : (
+                expenses.map((e, i) => (
+                  <View key={e.category} style={[S.row, i % 2 === 1 ? S.rowAlt : {}]}>
+                    <Text style={S.col}>{e.category}</Text>
+                    <Text style={S.colR}>{formatINR(e.total_amount)}</Text>
+                  </View>
+                ))
+              )}
+              <View style={S.rowTotal}>
+                <Text style={[S.col, S.bold]}>Total expenses</Text>
+                <Text style={[S.colR, S.bold]}>{formatINR(totalExpenses)}</Text>
+              </View>
+            </View>
+
+            <Text style={[S.sectionHead, { marginTop: 12 }]}>CORPUS FUND (ALL TIME)</Text>
+            <View style={S.table}>
+              <View style={S.row}>
+                <Text style={S.col}>Collected of target</Text>
+                <Text style={S.colR}>{formatINR(corpusCollected)} / {formatINR(corpusTarget)}</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        <LetterheadFooter style={S.footer} generated={generated} />
+      </Page>
+    </Document>
+  )
+}
+
 export function CorpusFundDoc({ plans, generated }: {
   plans: CorpusPlanSummary[]
   generated: string
