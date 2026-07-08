@@ -6,6 +6,7 @@ import { X, Edit2, Ruler, UserMinus, UserPlus } from 'lucide-react'
 import { supabase, Flat, Resident } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
 import { useRoleCtx } from '@/contexts/RoleContext'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { toast } from 'sonner'
 
 
@@ -311,13 +312,12 @@ function RateChangeModal({ flat, onClose, onSaved }: { flat: Flat; onClose: () =
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[85vh] overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between p-5 border-b hairline shrink-0">
-          <h3 className="font-semibold">Change rate — {flat.code}</h3>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[var(--ink-100)]"><X size={18} /></button>
-        </div>
-        <div className="p-5 space-y-4 overflow-y-auto flex-1 min-h-0">
+    <Dialog open onOpenChange={v => { if (!v) onClose() }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Change rate — {flat.code}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
           <div>
             <label className="ds-lbl">New monthly rate (₹)</label>
             <input type="number" value={rate} onChange={e => setRate(e.target.value)}
@@ -336,12 +336,12 @@ function RateChangeModal({ flat, onClose, onSaved }: { flat: Flat; onClose: () =
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
         </div>
-        <div className="flex gap-2 p-5 border-t hairline">
+        <DialogFooter className="gap-2">
           <button onClick={onClose} className="btn-secondary flex-1">Cancel</button>
           <button onClick={handleSave} disabled={saving} className="btn-primary flex-1">{saving ? 'Saving…' : 'Save'}</button>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -374,13 +374,12 @@ function AreaDetailsModal({ flat, onClose, onSaved }: { flat: Flat; onClose: () 
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[85vh] overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between p-5 border-b hairline shrink-0">
-          <h3 className="font-semibold">Area details — {flat.code}</h3>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[var(--ink-100)]"><X size={18} /></button>
-        </div>
-        <div className="p-5 space-y-4 overflow-y-auto flex-1 min-h-0">
+    <Dialog open onOpenChange={v => { if (!v) onClose() }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Area details — {flat.code}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
           <div className="flex justify-between text-sm">
             <span style={{ color: 'var(--ink-500)' }}>Floor</span>
             <span className="font-medium">{flat.floor ?? '—'}</span>
@@ -396,12 +395,12 @@ function AreaDetailsModal({ flat, onClose, onSaved }: { flat: Flat; onClose: () 
           <p className="text-[11px]" style={{ color: 'var(--ink-400)' }}>Values will typically come from the sale deed / builder's area statement, shared by each owner.</p>
           {error && <p className="text-sm text-red-600">{error}</p>}
         </div>
-        <div className="flex gap-2 p-5 border-t hairline">
+        <DialogFooter className="gap-2">
           <button onClick={onClose} className="btn-secondary flex-1">Cancel</button>
           <button onClick={handleSave} disabled={saving} className="btn-primary flex-1">{saving ? 'Saving…' : 'Save'}</button>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
