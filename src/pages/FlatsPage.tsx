@@ -514,7 +514,7 @@ function ResidentsTab() {
       )}
 
       {isAdmin && showAdd && (
-        <AddResidentModal
+        <ResidentModal
           flats={flats ?? []}
           onClose={() => setShowAdd(false)}
           onSaved={() => { setShowAdd(false); qc.invalidateQueries({ queryKey: ['residents'] }) }}
@@ -539,16 +539,22 @@ function ResidentsTab() {
   )
 }
 
-function AddResidentModal({ flats, onClose, onSaved }: { flats: any[]; onClose: () => void; onSaved: () => void }) {
-  const [flatId, setFlatId]   = useState('')
-  const [name, setName]       = useState('')
-  const [type, setType]       = useState<'Owner' | 'Tenant'>('Owner')
-  const [relation, setRelation] = useState<string>('Self')
-  const [phone, setPhone]     = useState('')
-  const [email, setEmail]     = useState('')
-  const [upiRaw, setUpiRaw]   = useState('')
-  const [movedIn, setMovedIn] = useState('')
-  const [notes, setNotes]     = useState('')
+function ResidentModal({ flats, resident, onClose, onSaved }: {
+  flats: { id: string; code: string }[]
+  resident?: Resident
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const isEdit = !!resident
+  const [flatId, setFlatId]   = useState(resident?.flat_id ?? '')
+  const [name, setName]       = useState(resident?.name ?? '')
+  const [type, setType]       = useState<'Owner' | 'Tenant'>(resident?.type ?? 'Owner')
+  const [relation, setRelation] = useState<string>(resident?.relation ?? 'Self')
+  const [phone, setPhone]     = useState(resident?.phone ?? '')
+  const [email, setEmail]     = useState(resident?.email ?? '')
+  const [upiRaw, setUpiRaw]   = useState(resident?.upi_ids?.join(', ') ?? '')
+  const [movedIn, setMovedIn] = useState(resident?.moved_in ?? '')
+  const [notes, setNotes]     = useState(resident?.notes ?? '')
   const [saving, setSaving]   = useState(false)
   const [error, setError]     = useState('')
 
@@ -556,24 +562,26 @@ function AddResidentModal({ flats, onClose, onSaved }: { flats: any[]; onClose: 
     if (!flatId || !name) { setError('Flat and name are required'); return }
     setSaving(true); setError('')
     const upi_ids = upiRaw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
-    const { error: err } = await supabase.from('residents').insert({
+    const payload = {
       flat_id: flatId, name, type, relation, phone: phone || null, email: email || null,
-      upi_ids, moved_in: movedIn || null, notes: notes || null, is_active: true,
-    })
+      upi_ids, moved_in: movedIn || null, notes: notes || null,
+    }
+    const { error: err } = isEdit
+      ? await supabase.from('residents').update(payload).eq('id', resident!.id)
+      : await supabase.from('residents').insert({ ...payload, is_active: true })
     setSaving(false)
     if (err) { setError(err.message); toast.error(err.message); return }
-    toast.success(`${name} added as resident`)
+    toast.success(isEdit ? `${name} updated` : `${name} added as resident`)
     onSaved()
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[85vh] overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between p-5 border-b hairline shrink-0">
-          <h3 className="font-semibold">Add resident</h3>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[var(--ink-100)]"><X size={18} /></button>
-        </div>
-        <div className="p-5 space-y-4 overflow-y-auto flex-1 min-h-0">
+    <Dialog open onOpenChange={v => { if (!v) onClose() }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? 'Edit resident' : 'Add resident'}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="ds-lbl">Flat *</label>
@@ -619,12 +627,14 @@ function AddResidentModal({ flats, onClose, onSaved }: { flats: any[]; onClose: 
           <Field label="Notes" value={notes} onChange={setNotes} placeholder="optional" />
           {error && <p className="text-sm text-red-600">{error}</p>}
         </div>
-        <div className="flex gap-2 p-5 border-t hairline">
+        <DialogFooter className="gap-2">
           <button onClick={onClose} className="btn-secondary flex-1">Cancel</button>
-          <button onClick={handleSave} disabled={saving} className="btn-primary flex-1">{saving ? 'Saving…' : 'Add resident'}</button>
-        </div>
-      </div>
-    </div>
+          <button onClick={handleSave} disabled={saving} className="btn-primary flex-1">
+            {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Add resident'}
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
