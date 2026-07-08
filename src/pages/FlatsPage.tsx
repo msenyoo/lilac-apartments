@@ -70,7 +70,7 @@ function FlatsTab() {
   })
 
   const { data: flatsLite } = useQuery({
-    queryKey: ['flats'],
+    queryKey: ['flats-lite'],
     queryFn: async () => {
       const { data } = await supabase.from('flats').select('id,code').order('code')
       return data ?? []
@@ -487,7 +487,7 @@ function ResidentsTab() {
   })
 
   const { data: flats } = useQuery({
-    queryKey: ['flats'],
+    queryKey: ['flats-lite'],
     queryFn: async () => {
       const { data } = await supabase.from('flats').select('id,code').order('code')
       return data ?? []
