@@ -93,93 +93,95 @@ function FlatsTab() {
   ], [])
 
   return (
-    <div className="flex flex-col lg:flex-row gap-4">
-      <div className="flex-1 min-w-0">
-        {isLoading ? (
-          <div className="surface h-64 animate-pulse" style={{ background: 'var(--ink-100)' }} />
-        ) : (
-          <div className="overflow-hidden border hairline" style={{ borderRadius: 'var(--ds-radius)', height: 480 }}>
-            <AgGridReact
-              rowData={flats ?? []}
-              columnDefs={colDefs}
-              defaultColDef={{ sortable: true, resizable: true, filter: true, floatingFilter: true }}
-              rowSelection={{ mode: 'singleRow' }}
-              getRowStyle={(p: any) => p.data?.id === selected?.id ? { background: 'var(--brand-50)' } : undefined}
-              onRowClicked={e => setSelected(e.data ?? null)}
-            />
-          </div>
-        )}
-      </div>
-
-      {/* Detail panel */}
-      {selected && (
-        <div className="w-full lg:w-72 shrink-0 space-y-3">
-          <div className="surface !p-4 flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-lg">{selected.code}</h3>
-              <button onClick={() => setSelected(null)} className="p-1 rounded hover:bg-[var(--ink-100)]"><X size={15} /></button>
-            </div>
-            <div className="space-y-1.5 text-sm">
-              <Detail label="Block"       value={selected.block} />
-              <Detail label="Floor"       value={selected.floor ?? '—'} />
-              <Detail label="Unit type"   value={selected.flat_type} />
-              <Detail label="BHK"         value={selected.bhk_type ?? '—'} />
-              <Detail label="Private terrace" value={selected.has_private_terrace ? 'Yes' : 'No'} />
-              <Detail label="Current rate" value={formatINR(selected.maintenance_amt) + '/mo'} />
-              <Detail label="Corpus target" value={formatINR(selected.corpus_target)} />
-            </div>
-            {isAdmin && (
-              <button onClick={() => setEditRate(true)}
-                className="w-full btn-secondary text-sm flex items-center justify-center gap-1.5">
-                <Edit2 size={13} /> Change maintenance rate
-              </button>
-            )}
-          </div>
-
-          <PeopleCard flatId={selected.id} />
-
-          {/* Area details */}
-          <div className="surface !p-4 flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <h4 className="font-medium text-sm">Area details</h4>
-              {!selected.carpet_area && (
-                <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">Pending</span>
-              )}
-            </div>
-            <div className="space-y-1.5 text-sm">
-              <Detail label="Carpet area"   value={fmtArea(selected.carpet_area)} />
-              <Detail label="Plinth area"   value={fmtArea(selected.plinth_area)} />
-              <Detail label="Common area"   value={fmtArea(selected.common_area)} />
-              <Detail label="Saleable area" value={fmtArea(selected.saleable_area)} />
-              <Detail label="P.O.T. area"   value={fmtArea(selected.pot_area)} />
-              <Detail label="U.D.S total"   value={fmtArea(selected.uds_total)} />
-            </div>
-            {isAdmin && (
-              <button onClick={() => setEditArea(true)}
-                className="w-full btn-secondary text-sm flex items-center justify-center gap-1.5">
-                <Ruler size={13} /> {selected.carpet_area ? 'Edit area details' : 'Add area details'}
-              </button>
-            )}
-          </div>
-
-          {/* Rate history */}
-          {rateHistory && rateHistory.length > 0 && (
-            <div className="surface !p-4">
-              <h4 className="font-medium text-sm mb-3">Rate history</h4>
-              <div className="space-y-2">
-                {rateHistory.map((r: any) => (
-                  <div key={r.id} className="flex justify-between text-sm">
-                    <div>
-                      <p className="font-medium">{formatINR(r.monthly_rate)}/mo</p>
-                      <p className="text-[11px]" style={{ color: 'var(--ink-400)' }}>{r.effective_from}{r.effective_to ? ` → ${r.effective_to}` : ' → now'}</p>
-                    </div>
-                    {r.notes && <p className="text-[11px] max-w-[120px] text-right" style={{ color: 'var(--ink-400)' }}>{r.notes}</p>}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+    <div className="flex flex-col gap-4">
+      {isLoading ? (
+        <div className="surface h-64 animate-pulse" style={{ background: 'var(--ink-100)' }} />
+      ) : (
+        <div className="overflow-hidden border hairline" style={{ borderRadius: 'var(--ds-radius)', height: 480 }}>
+          <AgGridReact
+            rowData={flats ?? []}
+            columnDefs={colDefs}
+            defaultColDef={{ sortable: true, resizable: true, filter: true, floatingFilter: true }}
+            rowSelection={{ mode: 'singleRow' }}
+            getRowStyle={(p: any) => p.data?.id === selected?.id ? { background: 'var(--brand-50)' } : undefined}
+            onRowClicked={e => setSelected(e.data ?? null)}
+          />
         </div>
+      )}
+
+      {selected && (
+        <Dialog open onOpenChange={v => { if (!v) setSelected(null) }}>
+          <DialogContent className="max-w-[520px] lg:max-w-[900px] max-h-[85vh] rounded-2xl p-3 md:p-4">
+            <DialogHeader className="px-1">
+              <DialogTitle>{selected.code}</DialogTitle>
+            </DialogHeader>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start px-1 pb-1">
+              <div className="flex flex-col gap-3">
+                <div className="surface !p-4 flex flex-col gap-3">
+                  <div className="space-y-1.5 text-sm">
+                    <Detail label="Block"       value={selected.block} />
+                    <Detail label="Floor"       value={selected.floor ?? '—'} />
+                    <Detail label="Unit type"   value={selected.flat_type} />
+                    <Detail label="BHK"         value={selected.bhk_type ?? '—'} />
+                    <Detail label="Private terrace" value={selected.has_private_terrace ? 'Yes' : 'No'} />
+                    <Detail label="Current rate" value={formatINR(selected.maintenance_amt) + '/mo'} />
+                    <Detail label="Corpus target" value={formatINR(selected.corpus_target)} />
+                  </div>
+                  {isAdmin && (
+                    <button onClick={() => setEditRate(true)}
+                      className="w-full btn-secondary text-sm flex items-center justify-center gap-1.5">
+                      <Edit2 size={13} /> Change maintenance rate
+                    </button>
+                  )}
+                </div>
+
+                {/* Area details */}
+                <div className="surface !p-4 flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-medium text-sm">Area details</h4>
+                    {!selected.carpet_area && (
+                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">Pending</span>
+                    )}
+                  </div>
+                  <div className="space-y-1.5 text-sm">
+                    <Detail label="Carpet area"   value={fmtArea(selected.carpet_area)} />
+                    <Detail label="Plinth area"   value={fmtArea(selected.plinth_area)} />
+                    <Detail label="Common area"   value={fmtArea(selected.common_area)} />
+                    <Detail label="Saleable area" value={fmtArea(selected.saleable_area)} />
+                    <Detail label="P.O.T. area"   value={fmtArea(selected.pot_area)} />
+                    <Detail label="U.D.S total"   value={fmtArea(selected.uds_total)} />
+                  </div>
+                  {isAdmin && (
+                    <button onClick={() => setEditArea(true)}
+                      className="w-full btn-secondary text-sm flex items-center justify-center gap-1.5">
+                      <Ruler size={13} /> {selected.carpet_area ? 'Edit area details' : 'Add area details'}
+                    </button>
+                  )}
+                </div>
+
+                {/* Rate history */}
+                {rateHistory && rateHistory.length > 0 && (
+                  <div className="surface !p-4">
+                    <h4 className="font-medium text-sm mb-3">Rate history</h4>
+                    <div className="space-y-2">
+                      {rateHistory.map((r: any) => (
+                        <div key={r.id} className="flex justify-between text-sm">
+                          <div>
+                            <p className="font-medium">{formatINR(r.monthly_rate)}/mo</p>
+                            <p className="text-[11px]" style={{ color: 'var(--ink-400)' }}>{r.effective_from}{r.effective_to ? ` → ${r.effective_to}` : ' → now'}</p>
+                          </div>
+                          {r.notes && <p className="text-[11px] max-w-[120px] text-right" style={{ color: 'var(--ink-400)' }}>{r.notes}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <PeopleCard flatId={selected.id} />
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
 
       {isAdmin && editRate && selected && (
