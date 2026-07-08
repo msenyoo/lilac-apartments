@@ -69,6 +69,16 @@ function FlatsTab() {
     enabled: !!selected,
   })
 
+  const { data: flatsLite } = useQuery({
+    queryKey: ['flats'],
+    queryFn: async () => {
+      const { data } = await supabase.from('flats').select('id,code').order('code')
+      return data ?? []
+    },
+  })
+  const [editResident, setEditResident] = useState<Resident | null>(null)
+  const [deleteResident, setDeleteResident] = useState<Resident | null>(null)
+
   const colDefs = useMemo((): ColDef<any>[] => [
     { field: 'code',                headerName: 'Flat',         width: 90 },
     { field: 'block',               headerName: 'Block',        width: 80, filter: true },
@@ -179,10 +189,36 @@ function FlatsTab() {
                 )}
               </div>
 
-              <PeopleCard flatId={selected.id} />
+              <PeopleCard flatId={selected.id} onEdit={setEditResident} onDelete={setDeleteResident} />
             </div>
           </DialogContent>
         </Dialog>
+      )}
+
+      {isAdmin && editResident && (
+        <ResidentModal
+          flats={flatsLite ?? []}
+          resident={editResident}
+          onClose={() => setEditResident(null)}
+          onSaved={() => {
+            setEditResident(null)
+            qc.invalidateQueries({ queryKey: ['residents'] })
+            qc.invalidateQueries({ queryKey: ['flat-residents'] })
+          }}
+        />
+      )}
+
+      {isAdmin && deleteResident && (
+        <DeleteResidentDialog
+          resident={deleteResident}
+          flatCode={selected?.code ?? '—'}
+          onClose={() => setDeleteResident(null)}
+          onSaved={() => {
+            setDeleteResident(null)
+            qc.invalidateQueries({ queryKey: ['residents'] })
+            qc.invalidateQueries({ queryKey: ['flat-residents'] })
+          }}
+        />
       )}
 
       {isAdmin && editRate && selected && (
@@ -210,7 +246,11 @@ function Detail({ label, value }: { label: string; value: string }) {
   )
 }
 
-function PeopleCard({ flatId }: { flatId: string }) {
+function PeopleCard({ flatId, onEdit, onDelete }: {
+  flatId: string
+  onEdit: (r: Resident) => void
+  onDelete: (r: Resident) => void
+}) {
   const { isAdmin, role } = useRoleCtx()
   const canSeePhone = isAdmin || role === 'committee'
   const [showPast, setShowPast] = useState(false)
@@ -236,13 +276,13 @@ function PeopleCard({ flatId }: { flatId: string }) {
       {owners.length > 0 && (
         <div className="space-y-1.5">
           <p className="text-[10px] font-semibold tracking-wide" style={{ color: 'var(--ink-400)' }}>OWNER</p>
-          {owners.map(p => <PersonRow key={p.id} p={p} canSeePhone={canSeePhone} />)}
+          {owners.map(p => <PersonRow key={p.id} p={p} canSeePhone={canSeePhone} isAdmin={isAdmin} onEdit={onEdit} onDelete={onDelete} />)}
         </div>
       )}
       {tenants.length > 0 && (
         <div className="space-y-1.5">
           <p className="text-[10px] font-semibold tracking-wide" style={{ color: 'var(--ink-400)' }}>TENANT</p>
-          {tenants.map(p => <PersonRow key={p.id} p={p} canSeePhone={canSeePhone} />)}
+          {tenants.map(p => <PersonRow key={p.id} p={p} canSeePhone={canSeePhone} isAdmin={isAdmin} onEdit={onEdit} onDelete={onDelete} />)}
         </div>
       )}
       {active.length === 0 && (
@@ -257,10 +297,8 @@ function PeopleCard({ flatId }: { flatId: string }) {
           {showPast && (
             <div className="space-y-1.5 mt-2">
               {past.map(p => (
-                <div key={p.id} className="flex justify-between text-[13px]">
-                  <span style={{ color: 'var(--ink-500)' }}>{p.name}</span>
-                  <span style={{ color: 'var(--ink-400)' }}>{p.moved_in ?? '—'} → {p.moved_out ?? '—'}</span>
-                </div>
+                <PersonRow key={p.id} p={p} canSeePhone={canSeePhone} isAdmin={isAdmin} onEdit={onEdit} onDelete={onDelete}
+                  dateRange={`${p.moved_in ?? '—'} → ${p.moved_out ?? '—'}`} />
               ))}
             </div>
           )}
@@ -270,17 +308,38 @@ function PeopleCard({ flatId }: { flatId: string }) {
   )
 }
 
-function PersonRow({ p, canSeePhone }: { p: Resident; canSeePhone: boolean }) {
+function PersonRow({ p, canSeePhone, isAdmin, onEdit, onDelete, dateRange }: {
+  p: Resident
+  canSeePhone: boolean
+  isAdmin: boolean
+  onEdit: (r: Resident) => void
+  onDelete: (r: Resident) => void
+  dateRange?: string
+}) {
   return (
     <div className="flex items-center justify-between text-sm gap-2">
       <div className="flex items-center gap-1.5 min-w-0">
-        <span className="font-medium truncate">{p.name}</span>
+        <span className="font-medium truncate" style={dateRange ? { color: 'var(--ink-500)' } : undefined}>{p.name}</span>
         <span className="text-[10px] px-1.5 py-0.5 rounded-full shrink-0"
           style={{ background: 'var(--ink-100)', color: 'var(--ink-500)' }}>{p.relation}</span>
       </div>
-      {canSeePhone && p.phone && (
-        <a href={`tel:${p.phone}`} className="text-[12px] font-medium shrink-0" style={{ color: 'var(--ink-700)' }}>{p.phone}</a>
-      )}
+      <div className="flex items-center gap-2 shrink-0">
+        {dateRange
+          ? <span className="text-[11px]" style={{ color: 'var(--ink-400)' }}>{dateRange}</span>
+          : (canSeePhone && p.phone && (
+              <a href={`tel:${p.phone}`} className="text-[12px] font-medium" style={{ color: 'var(--ink-700)' }}>{p.phone}</a>
+            ))}
+        {isAdmin && (
+          <>
+            <button onClick={() => onEdit(p)} className="text-slate-400 hover:text-slate-700" aria-label={`Edit ${p.name}`}>
+              <Pencil size={12} />
+            </button>
+            <button onClick={() => onDelete(p)} className="text-slate-400 hover:text-red-600" aria-label={`Delete ${p.name}`}>
+              <Trash2 size={12} />
+            </button>
+          </>
+        )}
+      </div>
     </div>
   )
 }
