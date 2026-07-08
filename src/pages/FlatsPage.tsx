@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AgGridReact } from 'ag-grid-react'
 import type { ColDef } from 'ag-grid-community'
-import { X, Edit2, Ruler, UserMinus, UserPlus, Pencil, Trash2 } from 'lucide-react'
+import { Edit2, Ruler, UserMinus, UserPlus, Pencil, Trash2 } from 'lucide-react'
 import { supabase, Flat, Resident } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
 import { useRoleCtx } from '@/contexts/RoleContext'
@@ -802,13 +802,12 @@ function MoveOutDialog({ resident, household, onClose, onSaved }: {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between p-5 border-b hairline">
-          <h3 className="font-semibold">Move out — {resident.name}{resident.flat ? ` (${resident.flat.code})` : ''}</h3>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[var(--ink-100)]"><X size={18} /></button>
-        </div>
-        <div className="p-5 space-y-4">
+    <Dialog open onOpenChange={v => { if (!v) onClose() }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Move out — {resident.name}{resident.flat ? ` (${resident.flat.code})` : ''}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
           <div>
             <label className="ds-lbl">Move-out date</label>
             <input type="date" value={date} onChange={e => setDate(e.target.value)} className="ds-field w-full" />
@@ -830,14 +829,14 @@ function MoveOutDialog({ resident, household, onClose, onSaved }: {
             </div>
           )}
         </div>
-        <div className="flex gap-2 p-5 border-t hairline">
+        <DialogFooter className="gap-2">
           <button onClick={onClose} className="btn-secondary flex-1">Cancel</button>
           <button onClick={handleMoveOut} disabled={saving || !date} className="btn-primary flex-1">
             {saving ? 'Saving…' : 'Move out'}
           </button>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
