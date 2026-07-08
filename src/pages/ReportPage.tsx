@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { formatINR, FLAT_CODES } from '@/lib/tagger'
-import { Share2, CheckCircle, AlertTriangle, Download, FileText, Loader2, Zap, MessageCircle, Check } from 'lucide-react'
+import { AlertTriangle, Download, FileText, Loader2, Zap, MessageCircle, Check } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import type { DuesEntry } from '@/lib/supabase'
@@ -85,7 +85,7 @@ type ReportTab = 'monthly' | 'flat' | 'aging' | 'agm' | 'utility' | 'expenditure
 export default function ReportPage() {
   const [tab, setTab] = useState<ReportTab>('monthly')
   const [month, setMonth] = useState(currentFiscalLabel)
-  const [shared, setShared] = useState(false)
+  const [generatingPdf, setGeneratingPdf] = useState(false)
 
   const { data: summary } = useQuery({
     queryKey: ['monthly-summary', month],
@@ -136,16 +136,32 @@ export default function ReportPage() {
   // Collections settle oldest month first, so zero outstanding today means
   // every month up to today (incl. the selected one) is covered
   const isCovered = (f: any) => f.collected <= 0 && (duesByFlat.get(f.flat_code)?.total_outstanding ?? 1) <= 0
-  const advancePaidCount = (flatsData ?? []).filter(isCovered).length
 
-  async function handleShare() {
-    const text = buildShareText(month, summary, outstandingFlats, expenses ?? [], totalCorpusCollected, totalCorpusTarget, advancePaidCount)
-    if (navigator.share) {
-      await navigator.share({ title: `Lilac Apartments — ${month}`, text })
-    } else {
-      await navigator.clipboard.writeText(text)
-      setShared(true)
-      setTimeout(() => setShared(false), 2500)
+  async function handleMonthlyPdf() {
+    setGeneratingPdf(true)
+    try {
+      const [{ pdf }, { MonthlyReportDoc }] = await Promise.all([
+        import('@react-pdf/renderer'),
+        import('@/components/reports/AgmPdfDocs'),
+      ])
+      const generated = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+      const blob = await pdf(
+        <MonthlyReportDoc
+          month={month}
+          maintenanceCollected={summary?.maintenance_collected ?? 0}
+          flatsPaid={summary?.flats_paid ?? 0}
+          totalFlats={44}
+          totalExpenses={summary?.total_expenses ?? 0}
+          corpusCollected={totalCorpusCollected}
+          corpusTarget={totalCorpusTarget}
+          flats={(flatsData ?? []).map((f: any) => ({ flat_code: f.flat_code, maintenance_amt: f.maintenance_amt, collected: f.collected }))}
+          expenses={(expenses ?? []).map((e: any) => ({ category: e.category, total_amount: e.total_amount }))}
+          generated={generated}
+        />
+      ).toBlob()
+      triggerDownload(blob, `Lilac_Monthly_Report_${month}.pdf`)
+    } finally {
+      setGeneratingPdf(false)
     }
   }
 
@@ -225,6 +241,19 @@ export default function ReportPage() {
             </select>
           </div>
 
+          {/* Action buttons */}
+          <div className="flex gap-2 flex-wrap">
+            <button onClick={handleExcelExport} className="btn-secondary flex items-center gap-2">
+              <Download size={15} /> Export Excel
+            </button>
+            <button onClick={handleMonthlyPdf} disabled={generatingPdf} className="btn-primary flex items-center gap-2 disabled:opacity-50">
+              {generatingPdf
+                ? <><Loader2 size={15} className="animate-spin" /> Generating…</>
+                : <><FileText size={15} /> Download PDF</>
+              }
+            </button>
+          </div>
+
           {/* Summary card */}
           <div className="surface !p-0 overflow-hidden">
             <div className="px-5 py-4 text-white" style={{ background: 'linear-gradient(160deg, var(--brand-700), var(--brand-500))' }}>
@@ -300,15 +329,6 @@ export default function ReportPage() {
             </div>
           )}
 
-          {/* Action buttons */}
-          <div className="flex gap-2 flex-wrap">
-            <button onClick={handleShare} className="btn-primary flex items-center gap-2 flex-1 justify-center">
-              {shared ? <><CheckCircle size={15} /> Copied!</> : <><Share2 size={15} /> Share with residents</>}
-            </button>
-            <button onClick={handleExcelExport} className="btn-secondary flex items-center gap-2">
-              <Download size={15} /> Export Excel
-            </button>
-          </div>
         </div>
       )}
     </div>
@@ -2190,26 +2210,4 @@ function BalanceSheetTab() {
       </p>
     </div>
   )
-}
-
-function buildShareText(month: string, summary: any, outstanding: DuesEntry[], expenses: any[], corpusCollected: number, corpusTarget: number, advancePaidCount: number) {
-  return [
-    `THE LILAC APARTMENT ASSOCIATION`,
-    `Monthly Statement — ${month}`,
-    ``,
-    `MAINTENANCE`,
-    `  Collected: ${formatINR(summary?.maintenance_collected ?? 0)}`,
-    `  Flats paid: ${summary?.flats_paid ?? 0} of 44${advancePaidCount > 0 ? ` (+${advancePaidCount} paid in advance)` : ''}`,
-    ``,
-    `EXPENSES`,
-    ...expenses.map((e: any) => `  ${e.category}: ${formatINR(e.total_amount)}`),
-    ``,
-    `CORPUS FUND`,
-    `  Collected: ${formatINR(corpusCollected)} of ${formatINR(corpusTarget)}`,
-    ``,
-    ...(outstanding.length > 0
-      ? [`OUTSTANDING DUES (as of today)`, ...outstanding.map(f => `  ${f.flat_code}: ${formatINR(f.total_outstanding)}`), ``]
-      : []),
-    `Generated by Lilac Apartments App`,
-  ].join('\n')
 }
