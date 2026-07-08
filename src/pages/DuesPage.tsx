@@ -369,6 +369,9 @@ function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat
   return (
     <Dialog open onOpenChange={v => { if (!v) onClose() }}>
     <DialogContent className="max-w-[520px] lg:max-w-[900px] max-h-[85vh] rounded-2xl p-3 md:p-4">
+    <DialogHeader className="sr-only">
+      <DialogTitle>Flat {flat.flat_code} details</DialogTitle>
+    </DialogHeader>
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
       <div className="surface !p-4 flex flex-col gap-3">
         <div className="flex items-center justify-between">
