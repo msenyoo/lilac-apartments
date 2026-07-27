@@ -169,3 +169,24 @@ All migrations 001–014 are applied to production.
 Push to `main` → Vercel auto-deploys.
 Env vars in Vercel dashboard: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
 Production URL: https://lilac-apartments.vercel.app
+
+---
+
+## If prod is down: check Supabase auto-pause first
+
+The app is used by residents/committee only ~monthly. Supabase's free tier auto-pauses a
+project after ~1 week of inactivity — when paused, the project's subdomain stops resolving
+in DNS entirely, so the Vercel frontend loads (HTTP 200) but every Supabase call fails.
+
+A scheduled workflow (`.github/workflows/supabase-keepalive.yml`) pings the prod REST API
+every 3 days to prevent this, but if it's ever missed (workflow disabled, GitHub outage,
+etc.) the project can still pause. To check and fix:
+
+```bash
+# Check status — look for "status":"INACTIVE"
+curl -s https://api.supabase.com/v1/projects -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN"
+
+# Resume it (polls until healthy, ~3 min)
+SUPABASE_ACCESS_TOKEN=sbp_... node scripts/resume-supabase.js         # prod
+SUPABASE_ACCESS_TOKEN=sbp_... node scripts/resume-supabase.js dev     # dev DB
+```
