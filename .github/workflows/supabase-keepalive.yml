@@ -1,0 +1,26 @@
+name: Supabase Keep-Alive
+
+# Prevents the free-tier Supabase project from auto-pausing due to inactivity
+# (residents/committee use the app only ~monthly). Pings a real table via the
+# public REST API using the anon key, which is a publishable key safe to
+# commit (see CLAUDE.md). Runs well under Supabase's ~7-day inactivity window.
+
+on:
+  schedule:
+    - cron: '0 3 */3 * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST API (prod)
+        run: |
+          status=$(curl -s -o /dev/null -w "%{http_code}" \
+            "https://aulttcsvxzcwyceezzpz.supabase.co/rest/v1/flats?select=id&limit=1" \
+            -H "apikey: sb_publishable_zPwcS21TWUSR8zeSnhB4FA_2gPhdxD7")
+          echo "HTTP status: $status"
+          if [ "$status" -ge 400 ]; then
+            echo "::warning::Supabase prod ping returned $status — project may be paused. Run scripts/resume-supabase.js"
+            exit 1
+          fi
