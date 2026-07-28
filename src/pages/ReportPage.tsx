@@ -942,7 +942,7 @@ function FlatStatementTab() {
   function buildConsolidatedReminder() {
     const asOf = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
     const lines = [
-      `*🏢 Lilac Apartments – Payment Reminder*`,
+      `*Lilac Apartments – Payment Reminder*`,
       ``,
       `*Flat ${flatCode} · ${asOf}*`,
       ``,
@@ -956,7 +956,7 @@ function FlatStatementTab() {
     const upi  = appSettings?.collection_upi
     const bank = appSettings?.collection_bank
     if (upi || bank) {
-      lines.push(``, `💳 *Pay via:*`)
+      lines.push(``, `*Pay via:*`)
       if (upi) {
         lines.push(`UPI ID: \`${upi}\``)
         const payUrl = `upi://pay?pa=${upi}&pn=${encodeURIComponent('Lilac Apartment Association')}&am=${combinedOutstanding}&cu=INR`
@@ -966,7 +966,7 @@ function FlatStatementTab() {
     }
     lines.push(
       ``,
-      `We'd appreciate it if you could clear the dues at your earliest convenience. Thank you for your cooperation! 🙏`,
+      `We'd appreciate it if you could clear the dues at your earliest convenience. Thank you for your cooperation!`,
       ``,
       `— *The Lilac Apartment Association, Rajakilpakkam*`,
     )
