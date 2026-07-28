@@ -942,7 +942,7 @@ function FlatStatementTab() {
   function buildConsolidatedReminder() {
     const asOf = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
     const lines = [
-      `*Lilac Apartments — Statement reminder*`,
+      `*Lilac Apartments — Payment reminder*`,
       `Flat ${flatCode} · As of ${asOf}`,
       ``,
       `Dear resident,`,
