@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AgGridReact } from 'ag-grid-react'
 import type { ColDef } from 'ag-grid-community'
-import { Edit2, Ruler, UserMinus, UserPlus, Pencil, Trash2 } from 'lucide-react'
+import { Edit2, Ruler, UserMinus, UserPlus, Pencil, Trash2, Contact } from 'lucide-react'
 import { supabase, Flat, Resident } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
 import { useRoleCtx } from '@/contexts/RoleContext'
@@ -14,6 +14,13 @@ import { toast } from 'sonner'
 type Tab = 'flats' | 'residents'
 
 const RELATIONS = ['Self', 'Co-owner', 'Spouse', 'Parent', 'Child', 'Guardian', 'Other'] as const
+
+const supportsContactPicker = typeof navigator !== 'undefined' && 'contacts' in navigator && 'ContactsManager' in window
+
+function normalizePickedPhone(raw: string): string {
+  const digits = raw.replace(/\D/g, '')
+  return digits.length === 12 && digits.startsWith('91') ? digits.slice(2) : digits
+}
 
 export default function FlatsPage() {
   const [tab, setTab] = useState<Tab>('flats')
@@ -654,6 +661,7 @@ function ResidentModal({ flats, resident, onClose, onSaved }: {
   const [notes, setNotes]     = useState(resident?.notes ?? '')
   const [saving, setSaving]   = useState(false)
   const [error, setError]     = useState('')
+  const [picking, setPicking] = useState(false)
 
   async function handleSave() {
     if (!flatId || !name) { setError('Flat and name are required'); return }
@@ -670,6 +678,22 @@ function ResidentModal({ flats, resident, onClose, onSaved }: {
     if (err) { setError(err.message); toast.error(err.message); return }
     toast.success(isEdit ? `${name} updated` : `${name} added as resident`)
     onSaved()
+  }
+
+  async function handlePickContact() {
+    setPicking(true)
+    try {
+      const contacts = await navigator.contacts!.select(['name', 'tel', 'email'], { multiple: false })
+      if (contacts.length === 0) return
+      const c = contacts[0]
+      if (c.name[0]) setName(c.name[0])
+      if (c.tel[0]) setPhone(normalizePickedPhone(c.tel[0]))
+      if (c.email[0]) setEmail(c.email[0])
+    } catch {
+      toast.error('Could not access contacts')
+    } finally {
+      setPicking(false)
+    }
   }
 
   return (
@@ -708,6 +732,12 @@ function ResidentModal({ flats, resident, onClose, onSaved }: {
             </select>
             <p className="text-[11px] mt-1" style={{ color: 'var(--ink-400)' }}>Who this person is — e.g. the owner's spouse, or the tenant themself (Self)</p>
           </div>
+          {!isEdit && supportsContactPicker && (
+            <button type="button" onClick={handlePickContact} disabled={picking}
+              className="btn-secondary w-full text-sm flex items-center justify-center gap-1.5">
+              <Contact size={14} /> {picking ? 'Choosing…' : 'Pick from contacts'}
+            </button>
+          )}
           <Field label="Full name *" value={name} onChange={setName} placeholder="e.g. Ramesh Kumar" />
           <div className="grid grid-cols-2 gap-3">
             <Field label="Phone" value={phone} onChange={setPhone} placeholder="9876543210" />
