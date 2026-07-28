@@ -942,26 +942,33 @@ function FlatStatementTab() {
   function buildConsolidatedReminder() {
     const asOf = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
     const lines = [
-      `*Lilac Apartments — Payment reminder*`,
-      `Flat ${flatCode} · As of ${asOf}`,
+      `*🏢 Lilac Apartments – Payment Reminder*`,
       ``,
-      `Dear resident,`,
+      `*Flat ${flatCode} · ${asOf}*`,
       ``,
-      `Your consolidated outstanding: *${formatINR(combinedOutstanding)}*`,
+      `Dear Resident,`,
+      ``,
+      `This is a gentle reminder that your outstanding maintenance & corpus dues are currently *${formatINR(combinedOutstanding)}*:`,
+      ``,
     ]
-    if (maintOutstanding > 0) lines.push(`  • Maintenance: ${formatINR(maintOutstanding)}`)
-    if (corpusOutstanding > 0) lines.push(`  • Corpus: ${formatINR(corpusOutstanding)}`)
+    if (maintOutstanding > 0) lines.push(`• Maintenance: ${formatINR(maintOutstanding)}`)
+    if (corpusOutstanding > 0) lines.push(`• Corpus: ${formatINR(corpusOutstanding)}`)
     const upi  = appSettings?.collection_upi
     const bank = appSettings?.collection_bank
     if (upi || bank) {
-      lines.push(``, `Payment details:`)
-      if (upi)  lines.push(`  UPI: ${upi}`)
-      if (bank) lines.push(`  Bank: ${bank}`)
+      lines.push(``, `💳 *Pay via:*`)
+      if (upi) {
+        lines.push(`UPI ID: \`${upi}\``)
+        const payUrl = `upi://pay?pa=${upi}&pn=${encodeURIComponent('Lilac Apartment Association')}&am=${combinedOutstanding}&cu=INR`
+        lines.push(``, `*Quick Pay* (supported on some devices):`, `\`${payUrl}\``)
+      }
+      if (bank) lines.push(``, `Bank: ${bank}`)
     }
     lines.push(
       ``,
-      `Kindly settle at your earliest convenience.`,
-      `— The Lilac Apartment Association, Rajakilpakkam`,
+      `We'd appreciate it if you could clear the dues at your earliest convenience. Thank you for your cooperation! 🙏`,
+      ``,
+      `— *The Lilac Apartment Association, Rajakilpakkam*`,
     )
     return lines.join('\n')
   }
