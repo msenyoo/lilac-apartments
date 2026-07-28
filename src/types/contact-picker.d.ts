@@ -1,7 +1,7 @@
 interface ContactInfo {
-  name: string[]
-  tel: string[]
-  email: string[]
+  name?: string[]
+  tel?: string[]
+  email?: string[]
 }
 
 interface ContactsManager {
@@ -10,8 +10,4 @@ interface ContactsManager {
 
 interface Navigator {
   contacts?: ContactsManager
-}
-
-interface Window {
-  ContactsManager?: unknown
 }

@@ -686,9 +686,9 @@ function ResidentModal({ flats, resident, onClose, onSaved }: {
       const contacts = await navigator.contacts!.select(['name', 'tel', 'email'], { multiple: false })
       if (contacts.length === 0) return
       const c = contacts[0]
-      if (c.name[0]) setName(c.name[0])
-      if (c.tel[0]) setPhone(normalizePickedPhone(c.tel[0]))
-      if (c.email[0]) setEmail(c.email[0])
+      if (c.name?.[0]) setName(c.name[0])
+      if (c.tel?.[0]) setPhone(normalizePickedPhone(c.tel[0]))
+      if (c.email?.[0]) setEmail(c.email[0])
     } catch {
       toast.error('Could not access contacts')
     } finally {
