@@ -639,7 +639,7 @@ export function CashbookDoc({
     <Document>
       <Page size="A4" style={S.page}>
         <LetterheadHeader style={S.header}>
-          <Text style={S.title}>Cashbook — {month}</Text>
+          <Text style={S.title}>Cash Book Statement — {month}</Text>
           <Text style={S.subtitle}>Opening/closing balance, receipts &amp; payments for {month} only</Text>
         </LetterheadHeader>
 

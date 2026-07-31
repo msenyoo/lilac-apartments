@@ -1955,7 +1955,7 @@ function CashbookTab() {
   function handleExcelExport() {
     const wb = XLSX.utils.book_new()
     const rows: any[][] = [
-      [`Lilac Apartment Association — Cashbook — ${month}`], [],
+      [`Lilac Apartment Association — Cash Book Statement — ${month}`], [],
       ['Opening Balance', openingBalance],
       [],
       ['RECEIPTS'],
