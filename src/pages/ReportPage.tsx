@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+﻿import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { formatINR, FLAT_CODES } from '@/lib/tagger'
@@ -143,7 +143,7 @@ export default function ReportPage() {
   const totalCorpusCollected = corpus?.reduce((s, c) => s + (c.collected ?? 0), 0) ?? 0
   const totalCorpusTarget    = corpus?.reduce((s, c) => s + (c.corpus_target ?? 0), 0) ?? 0
   // A payment made in advance lands in an earlier month's collections, so
-  // "no money this month" ≠ "due" — only total outstanding decides that.
+  // "no money this month" â‰  "due" â€” only total outstanding decides that.
   const outstandingFlats = (duesData ?? []).filter(d => d.total_outstanding > 0)
   const duesByFlat = new Map((duesData ?? []).map(d => [d.flat_code, d]))
   // Collections settle oldest month first, so zero outstanding today means
@@ -182,7 +182,7 @@ export default function ReportPage() {
     const wb = XLSX.utils.book_new()
 
     const summaryRows = [
-      ['Lilac Apartment Association — Monthly Report', month],
+      ['Lilac Apartment Association â€” Monthly Report', month],
       [],
       ['Metric', 'Value'],
       ['Maintenance collected', summary?.maintenance_collected ?? 0],
@@ -263,7 +263,7 @@ export default function ReportPage() {
             </button>
             <button onClick={handleMonthlyPdf} disabled={generatingPdf} className="btn-primary flex items-center gap-2 disabled:opacity-50">
               {generatingPdf
-                ? <><Loader2 size={15} className="animate-spin" /> Generating…</>
+                ? <><Loader2 size={15} className="animate-spin" /> Generatingâ€¦</>
                 : <><FileText size={15} /> Download PDF</>
               }
             </button>
@@ -273,7 +273,7 @@ export default function ReportPage() {
           <div className="surface !p-0 overflow-hidden">
             <div className="px-5 py-4 text-white" style={{ background: 'linear-gradient(160deg, var(--brand-700), var(--brand-500))' }}>
               <p className="text-[11px] opacity-80 uppercase tracking-widest font-medium">The Lilac Apartment Association</p>
-              <p className="font-bold text-lg mt-0.5">Monthly Statement — {month}</p>
+              <p className="font-bold text-lg mt-0.5">Monthly Statement â€” {month}</p>
             </div>
             <div className="divide-rows">
               {[
@@ -295,7 +295,7 @@ export default function ReportPage() {
           {expenses && expenses.length > 0 && (
             <div className="surface !p-0">
               <div className="px-5 py-3 border-b hairline">
-                <h3 className="font-semibold text-sm">Expenses — {month}</h3>
+                <h3 className="font-semibold text-sm">Expenses â€” {month}</h3>
               </div>
               {expenses.map((e: any) => (
                 <div key={e.category} className="flex justify-between px-5 py-2.5 border-b hairline text-sm">
@@ -309,7 +309,7 @@ export default function ReportPage() {
           {/* Collections by flat */}
           <div className="surface !p-0">
             <div className="px-5 py-3 border-b hairline">
-              <h3 className="font-semibold text-sm">Collections by flat — {month}</h3>
+              <h3 className="font-semibold text-sm">Collections by flat â€” {month}</h3>
             </div>
             <div className="divide-rows max-h-64 overflow-y-auto">
               {(flatsData ?? []).map((f: any) => (
@@ -319,9 +319,9 @@ export default function ReportPage() {
                   {f.collected > 0 ? (
                     <span className="font-semibold text-green-700">{formatINR(f.collected)}</span>
                   ) : isCovered(f) ? (
-                    <span className="text-green-700 text-xs font-medium">Paid in advance ✓</span>
+                    <span className="text-green-700 text-xs font-medium">Paid in advance âœ“</span>
                   ) : (
-                    <span className="text-slate-300">—</span>
+                    <span className="text-slate-300">â€”</span>
                   )}
                 </div>
               ))}
@@ -333,7 +333,7 @@ export default function ReportPage() {
             <div className="surface !p-0">
               <div className="px-5 py-3 border-b hairline flex items-center gap-2">
                 <AlertTriangle size={15} className="text-amber-500" />
-                <h3 className="font-semibold text-sm">Outstanding dues — as of today</h3>
+                <h3 className="font-semibold text-sm">Outstanding dues â€” as of today</h3>
               </div>
               {outstandingFlats.map(f => (
                 <div key={f.flat_code} className="flex justify-between px-5 py-2.5 border-b hairline text-sm">
@@ -350,7 +350,7 @@ export default function ReportPage() {
   )
 }
 
-// ── DUES AGING TAB ────────────────────────────────────────────
+// â”€â”€ DUES AGING TAB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function DuesAgingTab() {
   const fy = getCurrentFy()
@@ -377,7 +377,7 @@ function DuesAgingTab() {
     if (!dues?.length) return
     const wb = XLSX.utils.book_new()
     const rows: any[][] = [
-      [`Lilac Apartment Association — Defaulters List — ${selectedFy.label}`],
+      [`Lilac Apartment Association â€” Defaulters List â€” ${selectedFy.label}`],
       [],
       ['Flat', 'Block', 'Annual Due', 'Collected', 'Pending', 'Arrears', 'Total Outstanding', 'Status'],
       ...(dues ?? []).map(r => [
@@ -432,7 +432,7 @@ function DuesAgingTab() {
           <button onClick={handlePdf} disabled={!dues?.length || generating}
             className="btn-primary flex items-center gap-2 py-1.5 px-3 text-sm">
             {generating
-              ? <><Loader2 size={14} className="animate-spin" /> Generating…</>
+              ? <><Loader2 size={14} className="animate-spin" /> Generatingâ€¦</>
               : <><FileText size={14} /> Download PDF</>
             }
           </button>
@@ -445,11 +445,11 @@ function DuesAgingTab() {
           <AlertTriangle size={15} className={dues.length > 0 ? 'text-red-500 shrink-0' : 'text-green-500 shrink-0'} />
           {dues.length > 0 ? (
             <span className="text-red-700">
-              <strong>{dues.length}</strong> flat(s) with outstanding dues ·{' '}
-              <strong>{formatINR(totalPending)}</strong> total pending — {selectedFy.label}
+              <strong>{dues.length}</strong> flat(s) with outstanding dues Â·{' '}
+              <strong>{formatINR(totalPending)}</strong> total pending â€” {selectedFy.label}
             </span>
           ) : (
-            <span className="text-green-700">All flats cleared for {selectedFy.label} 🎉</span>
+            <span className="text-green-700">All flats cleared for {selectedFy.label} ðŸŽ‰</span>
           )}
         </div>
       )}
@@ -484,9 +484,9 @@ function DuesAgingTab() {
                   <td className="px-4 py-2.5 font-semibold">{r.flat_code}</td>
                   <td className="px-4 py-2.5" style={{ color: 'var(--ink-600)' }}>{r.block}</td>
                   <td className="px-4 py-2.5 text-right">{formatINR(r.annual_due)}</td>
-                  <td className="px-4 py-2.5 text-right text-green-700">{r.collected_fy > 0 ? formatINR(r.collected_fy) : '—'}</td>
-                  <td className="px-4 py-2.5 text-right">{r.pending > 0 ? formatINR(r.pending) : '—'}</td>
-                  <td className="px-4 py-2.5 text-right">{r.arrears_maintenance > 0 ? formatINR(r.arrears_maintenance) : '—'}</td>
+                  <td className="px-4 py-2.5 text-right text-green-700">{r.collected_fy > 0 ? formatINR(r.collected_fy) : 'â€”'}</td>
+                  <td className="px-4 py-2.5 text-right">{r.pending > 0 ? formatINR(r.pending) : 'â€”'}</td>
+                  <td className="px-4 py-2.5 text-right">{r.arrears_maintenance > 0 ? formatINR(r.arrears_maintenance) : 'â€”'}</td>
                   <td className="px-4 py-2.5 text-right font-semibold text-red-600">{formatINR(r.total_outstanding)}</td>
                   <td className="px-4 py-2.5">
                     <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
@@ -513,7 +513,7 @@ function DuesAgingTab() {
   )
 }
 
-// ── AGM REPORTS TAB ───────────────────────────────────────────
+// â”€â”€ AGM REPORTS TAB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function AGMReportsTab() {
   const fy = getCurrentFy()
@@ -521,7 +521,7 @@ function AGMReportsTab() {
   const selectedFy = getFyRange(selectedFyYear)
   const [generating, setGenerating] = useState<string | null>(null)
 
-  // Defaulters: pending > 0, sorted block → flat
+  // Defaulters: pending > 0, sorted block â†’ flat
   const { data: defaulters } = useQuery({
     queryKey: ['agm-defaulters', selectedFyYear],
     queryFn: async () => {
@@ -734,8 +734,8 @@ function AGMReportsTab() {
     {
       key: 'defaulters',
       title: 'Defaulters List',
-      desc: 'All flats with outstanding maintenance dues — read at AGM',
-      meta: `${defaulters?.length ?? 0} flat(s) pending · ${selectedFy.label}`,
+      desc: 'All flats with outstanding maintenance dues â€” read at AGM',
+      meta: `${defaulters?.length ?? 0} flat(s) pending Â· ${selectedFy.label}`,
       onDownload: handleDefaultersPdf,
       disabled: !defaulters?.length,
     },
@@ -743,7 +743,7 @@ function AGMReportsTab() {
       key: 'ie',
       title: 'Income & Expenditure Statement',
       desc: 'Categorised income vs expenditure for the financial year',
-      meta: `${income.length} income categories · ${selectedFy.label}`,
+      meta: `${income.length} income categories Â· ${selectedFy.label}`,
       onDownload: handleIEPdf,
       disabled: income.length === 0,
     },
@@ -751,7 +751,7 @@ function AGMReportsTab() {
       key: 'corpus',
       title: 'Corpus Fund Statement',
       desc: 'Per-plan flat-wise corpus collection status',
-      meta: `${corpusPlans.length} plan(s) · all time`,
+      meta: `${corpusPlans.length} plan(s) Â· all time`,
       onDownload: handleCorpusPdf,
       disabled: corpusPlans.length === 0,
     },
@@ -759,7 +759,7 @@ function AGMReportsTab() {
       key: 'rp',
       title: 'Receipts & Payments Account',
       desc: 'Cash-basis summary of all inflows and outflows',
-      meta: `${receipts.length} receipt categories · ${selectedFy.label}`,
+      meta: `${receipts.length} receipt categories Â· ${selectedFy.label}`,
       onDownload: handleRPPdf,
       disabled: receipts.length === 0,
     },
@@ -800,7 +800,7 @@ function AGMReportsTab() {
               className="btn-primary flex items-center justify-center gap-2 py-2 text-sm mt-auto disabled:opacity-50"
             >
               {generating === r.key
-                ? <><Loader2 size={14} className="animate-spin" /> Generating PDF…</>
+                ? <><Loader2 size={14} className="animate-spin" /> Generating PDFâ€¦</>
                 : <><Download size={14} /> Download PDF</>
               }
             </button>
@@ -809,13 +809,13 @@ function AGMReportsTab() {
       </div>
 
       <p className="text-xs text-center" style={{ color: 'var(--ink-400)' }}>
-        PDFs are generated in-browser — no data leaves your device.
+        PDFs are generated in-browser â€” no data leaves your device.
       </p>
     </div>
   )
 }
 
-// ── FLAT STATEMENT TAB ───────────────────────────────────────
+// â”€â”€ FLAT STATEMENT TAB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 type FlatDateMode = 'fy' | 'custom' | 'all'
 
 function FlatStatementTab() {
@@ -875,7 +875,7 @@ function FlatStatementTab() {
     plans:     corpusEntries.length,
   } : null
 
-  // Cumulative dues tracker — tracks all dues/collections from dues_start_fiscal_year to today
+  // Cumulative dues tracker â€” tracks all dues/collections from dues_start_fiscal_year to today
   const { data: duesEntry } = useQuery({
     queryKey: ['dues-entry', flatCode],
     queryFn: async () => {
@@ -908,7 +908,7 @@ function FlatStatementTab() {
     const wb = XLSX.utils.book_new()
     const rangeLabel = mode === 'fy' ? fy.label : mode === 'custom' ? `${appliedStart} to ${appliedEnd}` : 'All time'
     const headerRows: any[][] = [
-      ['Lilac Apartment Association — Flat Statement'],
+      ['Lilac Apartment Association â€” Flat Statement'],
       [`Flat: ${flatCode}`, `BHK: ${flatInfo?.bhk_type ?? ''}`, `Period: ${rangeLabel}`],
       [],
       ['SUMMARY (cumulative since Apr-' + String(duesEntry?.start_fiscal_year ?? '').slice(-2) + ')'],
@@ -957,17 +957,17 @@ function FlatStatementTab() {
   function buildConsolidatedReminder() {
     const asOf = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
     const lines = [
-      `*Lilac Apartments – Payment Reminder*`,
+      `*Lilac Apartments â€“ Payment Reminder*`,
       ``,
-      `*Flat ${flatCode} · ${asOf}*`,
+      `*Flat ${flatCode} Â· ${asOf}*`,
       ``,
       `Dear Resident,`,
       ``,
       `This is a gentle reminder that your outstanding maintenance & corpus dues are currently *${formatINR(combinedOutstanding)}*:`,
       ``,
     ]
-    if (maintOutstanding > 0) lines.push(`• Maintenance: ${formatINR(maintOutstanding)}`)
-    if (corpusOutstanding > 0) lines.push(`• Corpus: ${formatINR(corpusOutstanding)}`)
+    if (maintOutstanding > 0) lines.push(`â€¢ Maintenance: ${formatINR(maintOutstanding)}`)
+    if (corpusOutstanding > 0) lines.push(`â€¢ Corpus: ${formatINR(corpusOutstanding)}`)
     const upi  = appSettings?.collection_upi
     const bank = appSettings?.collection_bank
     if (upi || bank) {
@@ -983,7 +983,7 @@ function FlatStatementTab() {
       ``,
       `We'd appreciate it if you could clear the dues at your earliest convenience. Thank you for your cooperation!`,
       ``,
-      `— *The Lilac Apartment Association, Rajakilpakkam*`,
+      `â€” *The Lilac Apartment Association, Rajakilpakkam*`,
     )
     return lines.join('\n')
   }
@@ -1067,7 +1067,7 @@ function FlatStatementTab() {
           <div className="surface !p-4" style={{ background: outstandingAmt! > 0 ? 'var(--bad-bg)' : 'var(--ok-bg)' }}>
             <p className="text-[12px] mb-1" style={{ color: 'var(--ink-500)' }}>Outstanding</p>
             <p className={`text-xl font-bold ${outstandingAmt! > 0 ? 'text-red-600' : 'text-green-600'}`}>
-              {outstandingAmt! > 0 ? formatINR(outstandingAmt!) : '✓ Clear'}
+              {outstandingAmt! > 0 ? formatINR(outstandingAmt!) : 'âœ“ Clear'}
             </p>
             <p className="text-xs mt-0.5" style={{ color: 'var(--ink-400)' }}>all dues since Apr-{String(duesEntry.start_fiscal_year).slice(-2)}</p>
           </div>
@@ -1079,7 +1079,7 @@ function FlatStatementTab() {
             <p className="text-xl font-bold text-purple-700">{formatINR(corpusTotals.collected)}</p>
             <p className="text-xs mt-0.5" style={{ color: 'var(--ink-400)' }}>
               of {formatINR(corpusTotals.target)} target
-              {corpusTotals.plans > 1 && ` · ${corpusTotals.plans} plans`}
+              {corpusTotals.plans > 1 && ` Â· ${corpusTotals.plans} plans`}
             </p>
           </div>
         )}
@@ -1093,7 +1093,7 @@ function FlatStatementTab() {
       ) : (
         <div className="surface !p-0">
           <div className="px-5 py-3 border-b hairline flex items-center justify-between">
-            <h3 className="font-semibold text-sm">{flatCode} — transaction history</h3>
+            <h3 className="font-semibold text-sm">{flatCode} â€” transaction history</h3>
             <span className="text-xs" style={{ color: 'var(--ink-400)' }}>{txns.length} transactions</span>
           </div>
           <div className="divide-rows max-h-[560px] overflow-y-auto">
@@ -1133,7 +1133,7 @@ function FlatStatementTab() {
   )
 }
 
-// ── EXPENDITURE REPORTS TAB ──────────────────────────────────
+// â”€â”€ EXPENDITURE REPORTS TAB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 type ExpSubTab = 'category' | 'vendor' | 'trend' | 'tds'
 
@@ -1224,7 +1224,7 @@ function ExpenditureReportsTab() {
         const key = `${MONTHS_S[d.getMonth()]}-${String(d.getFullYear()).slice(-2)}`
         monthly.set(key, (monthly.get(key) ?? 0) + ((e as any).amount ?? 0))
       }
-      // Build ordered array Apr→Mar
+      // Build ordered array Aprâ†’Mar
       const result: { month: string; amount: number }[] = []
       for (let m = 3; m <= 14; m++) {
         const yr = m > 11 ? selectedFyYear + 1 : selectedFyYear
@@ -1268,7 +1268,7 @@ function ExpenditureReportsTab() {
         .filter(r => r.total > 0)
         .map(r => ({
           name:          r.name,
-          pan:           r.pan ?? '—',
+          pan:           r.pan ?? 'â€”',
           total:         r.total,
           overThreshold: Math.max(0, r.total - TDS_THRESHOLD),
           tdsDue:        r.total > TDS_THRESHOLD ? Math.round((r.total - TDS_THRESHOLD) * TDS_RATE) : 0,
@@ -1282,7 +1282,7 @@ function ExpenditureReportsTab() {
     if (!catExpenses?.length) return
     const wb = XLSX.utils.book_new()
     const rows: any[][] = [
-      [`Expenditure by Category — ${selectedFy.label}${fundLabel}`], [],
+      [`Expenditure by Category â€” ${selectedFy.label}${fundLabel}`], [],
       ['Category', 'Type', 'Amount'],
       ...(catExpenses).map(r => [r.category, r.budget_type, r.amount]),
       [],
@@ -1296,8 +1296,8 @@ function ExpenditureReportsTab() {
     if (!vendorExpenses?.length) return
     const wb = XLSX.utils.book_new()
     const rows: any[][] = [
-      [`Expenditure by Vendor — ${selectedFy.label}${fundLabel}`], [],
-      ['Vendor / Payee', 'Amount', 'TDS Required (>₹30K)'],
+      [`Expenditure by Vendor â€” ${selectedFy.label}${fundLabel}`], [],
+      ['Vendor / Payee', 'Amount', 'TDS Required (>â‚¹30K)'],
       ...(vendorExpenses).map(r => [r.vendor, r.amount, r.tdsRequired ? 'Yes' : 'No']),
     ]
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Vendor')
@@ -1350,22 +1350,22 @@ function ExpenditureReportsTab() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="surface !p-4" style={{ background: 'var(--bad-bg)' }}>
           <p className="text-[12px] mb-1" style={{ color: 'var(--ink-500)' }}>Total expenses</p>
-          <p className="text-xl font-bold text-rose-600">{totalExpenses > 0 ? formatINR(totalExpenses) : '—'}</p>
+          <p className="text-xl font-bold text-rose-600">{totalExpenses > 0 ? formatINR(totalExpenses) : 'â€”'}</p>
         </div>
         <div className="surface !p-4" style={{ background: 'var(--info-bg)' }}>
           <p className="text-[12px] mb-1" style={{ color: 'var(--ink-500)' }}>Maintenance expenses</p>
-          <p className="text-xl font-bold text-blue-700">{maintenanceTotal > 0 ? formatINR(maintenanceTotal) : '—'}</p>
+          <p className="text-xl font-bold text-blue-700">{maintenanceTotal > 0 ? formatINR(maintenanceTotal) : 'â€”'}</p>
         </div>
         <div className="surface !p-4" style={{ background: 'var(--brand-50)' }}>
           <p className="text-[12px] mb-1" style={{ color: 'var(--ink-500)' }}>Corpus expenses</p>
-          <p className="text-xl font-bold text-violet-700">{corpusTotal > 0 ? formatINR(corpusTotal) : '—'}</p>
+          <p className="text-xl font-bold text-violet-700">{corpusTotal > 0 ? formatINR(corpusTotal) : 'â€”'}</p>
         </div>
         <div className="surface !p-4" style={{ background: tdsVendors > 0 ? 'var(--warn-bg, #fffbeb)' : undefined }}>
           <p className="text-[12px] mb-1" style={{ color: 'var(--ink-500)' }}>TDS required vendors</p>
           <p className={`text-xl font-bold ${tdsVendors > 0 ? 'text-amber-600' : ''}`} style={tdsVendors === 0 ? { color: 'var(--ink-400)' } : undefined}>
-            {tdsVendors > 0 ? tdsVendors : '—'}
+            {tdsVendors > 0 ? tdsVendors : 'â€”'}
           </p>
-          {tdsVendors > 0 && <p className="text-xs text-amber-500 mt-0.5">Vendors paid &gt;₹30K</p>}
+          {tdsVendors > 0 && <p className="text-xs text-amber-500 mt-0.5">Vendors paid &gt;â‚¹30K</p>}
         </div>
       </div>
 
@@ -1374,14 +1374,14 @@ function ExpenditureReportsTab() {
         <div className="flex flex-col gap-4">
           {catExpenses && catExpenses.length > 0 && (
             <div className="surface !p-4">
-              <h3 className="font-semibold text-sm mb-3">Category breakdown — {selectedFy.label}</h3>
+              <h3 className="font-semibold text-sm mb-3">Category breakdown â€” {selectedFy.label}</h3>
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart
-                  data={catExpenses.slice(0, 12).map(r => ({ name: r.category.length > 16 ? r.category.slice(0, 14) + '…' : r.category, amount: r.amount }))}
+                  data={catExpenses.slice(0, 12).map(r => ({ name: r.category.length > 16 ? r.category.slice(0, 14) + 'â€¦' : r.category, amount: r.amount }))}
                   margin={{ top: 4, right: 8, bottom: 40, left: 8 }}
                 >
                   <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-30} textAnchor="end" interval={0} />
-                  <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `₹${(Number(v)/1000).toFixed(0)}k`} />
+                  <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `â‚¹${(Number(v)/1000).toFixed(0)}k`} />
                   <Tooltip formatter={(v: any) => [formatINR(Number(v)), 'Amount']} />
                   <Bar dataKey="amount" fill="#7c3aed" radius={[3, 3, 0, 0]} maxBarSize={32} />
                 </BarChart>
@@ -1421,7 +1421,7 @@ function ExpenditureReportsTab() {
                       </td>
                       <td className="px-4 py-2.5 text-right font-semibold">{formatINR(r.amount)}</td>
                       <td className="px-4 py-2.5 text-right" style={{ color: 'var(--ink-500)' }}>
-                        {totalExpenses > 0 ? `${((r.amount / totalExpenses) * 100).toFixed(1)}%` : '—'}
+                        {totalExpenses > 0 ? `${((r.amount / totalExpenses) * 100).toFixed(1)}%` : 'â€”'}
                       </td>
                     </tr>
                   ))}
@@ -1451,7 +1451,7 @@ function ExpenditureReportsTab() {
               <div>
                 <h3 className="font-semibold text-sm">Payments by vendor / payee</h3>
                 {tdsVendors > 0 && (
-                  <p className="text-xs text-amber-600 mt-0.5">{tdsVendors} vendor(s) exceed ₹30,000 — TDS may be applicable</p>
+                  <p className="text-xs text-amber-600 mt-0.5">{tdsVendors} vendor(s) exceed â‚¹30,000 â€” TDS may be applicable</p>
                 )}
               </div>
               <button onClick={handleExcelVendor}
@@ -1475,7 +1475,7 @@ function ExpenditureReportsTab() {
                     <td className="px-4 py-2.5">
                       {r.tdsRequired
                         ? <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">TDS required</span>
-                        : <span className="text-xs" style={{ color: 'var(--ink-300)' }}>—</span>
+                        : <span className="text-xs" style={{ color: 'var(--ink-300)' }}>â€”</span>
                       }
                     </td>
                   </tr>
@@ -1499,11 +1499,11 @@ function ExpenditureReportsTab() {
           <div className="h-64 animate-pulse rounded-[var(--ds-radius)]" style={{ background: 'var(--ink-100)' }} />
         ) : (
           <div className="surface !p-4">
-            <h3 className="font-semibold text-sm mb-3">Monthly expenditure — {selectedFy.label}</h3>
+            <h3 className="font-semibold text-sm mb-3">Monthly expenditure â€” {selectedFy.label}</h3>
             <ResponsiveContainer width="100%" height={260}>
               <BarChart data={monthlyTrend} margin={{ top: 4, right: 8, bottom: 4, left: 8 }}>
                 <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `₹${(Number(v)/1000).toFixed(0)}k`} />
+                <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `â‚¹${(Number(v)/1000).toFixed(0)}k`} />
                 <Tooltip formatter={(v: any) => [formatINR(Number(v)), 'Expenses']} />
                 <Bar dataKey="amount" fill="#f43f5e" radius={[3, 3, 0, 0]} maxBarSize={32} name="Expenses" />
               </BarChart>
@@ -1527,19 +1527,19 @@ function ExpenditureReportsTab() {
           <div className="surface !p-0 overflow-hidden">
             <div className="px-4 py-3 border-b hairline flex items-center justify-between">
               <div>
-                <h3 className="font-semibold text-sm">TDS Compliance Register — {selectedFy.label}</h3>
+                <h3 className="font-semibold text-sm">TDS Compliance Register â€” {selectedFy.label}</h3>
                 <p className="text-xs mt-0.5" style={{ color: 'var(--ink-500)' }}>
-                  Threshold: ₹30,000 per vendor · TDS rate: 10% on amount above threshold
+                  Threshold: â‚¹30,000 per vendor Â· TDS rate: 10% on amount above threshold
                 </p>
               </div>
               <button
                 onClick={() => {
                   const wb = XLSX.utils.book_new()
                   const rows: any[][] = [
-                    [`TDS Compliance Register — ${selectedFy.label}`],
-                    [`The Lilac Apartment Association · Generated ${new Date().toLocaleDateString('en-IN')}`],
+                    [`TDS Compliance Register â€” ${selectedFy.label}`],
+                    [`The Lilac Apartment Association Â· Generated ${new Date().toLocaleDateString('en-IN')}`],
                     [],
-                    ['Vendor / Payee', 'PAN', 'Total Paid (₹)', 'TDS Threshold (₹)', 'Amount Over Threshold (₹)', 'TDS @ 10% Due (₹)', 'Status'],
+                    ['Vendor / Payee', 'PAN', 'Total Paid (â‚¹)', 'TDS Threshold (â‚¹)', 'Amount Over Threshold (â‚¹)', 'TDS @ 10% Due (â‚¹)', 'Status'],
                     ...(tdsRows ?? []).map(r => [
                       r.name, r.pan, r.total, 30000, r.overThreshold, r.tdsDue, r.status,
                     ]),
@@ -1573,13 +1573,13 @@ function ExpenditureReportsTab() {
                   {(tdsRows ?? []).map((r, i) => (
                     <tr key={r.name + i} className={i % 2 === 1 ? 'bg-slate-50/50' : ''}>
                       <td className="px-4 py-2.5 font-medium">{r.name}</td>
-                      <td className="px-4 py-2.5 font-mono text-xs" style={{ color: r.pan === '—' ? 'var(--ink-300)' : 'var(--ink-700)' }}>{r.pan}</td>
+                      <td className="px-4 py-2.5 font-mono text-xs" style={{ color: r.pan === 'â€”' ? 'var(--ink-300)' : 'var(--ink-700)' }}>{r.pan}</td>
                       <td className="px-4 py-2.5 text-right font-semibold">{formatINR(r.total)}</td>
                       <td className="px-4 py-2.5 text-right" style={{ color: r.overThreshold > 0 ? 'var(--ink-800)' : 'var(--ink-300)' }}>
-                        {r.overThreshold > 0 ? formatINR(r.overThreshold) : '—'}
+                        {r.overThreshold > 0 ? formatINR(r.overThreshold) : 'â€”'}
                       </td>
                       <td className="px-4 py-2.5 text-right font-semibold" style={{ color: r.tdsDue > 0 ? '#d97706' : 'var(--ink-300)' }}>
-                        {r.tdsDue > 0 ? formatINR(r.tdsDue) : '—'}
+                        {r.tdsDue > 0 ? formatINR(r.tdsDue) : 'â€”'}
                       </td>
                       <td className="px-4 py-2.5">
                         {r.status === 'Due'
@@ -1608,7 +1608,7 @@ function ExpenditureReportsTab() {
   )
 }
 
-// ── UTILITY TAB ──────────────────────────────────────────────
+// â”€â”€ UTILITY TAB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function UtilityTab() {
   const fy = getCurrentFy()
@@ -1700,7 +1700,7 @@ function UtilityReport({ catId, catName, unitLabel: unitLabelProp, fyYear }: {
   function handleExcel() {
     const wb = XLSX.utils.book_new()
     const rows: any[][] = [
-      [`${catName} — ${fy.label}`], [],
+      [`${catName} â€” ${fy.label}`], [],
       hasUnits
         ? ['Period', 'Block', unitLabel, 'Rate', 'Amount', 'Notes']
         : ['Period', 'Block', 'Amount', 'Notes'],
@@ -1745,7 +1745,7 @@ function UtilityReport({ catId, catName, unitLabel: unitLabelProp, fyYear }: {
             <div className="surface !p-4" style={{ background: 'var(--ink-50)' }}>
               <p className="text-[12px] mb-1" style={{ color: 'var(--ink-500)' }}>Avg rate / {unitLabel}</p>
               <p className="text-xl font-bold" style={{ color: 'var(--ink-700)' }}>
-                {totalUnits > 0 ? `₹${(totalAmt / totalUnits).toFixed(2)}` : '—'}
+                {totalUnits > 0 ? `â‚¹${(totalAmt / totalUnits).toFixed(2)}` : 'â€”'}
               </p>
             </div>
           </>
@@ -1756,14 +1756,14 @@ function UtilityReport({ catId, catName, unitLabel: unitLabelProp, fyYear }: {
         </div>
       </div>
 
-      {/* Monthly amount by block — bar chart */}
+      {/* Monthly amount by block â€” bar chart */}
       {chartData.length > 0 && blocks.length > 0 && (
         <div className="surface !p-4">
-          <h3 className="font-semibold text-sm mb-3">Monthly cost by area — {fy.label}</h3>
+          <h3 className="font-semibold text-sm mb-3">Monthly cost by area â€” {fy.label}</h3>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={chartData} margin={{ top: 4, right: 8, bottom: 4, left: 8 }}>
               <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `₹${(Number(v)/1000).toFixed(0)}k`} />
+              <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `â‚¹${(Number(v)/1000).toFixed(0)}k`} />
               <Tooltip formatter={(v: any, name: string) => [formatINR(Number(v)), name]} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               {blocks.map(block => (
@@ -1801,11 +1801,11 @@ function UtilityReport({ catId, catName, unitLabel: unitLabelProp, fyYear }: {
             <tbody className="divide-rows">
               {(items ?? []).map((item: any, i: number) => (
                 <tr key={item.id} className={i % 2 === 1 ? 'bg-slate-50/50' : ''}>
-                  <td className="px-4 py-2.5" style={{ color: 'var(--ink-600)' }}>{item.period_from ?? '—'}</td>
-                  <td className="px-4 py-2.5 font-medium">{item.cost_center ?? '—'}</td>
+                  <td className="px-4 py-2.5" style={{ color: 'var(--ink-600)' }}>{item.period_from ?? 'â€”'}</td>
+                  <td className="px-4 py-2.5 font-medium">{item.cost_center ?? 'â€”'}</td>
                   {hasUnits && <>
-                    <td className="px-4 py-2.5 text-right">{item.utility_units != null ? Number(item.utility_units).toLocaleString('en-IN') : '—'}</td>
-                    <td className="px-4 py-2.5 text-right" style={{ color: 'var(--ink-500)' }}>{item.utility_rate != null ? `₹${item.utility_rate}` : '—'}</td>
+                    <td className="px-4 py-2.5 text-right">{item.utility_units != null ? Number(item.utility_units).toLocaleString('en-IN') : 'â€”'}</td>
+                    <td className="px-4 py-2.5 text-right" style={{ color: 'var(--ink-500)' }}>{item.utility_rate != null ? `â‚¹${item.utility_rate}` : 'â€”'}</td>
                   </>}
                   <td className="px-4 py-2.5 text-right font-semibold">{formatINR(item.amount)}</td>
                   <td className="px-4 py-2.5 text-xs max-w-xs truncate" style={{ color: 'var(--ink-500)' }}>{item.description ?? ''}</td>
@@ -1830,7 +1830,7 @@ function UtilityReport({ catId, catName, unitLabel: unitLabelProp, fyYear }: {
   )
 }
 
-// ── CASHBOOK TAB ──────────────────────────────────────────────
+// â”€â”€ CASHBOOK TAB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface CrCategoryRow { category: string; amount: number }
 interface DrPayeeRow { name: string; amount: number }
@@ -1945,12 +1945,48 @@ function CashbookTab() {
   const arrearsTotal     = arrearsRows.reduce((s, r) => s + r.arrears_maintenance, 0)
   const outstandingTotal = outstandingRows.reduce((s, r) => s + r.total_outstanding, 0)
 
+
+  function handleExcelExport() {
+    const wb = XLSX.utils.book_new()
+    const rows: any[][] = [
+      [`Lilac Apartment Association — Cashbook — ${month}`], [],
+      ['Opening Balance', openingBalance],
+      [],
+      ['RECEIPTS'],
+      ...(crSplitup ?? []).map(r => [`  ${r.category}`, r.amount]),
+      ['  Total Receipts', totalReceipts],
+      [],
+      ['PAYMENTS'],
+      ...(drSplitup ?? []).flatMap(group => [
+        [`  ${group.category}`, group.total],
+        ...group.payees.map(p => [`    ${p.name}`, p.amount]),
+      ]),
+      ['  Total Payments', totalPayments],
+      [],
+      ['Closing Balance', closingBalance],
+      [],
+      ['PENDING DUES (as of today)'],
+      ['  Current FY Pending', pendingTotal, `${pendingRows.length} flats`],
+      ['  Arrears (prior years)', arrearsTotal, `${arrearsRows.length} flats`],
+      ['  Total Outstanding', outstandingTotal, `${outstandingRows.length} flats`],
+    ]
+    const ws = XLSX.utils.aoa_to_sheet(rows)
+    ws['!cols'] = [32, 14, 14].map(w => ({ wch: w }))
+    XLSX.utils.book_append_sheet(wb, ws, 'Cashbook')
+    XLSX.writeFile(wb, `Lilac_Cashbook_${month}.xlsx`)
+  }
   return (
     <div className="flex flex-col gap-5 max-w-3xl">
       <div className="flex items-center gap-3 flex-wrap">
         <select value={month} onChange={e => setMonth(e.target.value)} className="ds-field">
           {FISCAL_MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
         </select>
+        <div className="ml-auto">
+          <button onClick={handleExcelExport}
+            className="flex items-center gap-1.5 text-sm hover:opacity-80" style={{ color: 'var(--brand-700)' }}>
+            <Download size={14} /> Export Excel
+          </button>
+        </div>
       </div>
 
       {/* KPI strip */}
@@ -2056,13 +2092,13 @@ function CashbookTab() {
       <p className="text-xs text-center" style={{ color: 'var(--ink-400)' }}>
         Opening/Closing balance is the audited bank position for {month}. Total Payments (above) is
         the sum of recorded expenses for the month and may not exactly match the bank-derived
-        Closing − Opening delta if a cash expense isn't yet linked to a bank transaction.
+        Closing âˆ’ Opening delta if a cash expense isn't yet linked to a bank transaction.
       </p>
     </div>
   )
 }
 
-// ── R&P STATEMENT TAB ─────────────────────────────────────────
+// â”€â”€ R&P STATEMENT TAB â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function RPStatementTab() {
   const fy = getCurrentFy()
@@ -2202,7 +2238,7 @@ function RPStatementTab() {
             className="btn-primary flex items-center gap-2 py-2 px-4 text-sm disabled:opacity-50"
           >
             {generating
-              ? <><Loader2 size={14} className="animate-spin" /> Generating PDF…</>
+              ? <><Loader2 size={14} className="animate-spin" /> Generating PDFâ€¦</>
               : <><FileText size={14} /> Download PDF</>
             }
           </button>
@@ -2262,7 +2298,7 @@ function RPStatementTab() {
       </div>
 
       <p className="text-xs text-center" style={{ color: 'var(--ink-400)' }}>
-        Cash-basis statement · All monetary transactions for {selectedFy.label}
+        Cash-basis statement Â· All monetary transactions for {selectedFy.label}
       </p>
     </div>
   )
@@ -2385,7 +2421,7 @@ function BalanceSheetTab() {
             className="btn-primary flex items-center gap-2 py-2 px-4 text-sm disabled:opacity-50"
           >
             {generating
-              ? <><Loader2 size={14} className="animate-spin" /> Generating PDF…</>
+              ? <><Loader2 size={14} className="animate-spin" /> Generating PDFâ€¦</>
               : <><FileText size={14} /> Download PDF</>
             }
           </button>
@@ -2402,7 +2438,7 @@ function BalanceSheetTab() {
               <p className="text-xs text-blue-600">as at 31 March {selectedFyYear + 1}</p>
             </div>
             {[
-              { label: 'Bank balance',           amount: bankBalance, note: 'Cumulative CRs − DRs through this date (audit-derived)' },
+              { label: 'Bank balance',           amount: bankBalance, note: 'Cumulative CRs âˆ’ DRs through this date (audit-derived)' },
               { label: 'Fixed deposits (active)', amount: fdTotal,    note: 'Sum of active FD principals' },
               { label: 'Corpus fund collected',   amount: corpColl,   note: 'All plans combined' },
             ].map(({ label, amount, note }) => (
@@ -2450,16 +2486,16 @@ function BalanceSheetTab() {
           style={{ background: netPosition >= 0 ? 'var(--ok-bg)' : 'var(--bad-bg)' }}>
           <div>
             <p>Net Position</p>
-            <p className="text-xs font-normal mt-0.5" style={{ color: 'var(--ink-500)' }}>Total Assets − Total Liabilities</p>
+            <p className="text-xs font-normal mt-0.5" style={{ color: 'var(--ink-500)' }}>Total Assets âˆ’ Total Liabilities</p>
           </div>
           <span className={netPosition >= 0 ? 'text-green-700' : 'text-red-600'}>
-            {netPosition >= 0 ? '' : '−'}{formatINR(Math.abs(netPosition))}
+            {netPosition >= 0 ? '' : 'âˆ’'}{formatINR(Math.abs(netPosition))}
           </span>
         </div>
       )}
 
       <p className="text-xs text-center" style={{ color: 'var(--ink-400)' }}>
-        Note: Bank balance = opening balance (set in Settings) + all bank CRs − all bank DRs for {selectedFy.label}.
+        Note: Bank balance = opening balance (set in Settings) + all bank CRs âˆ’ all bank DRs for {selectedFy.label}.
         Corpus collected is shown as an asset (ring-fenced fund).
       </p>
     </div>
