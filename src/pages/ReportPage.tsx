@@ -29,6 +29,19 @@ function buildFiscalMonths() {
 
 const FISCAL_MONTHS = buildFiscalMonths()
 
+function monthLabelToRange(label: string) {
+  const [mon, yy] = label.split('-')
+  const monthIndex = MONTHS_SHORT.indexOf(mon)
+  const year = 2000 + Number(yy)
+  const lastDay = new Date(year, monthIndex + 1, 0).getDate()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return {
+    start:   `${year}-${pad(monthIndex + 1)}-01`,
+    end:     `${year}-${pad(monthIndex + 1)}-${pad(lastDay)}`,
+    prevEnd: new Date(year, monthIndex, 0).toISOString().slice(0, 10),
+  }
+}
+
 function getCurrentFy() {
   const now = new Date()
   const year = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
@@ -80,7 +93,7 @@ const BLOCK_COLORS: Record<string, string> = {
   'Common':  '#64748b',
 }
 
-type ReportTab = 'monthly' | 'flat' | 'aging' | 'agm' | 'utility' | 'expenditure' | 'rp' | 'balance-sheet'
+type ReportTab = 'monthly' | 'flat' | 'aging' | 'agm' | 'utility' | 'expenditure' | 'cashbook' | 'rp' | 'balance-sheet'
 
 export default function ReportPage() {
   const [tab, setTab] = useState<ReportTab>('monthly')
@@ -212,6 +225,7 @@ export default function ReportPage() {
           { key: 'agm',         label: 'AGM reports' },
           { key: 'utility',       label: 'Utilities' },
           { key: 'expenditure',   label: 'Expenditure' },
+          { key: 'cashbook',      label: 'Cashbook' },
           { key: 'rp',            label: 'R&P Statement' },
           { key: 'balance-sheet', label: 'Balance Sheet' },
         ] as { key: ReportTab; label: string }[]).map(({ key, label }) => (
@@ -229,6 +243,7 @@ export default function ReportPage() {
       {tab === 'agm'         && <AGMReportsTab />}
       {tab === 'utility'     && <UtilityTab />}
       {tab === 'expenditure'   && <ExpenditureReportsTab />}
+      {tab === 'cashbook'      && <CashbookTab />}
       {tab === 'rp'            && <RPStatementTab />}
       {tab === 'balance-sheet' && <BalanceSheetTab />}
       {tab === 'monthly' && (
@@ -1811,6 +1826,238 @@ function UtilityReport({ catId, catName, unitLabel: unitLabelProp, fyYear }: {
           </table>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── CASHBOOK TAB ──────────────────────────────────────────────
+
+interface CrCategoryRow { category: string; amount: number }
+interface DrPayeeRow { name: string; amount: number }
+interface DrCategoryGroup { category: string; total: number; payees: DrPayeeRow[] }
+
+function resolveExpensePayee(e: {
+  payee_type: string
+  payee_name_raw: string | null
+  vendor: { name: string } | null
+  staff_member: { name: string } | null
+}): string {
+  if (e.payee_type === 'Staff')  return e.staff_member?.name ?? e.payee_name_raw ?? 'Cash / Misc'
+  if (e.payee_type === 'Vendor') return e.vendor?.name ?? e.payee_name_raw ?? 'Cash / Misc'
+  return e.payee_name_raw ?? 'Cash / Misc'
+}
+
+function CashbookTab() {
+  const [month, setMonth] = useState(currentFiscalLabel)
+  const { start, end, prevEnd } = monthLabelToRange(month)
+
+  const { data: openingBalance = 0 } = useQuery({
+    queryKey: ['cashbook-opening', prevEnd],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('fn_bank_balance_as_of', { p_date: prevEnd })
+      if (error) throw error
+      return (data as number) ?? 0
+    },
+  })
+
+  const { data: closingBalance = 0 } = useQuery({
+    queryKey: ['cashbook-closing', end],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('fn_bank_balance_as_of', { p_date: end })
+      if (error) throw error
+      return (data as number) ?? 0
+    },
+  })
+
+  const { data: crSplitup } = useQuery({
+    queryKey: ['cashbook-cr', start, end],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('transactions')
+        .select('category, amount')
+        .eq('cr_dr', 'CR')
+        .neq('row_type', 'VOIDED')
+        .gte('value_date', start)
+        .lte('value_date', end)
+      const grouped = new Map<string, number>()
+      for (const t of data ?? []) {
+        const cat = (t as any).category ?? 'Other'
+        grouped.set(cat, (grouped.get(cat) ?? 0) + ((t as any).amount ?? 0))
+      }
+      return Array.from(grouped.entries())
+        .map(([category, amount]) => ({ category, amount }))
+        .sort((a, b) => b.amount - a.amount) as CrCategoryRow[]
+    },
+  })
+
+  const { data: drSplitup } = useQuery({
+    queryKey: ['cashbook-dr', start, end],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('expenses')
+        .select(`
+          amount, payee_type, payee_name_raw,
+          category:category_id(name),
+          vendor:vendor_id(name),
+          staff_member:staff_id(name)
+        `)
+        .gte('expense_date', start)
+        .lte('expense_date', end)
+        .is('voided_at', null)
+      const grouped = new Map<string, Map<string, number>>()
+      for (const row of data ?? []) {
+        const e = row as any
+        const cat = e.category?.name ?? 'Uncategorised'
+        const payee = resolveExpensePayee(e)
+        if (!grouped.has(cat)) grouped.set(cat, new Map())
+        const payeeMap = grouped.get(cat)!
+        payeeMap.set(payee, (payeeMap.get(payee) ?? 0) + (e.amount ?? 0))
+      }
+      return Array.from(grouped.entries())
+        .map(([category, payeeMap]) => ({
+          category,
+          total: Array.from(payeeMap.values()).reduce((s, v) => s + v, 0),
+          payees: Array.from(payeeMap.entries())
+            .map(([name, amount]) => ({ name, amount }))
+            .sort((a, b) => b.amount - a.amount),
+        }))
+        .sort((a, b) => b.total - a.total) as DrCategoryGroup[]
+    },
+  })
+
+  const { data: duesRows } = useQuery({
+    queryKey: ['cashbook-dues'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('v_dues_tracker')
+        .select('pending, arrears_maintenance, total_outstanding')
+      return (data ?? []) as { pending: number; arrears_maintenance: number; total_outstanding: number }[]
+    },
+  })
+
+  const totalReceipts = (crSplitup ?? []).reduce((s, r) => s + r.amount, 0)
+  const totalPayments = (drSplitup ?? []).reduce((s, r) => s + r.total, 0)
+
+  const pendingRows     = (duesRows ?? []).filter(r => r.pending > 0)
+  const arrearsRows     = (duesRows ?? []).filter(r => r.arrears_maintenance > 0)
+  const outstandingRows = (duesRows ?? []).filter(r => r.total_outstanding > 0)
+  const pendingTotal     = pendingRows.reduce((s, r) => s + r.pending, 0)
+  const arrearsTotal     = arrearsRows.reduce((s, r) => s + r.arrears_maintenance, 0)
+  const outstandingTotal = outstandingRows.reduce((s, r) => s + r.total_outstanding, 0)
+
+  return (
+    <div className="flex flex-col gap-5 max-w-3xl">
+      <div className="flex items-center gap-3 flex-wrap">
+        <select value={month} onChange={e => setMonth(e.target.value)} className="ds-field">
+          {FISCAL_MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
+        </select>
+      </div>
+
+      {/* KPI strip */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="surface !p-4" style={{ background: 'var(--ink-50)' }}>
+          <p className="text-[12px] mb-1" style={{ color: 'var(--ink-500)' }}>Opening balance</p>
+          <p className="text-xl font-bold" style={{ color: 'var(--ink-800)' }}>{formatINR(openingBalance)}</p>
+        </div>
+        <div className="surface !p-4" style={{ background: 'var(--ok-bg)' }}>
+          <p className="text-[12px] mb-1" style={{ color: 'var(--ink-500)' }}>Total receipts (CR)</p>
+          <p className="text-xl font-bold text-green-700">{formatINR(totalReceipts)}</p>
+        </div>
+        <div className="surface !p-4" style={{ background: 'var(--bad-bg)' }}>
+          <p className="text-[12px] mb-1" style={{ color: 'var(--ink-500)' }}>Total payments (DR)</p>
+          <p className="text-xl font-bold text-rose-600">{formatINR(totalPayments)}</p>
+        </div>
+        <div className="surface !p-4" style={{ background: 'var(--brand-50)' }}>
+          <p className="text-[12px] mb-1" style={{ color: 'var(--ink-500)' }}>Closing balance</p>
+          <p className="text-xl font-bold text-violet-700">{formatINR(closingBalance)}</p>
+        </div>
+      </div>
+
+      {/* Receipts / Payments */}
+      <div className="flex flex-col lg:flex-row gap-4">
+        <div className="surface !p-0 overflow-hidden flex-1">
+          <div className="px-5 py-3 border-b hairline" style={{ background: 'var(--ink-50)' }}>
+            <h3 className="font-semibold text-sm" style={{ color: 'var(--ink-700)' }}>RECEIPTS (CR)</h3>
+          </div>
+          {(crSplitup ?? []).length === 0 ? (
+            <div className="px-5 py-6 text-center text-sm" style={{ color: 'var(--ink-400)' }}>No receipts for {month}</div>
+          ) : (
+            (crSplitup ?? []).map(r => (
+              <div key={r.category} className="flex justify-between items-center px-5 py-3 border-b hairline text-sm">
+                <span style={{ color: 'var(--ink-600)' }}>{r.category}</span>
+                <span className="font-semibold" style={{ color: 'var(--ink-800)' }}>{formatINR(r.amount)}</span>
+              </div>
+            ))
+          )}
+          <div className="flex justify-between items-center px-5 py-3 text-sm font-bold border-t-2 hairline" style={{ background: 'var(--ok-bg)' }}>
+            <span>Total Receipts</span>
+            <span className="text-green-700">{formatINR(totalReceipts)}</span>
+          </div>
+        </div>
+
+        <div className="surface !p-0 overflow-hidden flex-1">
+          <div className="px-5 py-3 border-b hairline" style={{ background: 'var(--ink-50)' }}>
+            <h3 className="font-semibold text-sm" style={{ color: 'var(--ink-700)' }}>PAYMENTS (DR)</h3>
+          </div>
+          {(drSplitup ?? []).length === 0 ? (
+            <div className="px-5 py-6 text-center text-sm" style={{ color: 'var(--ink-400)' }}>No payments for {month}</div>
+          ) : (
+            (drSplitup ?? []).map(group => (
+              <div key={group.category} className="border-b hairline">
+                <div className="flex justify-between items-center px-5 py-2.5 text-sm font-semibold" style={{ color: 'var(--ink-700)' }}>
+                  <span>{group.category}</span>
+                  <span>{formatINR(group.total)}</span>
+                </div>
+                {group.payees.map(p => (
+                  <div key={p.name} className="flex justify-between items-center pl-8 pr-5 py-1.5 text-[13px]">
+                    <span style={{ color: 'var(--ink-500)' }}>{p.name}</span>
+                    <span style={{ color: 'var(--ink-600)' }}>{formatINR(p.amount)}</span>
+                  </div>
+                ))}
+              </div>
+            ))
+          )}
+          <div className="flex justify-between items-center px-5 py-3 text-sm font-bold border-t-2 hairline" style={{ background: 'var(--bad-bg)' }}>
+            <span>Total Payments</span>
+            <span className="text-rose-700">{formatINR(totalPayments)}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Pending dues */}
+      <div className="surface !p-0 overflow-hidden">
+        <div className="px-5 py-3 border-b hairline flex items-center gap-2" style={{ background: 'var(--ink-50)' }}>
+          <AlertTriangle size={15} className="text-amber-500" />
+          <h3 className="font-semibold text-sm" style={{ color: 'var(--ink-700)' }}>PENDING DUES (as of today)</h3>
+        </div>
+        <div className="flex justify-between items-center px-5 py-3 border-b hairline text-sm">
+          <span style={{ color: 'var(--ink-600)' }}>Current FY Pending</span>
+          <span className="font-semibold">
+            {formatINR(pendingTotal)}{' '}
+            <span className="font-normal text-xs" style={{ color: 'var(--ink-400)' }}>({pendingRows.length} flats)</span>
+          </span>
+        </div>
+        <div className="flex justify-between items-center px-5 py-3 border-b hairline text-sm">
+          <span style={{ color: 'var(--ink-600)' }}>Arrears (prior years)</span>
+          <span className="font-semibold">
+            {formatINR(arrearsTotal)}{' '}
+            <span className="font-normal text-xs" style={{ color: 'var(--ink-400)' }}>({arrearsRows.length} flats)</span>
+          </span>
+        </div>
+        <div className="flex justify-between items-center px-5 py-3 text-sm font-bold border-t-2 hairline" style={{ background: 'var(--bad-bg)' }}>
+          <span>Total Outstanding</span>
+          <span className="text-rose-700">
+            {formatINR(outstandingTotal)}{' '}
+            <span className="font-normal text-xs">({outstandingRows.length} flats)</span>
+          </span>
+        </div>
+      </div>
+
+      <p className="text-xs text-center" style={{ color: 'var(--ink-400)' }}>
+        Opening/Closing balance is the audited bank position for {month}. Total Payments (above) is
+        the sum of recorded expenses for the month and may not exactly match the bank-derived
+        Closing − Opening delta if a cash expense isn't yet linked to a bank transaction.
+      </p>
     </div>
   )
 }
