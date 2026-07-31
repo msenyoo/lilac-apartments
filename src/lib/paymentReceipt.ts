@@ -9,7 +9,7 @@ export function buildReceiptData(
   planName: string | null,
 ): PaymentReceiptData {
   const categoryLabel = txn.corpus === 'YES'
-    ? `Corpus Fund — ${planName ?? 'Corpus'}`
+    ? (planName ? `Corpus Fund — ${planName}` : 'Corpus Fund')
     : (txn.category ?? 'Maintenance')
 
   return {

@@ -862,7 +862,7 @@ function FlatCorpusPanel({ flat, onClose }: { flat: CorpusEntry; onClose: () => 
                 </div>
                 <div className="flex items-center gap-2">
                   <p className="font-semibold text-green-700">{formatINR(p.amount)}</p>
-                  <ReceiptButton txn={p} flat={{ code: flat.flat_code, block: flat.block }} planName={flat.plan_name} />
+                  <ReceiptButton txn={p} flat={{ code: flat.flat_code, block: flat.block }} planName={!p.plan_id || p.plan_id === flat.plan_id ? flat.plan_name : null} />
                 </div>
               </div>
             ))}
