@@ -613,3 +613,110 @@ export function CorpusFundDoc({ plans, generated }: {
     </Document>
   )
 }
+
+// ── Cashbook ────────────────────────────────────────────────────
+
+interface CashbookCrRow { category: string; amount: number }
+interface CashbookDrPayee { name: string; amount: number }
+interface CashbookDrGroup { category: string; total: number; payees: CashbookDrPayee[] }
+interface CashbookDuesRow { label: string; amount: number; flats: number }
+
+export function CashbookDoc({
+  month, openingBalance, closingBalance, receipts, payments, dues, generated,
+}: {
+  month: string
+  openingBalance: number
+  closingBalance: number
+  receipts: CashbookCrRow[]
+  payments: CashbookDrGroup[]
+  dues: CashbookDuesRow[]
+  generated: string
+}) {
+  const totalReceipts = receipts.reduce((s, r) => s + r.amount, 0)
+  const totalPayments = payments.reduce((s, g) => s + g.total, 0)
+
+  return (
+    <Document>
+      <Page size="A4" style={S.page}>
+        <LetterheadHeader style={S.header}>
+          <Text style={S.title}>Cashbook — {month}</Text>
+          <Text style={S.subtitle}>Opening/closing balance, receipts &amp; payments for {month} only</Text>
+        </LetterheadHeader>
+
+        <View style={[S.rowTotal, { marginBottom: 8 }]}>
+          <Text style={[S.col, S.bold]}>Opening Balance</Text>
+          <Text style={[S.colR, S.bold]}>{formatINR(openingBalance)}</Text>
+        </View>
+
+        <View style={S.twoCol}>
+          <View style={S.half}>
+            <Text style={S.sectionHead}>RECEIPTS (CR)</Text>
+            <View style={S.table}>
+              {receipts.length === 0 ? (
+                <Text style={[S.small, { paddingVertical: 4 }]}>No receipts for {month}</Text>
+              ) : (
+                receipts.map((r, i) => (
+                  <View key={r.category} style={[S.row, i % 2 === 1 ? S.rowAlt : {}]}>
+                    <Text style={S.col}>{r.category}</Text>
+                    <Text style={S.colR}>{formatINR(r.amount)}</Text>
+                  </View>
+                ))
+              )}
+              <View style={S.rowTotal}>
+                <Text style={[S.col, S.bold]}>Total Receipts</Text>
+                <Text style={[S.colR, S.bold]}>{formatINR(totalReceipts)}</Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={S.half}>
+            <Text style={S.sectionHead}>PAYMENTS (DR)</Text>
+            <View style={S.table}>
+              {payments.length === 0 ? (
+                <Text style={[S.small, { paddingVertical: 4 }]}>No payments for {month}</Text>
+              ) : (
+                payments.map(group => (
+                  <View key={group.category}>
+                    <View style={S.row}>
+                      <Text style={[S.col, S.bold]}>{group.category}</Text>
+                      <Text style={[S.colR, S.bold]}>{formatINR(group.total)}</Text>
+                    </View>
+                    {group.payees.map(p => (
+                      <View key={p.name} style={S.row}>
+                        <Text style={[S.col, S.small, { paddingLeft: 8 }]}>{p.name}</Text>
+                        <Text style={[S.colR, S.small]}>{formatINR(p.amount)}</Text>
+                      </View>
+                    ))}
+                  </View>
+                ))
+              )}
+              <View style={S.rowTotal}>
+                <Text style={[S.col, S.bold]}>Total Payments</Text>
+                <Text style={[S.colR, S.bold]}>{formatINR(totalPayments)}</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        <View style={[S.rowTotal, { marginTop: 8 }]}>
+          <Text style={[S.col, S.bold]}>Closing Balance</Text>
+          <Text style={[S.colR, S.bold]}>{formatINR(closingBalance)}</Text>
+        </View>
+
+        <Text style={[S.sectionHead, { marginTop: 12 }]}>PENDING DUES (AS OF TODAY)</Text>
+        <View style={S.table}>
+          {dues.map((d, i) => (
+            <View key={d.label} style={i === dues.length - 1 ? S.rowTotal : S.row}>
+              <Text style={i === dues.length - 1 ? [S.col, S.bold] : S.col}>{d.label} ({d.flats} flats)</Text>
+              <Text style={i === dues.length - 1 ? [S.colR, S.bold, { color: '#dc2626' }] : S.colR}>
+                {formatINR(d.amount)}
+              </Text>
+            </View>
+          ))}
+        </View>
+
+        <LetterheadFooter style={S.footer} generated={generated} />
+      </Page>
+    </Document>
+  )
+}

@@ -1850,6 +1850,7 @@ function resolveExpensePayee(e: {
 function CashbookTab() {
   const [month, setMonth] = useState(currentFiscalLabel)
   const { start, end, prevEnd } = monthLabelToRange(month)
+  const [generating, setGenerating] = useState(false)
 
   const { data: openingBalance = 0 } = useQuery({
     queryKey: ['cashbook-opening', prevEnd],
@@ -1975,16 +1976,52 @@ function CashbookTab() {
     XLSX.writeFile(wb, `Lilac_Cashbook_${month}.xlsx`)
   }
 
+  async function handlePdf() {
+    setGenerating(true)
+    try {
+      const [{ pdf }, { CashbookDoc }] = await Promise.all([
+        import('@react-pdf/renderer'),
+        import('@/components/reports/AgmPdfDocs'),
+      ])
+      const generated = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+      const blob = await pdf(
+        <CashbookDoc
+          month={month}
+          openingBalance={openingBalance}
+          closingBalance={closingBalance}
+          receipts={crSplitup ?? []}
+          payments={drSplitup ?? []}
+          dues={[
+            { label: 'Current FY Pending',    amount: pendingTotal,     flats: pendingRows.length },
+            { label: 'Arrears (prior years)', amount: arrearsTotal,     flats: arrearsRows.length },
+            { label: 'Total Outstanding',     amount: outstandingTotal, flats: outstandingRows.length },
+          ]}
+          generated={generated}
+        />
+      ).toBlob()
+      triggerDownload(blob, `Lilac_Cashbook_${month}.pdf`)
+    } finally {
+      setGenerating(false)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-5 max-w-3xl">
       <div className="flex items-center gap-3 flex-wrap">
         <select value={month} onChange={e => setMonth(e.target.value)} className="ds-field">
           {FISCAL_MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
         </select>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
           <button onClick={handleExcelExport}
             className="flex items-center gap-1.5 text-sm hover:opacity-80" style={{ color: 'var(--brand-700)' }}>
             <Download size={14} /> Export Excel
+          </button>
+          <button onClick={handlePdf} disabled={generating}
+            className="btn-primary flex items-center gap-2 py-2 px-4 text-sm disabled:opacity-50">
+            {generating
+              ? <><Loader2 size={14} className="animate-spin" /> Generating PDF…</>
+              : <><FileText size={14} /> Download PDF</>
+            }
           </button>
         </div>
       </div>
