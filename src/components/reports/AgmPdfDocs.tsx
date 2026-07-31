@@ -616,9 +616,15 @@ export function CorpusFundDoc({ plans, generated }: {
 
 // ── Cashbook ────────────────────────────────────────────────────
 
+const PDF_MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+function formatShortDate(iso: string): string {
+  const [, m, d] = iso.split('-')
+  return `${d} ${PDF_MONTHS_SHORT[Number(m) - 1]}`
+}
+
 interface CashbookCrRow { category: string; amount: number }
-interface CashbookDrPayee { name: string; amount: number }
-interface CashbookDrGroup { category: string; total: number; payees: CashbookDrPayee[] }
+interface CashbookDrItem { date: string | null; label: string; amount: number }
+interface CashbookDrGroup { category: string; total: number; items: CashbookDrItem[] }
 interface CashbookDuesRow { label: string; amount: number; flats: number }
 
 export function CashbookDoc({
@@ -681,10 +687,12 @@ export function CashbookDoc({
                       <Text style={[S.col, S.bold]}>{group.category}</Text>
                       <Text style={[S.colR, S.bold]}>{formatINR(group.total)}</Text>
                     </View>
-                    {group.payees.map(p => (
-                      <View key={p.name} style={S.row}>
-                        <Text style={[S.col, S.small, { paddingLeft: 8 }]}>{p.name}</Text>
-                        <Text style={[S.colR, S.small]}>{formatINR(p.amount)}</Text>
+                    {group.items.map((item, i) => (
+                      <View key={`${item.label}_${item.date ?? ''}_${i}`} style={S.row}>
+                        <Text style={[S.col, S.small, { paddingLeft: 8 }]}>
+                          {item.date ? `${formatShortDate(item.date)}  ${item.label}` : item.label}
+                        </Text>
+                        <Text style={[S.colR, S.small]}>{formatINR(item.amount)}</Text>
                       </View>
                     ))}
                   </View>

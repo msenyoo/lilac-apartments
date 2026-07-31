@@ -45,6 +45,11 @@ function monthLabelToRange(label: string) {
   }
 }
 
+function formatShortDate(iso: string): string {
+  const [, m, d] = iso.split('-')
+  return `${d} ${MONTHS_SHORT[Number(m) - 1]}`
+}
+
 function getCurrentFy() {
   const now = new Date()
   const year = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
@@ -1836,8 +1841,8 @@ function UtilityReport({ catId, catName, unitLabel: unitLabelProp, fyYear }: {
 // ── CASHBOOK TAB ──────────────────────────────────────────────
 
 interface CrCategoryRow { category: string; amount: number }
-interface DrPayeeRow { name: string; amount: number }
-interface DrCategoryGroup { category: string; total: number; payees: DrPayeeRow[] }
+interface DrItemRow { date: string | null; label: string; amount: number }
+interface DrCategoryGroup { category: string; total: number; items: DrItemRow[] }
 
 interface PayeeCandidate {
   payee_type: string
@@ -1850,10 +1855,6 @@ function resolvePayeeCandidate(e: PayeeCandidate): string | null {
   if (e.payee_type === 'Staff')  return e.staff_member?.name ?? e.payee_name_raw ?? null
   if (e.payee_type === 'Vendor') return e.vendor?.name ?? e.payee_name_raw ?? null
   return e.payee_name_raw ?? null
-}
-
-function resolveLinePayee(line: PayeeCandidate, header: PayeeCandidate | undefined): string {
-  return resolvePayeeCandidate(line) ?? (header ? resolvePayeeCandidate(header) : null) ?? 'Cash / Misc'
 }
 
 function CashbookTab() {
@@ -1907,7 +1908,7 @@ function CashbookTab() {
       const { data: headers } = await supabase
         .from('expenses')
         .select(`
-          id, amount, payee_type, payee_name_raw,
+          id, amount, description, expense_date, payee_type, payee_name_raw,
           category:category_id(name),
           vendor:vendor_id(name),
           staff_member:staff_id(name)
@@ -1923,7 +1924,7 @@ function CashbookTab() {
         ? await supabase
             .from('expense_line_items')
             .select(`
-              expense_id, amount, payee_type, payee_name_raw,
+              expense_id, amount, description, paid_date, payee_type, payee_name_raw,
               category:category_id(name),
               vendor:vendor_id(name),
               staff_member:staff_id(name)
@@ -1938,36 +1939,61 @@ function CashbookTab() {
         linesByHeader.get(li.expense_id)!.push(li)
       }
 
-      const grouped = new Map<string, Map<string, number>>()
-      function addToGroup(category: string, payee: string, amount: number) {
-        if (!grouped.has(category)) grouped.set(category, new Map())
-        const payeeMap = grouped.get(category)!
-        payeeMap.set(payee, (payeeMap.get(payee) ?? 0) + amount)
+      const grouped = new Map<string, DrItemRow[]>()
+      function addItem(category: string, item: DrItemRow) {
+        if (!grouped.has(category)) grouped.set(category, [])
+        grouped.get(category)!.push(item)
       }
 
       for (const header of headerRows) {
         const lines = linesByHeader.get(header.id) ?? []
+
         if (lines.length === 0) {
           // No line items recorded for this expense — fall back to header-level category/amount
           const cat = header.category?.name ?? 'Uncategorised'
-          const payee = resolvePayeeCandidate(header) ?? 'Cash / Misc'
-          addToGroup(cat, payee, header.amount ?? 0)
+          const payee = resolvePayeeCandidate(header)
+          addItem(cat, payee
+            ? { date: null, label: payee, amount: header.amount ?? 0 }
+            : { date: header.expense_date, label: header.description, amount: header.amount ?? 0 })
           continue
         }
-        for (const line of lines) {
+
+        // A voucher whose line items all resolve to the SAME payee is a pass-through
+        // reimbursement covering many purchases — itemize with date + description. A voucher
+        // whose lines resolve to DIFFERENT payees (or has only one line) means each line is a
+        // genuinely distinct payment — keep showing the payee name, no date.
+        const linePayees = lines.map(l => resolvePayeeCandidate(l) ?? resolvePayeeCandidate(header))
+        const distinctPayees = new Set(linePayees.filter((p): p is string => p != null))
+        const isPassThrough = lines.length > 1 && distinctPayees.size === 1
+
+        lines.forEach((line, i) => {
           const cat = line.category?.name ?? 'Uncategorised'
-          const payee = resolveLinePayee(line, header)
-          addToGroup(cat, payee, line.amount ?? 0)
-        }
+          if (isPassThrough) {
+            addItem(cat, {
+              date: line.paid_date ?? header.expense_date,
+              label: line.description,
+              amount: line.amount ?? 0,
+            })
+          } else {
+            addItem(cat, {
+              date: null,
+              label: linePayees[i] ?? 'Cash / Misc',
+              amount: line.amount ?? 0,
+            })
+          }
+        })
       }
 
       return Array.from(grouped.entries())
-        .map(([category, payeeMap]) => ({
+        .map(([category, items]) => ({
           category,
-          total: Array.from(payeeMap.values()).reduce((s, v) => s + v, 0),
-          payees: Array.from(payeeMap.entries())
-            .map(([name, amount]) => ({ name, amount }))
-            .sort((a, b) => b.amount - a.amount),
+          total: items.reduce((s, it) => s + it.amount, 0),
+          items: items.sort((a, b) => {
+            if (a.date && b.date) return a.date.localeCompare(b.date)
+            if (a.date && !b.date) return -1
+            if (!a.date && b.date) return 1
+            return b.amount - a.amount
+          }),
         }))
         .sort((a, b) => b.total - a.total) as DrCategoryGroup[]
     },
@@ -2008,7 +2034,10 @@ function CashbookTab() {
       ['PAYMENTS'],
       ...(drSplitup ?? []).flatMap(group => [
         [`  ${group.category}`, group.total],
-        ...group.payees.map(p => [`    ${p.name}`, p.amount]),
+        ...group.items.map(item => [
+          item.date ? `    ${formatShortDate(item.date)}  ${item.label}` : `    ${item.label}`,
+          item.amount,
+        ]),
       ]),
       ['  Total Payments', totalPayments],
       [],
@@ -2132,10 +2161,13 @@ function CashbookTab() {
                   <span>{group.category}</span>
                   <span>{formatINR(group.total)}</span>
                 </div>
-                {group.payees.map(p => (
-                  <div key={p.name} className="flex justify-between items-center pl-8 pr-5 py-1.5 text-[13px]">
-                    <span style={{ color: 'var(--ink-500)' }}>{p.name}</span>
-                    <span style={{ color: 'var(--ink-600)' }}>{formatINR(p.amount)}</span>
+                {group.items.map((item, i) => (
+                  <div key={`${item.label}_${item.date ?? ''}_${i}`} className="flex justify-between items-center pl-8 pr-5 py-1.5 text-[13px]">
+                    <span style={{ color: 'var(--ink-500)' }}>
+                      {item.date && <span className="mr-2" style={{ color: 'var(--ink-400)' }}>{formatShortDate(item.date)}</span>}
+                      {item.label}
+                    </span>
+                    <span style={{ color: 'var(--ink-600)' }}>{formatINR(item.amount)}</span>
                   </div>
                 ))}
               </div>
