@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
 import { IndianRupee, Building2, CheckCircle2, AlertCircle, Clock, Receipt, FileText, Loader2 } from 'lucide-react'
 import { useRoleCtx } from '@/contexts/RoleContext'
+import { ReceiptButton } from '@/components/ReceiptButton'
 
 interface FlatRow { id: string; code: string; block: string; flat_type: string; bhk_type: string | null; maintenance_amt: number }
 interface DuesRow {
@@ -29,7 +30,7 @@ interface CorpusRow {
   status: string
 }
 interface ArrearRow { id: string; arrears_type: string; source_label: string; amount: number }
-interface TxnRow { id: string; value_date: string; description: string; amount: number; category: string | null; fiscal_label: string | null; corpus: string }
+interface TxnRow { id: string; value_date: string; description: string; amount: number; category: string | null; fiscal_label: string | null; corpus: 'YES' | 'NO'; plan_id: string | null; months_covered: string | null }
 
 interface CorpusExpenseRow {
   amount: number
@@ -198,7 +199,7 @@ export default function OwnerPortalPage() {
     queryFn: async () => {
       const { data } = await supabase
         .from('transactions')
-        .select('id,value_date,description,amount,category,fiscal_label,corpus')
+        .select('id,value_date,description,amount,category,fiscal_label,corpus,plan_id,months_covered')
         .eq('flat_code', myFlat!.code)
         .eq('cr_dr', 'CR')
         .neq('row_type', 'VOIDED')
@@ -414,6 +415,7 @@ export default function OwnerPortalPage() {
     ? Math.min(allMonths.length, Math.floor(((dues?.collected_fy ?? 0) + (dues?.advance_credits ?? 0)) / monthlyRate))
     : paidCount
   const pendingMonths   = effectiveStatus !== 'Clear' ? allMonths.slice(paidCount) : []
+  const planNameByPlanId = new Map(corpusList.map(c => [c.plan_id, c.plan_name]))
 
   return (
     <div className="flex flex-col gap-5 fade-in max-w-2xl">
@@ -743,7 +745,7 @@ export default function OwnerPortalPage() {
             <table className="ds-tbl">
               <thead>
                 <tr>
-                  {['Date', 'Description', 'Type', 'Amount'].map(h => <th key={h}>{h}</th>)}
+                  {['Date', 'Description', 'Type', 'Amount', ''].map(h => <th key={h}>{h}</th>)}
                 </tr>
               </thead>
               <tbody>
@@ -765,6 +767,13 @@ export default function OwnerPortalPage() {
                     </td>
                     <td className="font-semibold mono text-right" style={{ color: 'var(--ok)' }}>
                       {formatINR(p.amount)}
+                    </td>
+                    <td className="text-right">
+                      <ReceiptButton
+                        txn={p}
+                        flat={{ code: myFlat!.code, block: myFlat!.block }}
+                        planName={p.plan_id ? planNameByPlanId.get(p.plan_id) ?? null : null}
+                      />
                     </td>
                   </tr>
                 ))}
