@@ -8,6 +8,7 @@ import { supabase, DuesEntry, Transaction } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
 import { fetchFlatContactsByCode } from '@/lib/contacts'
 import { WhatsAppSendButtons } from '@/components/WhatsAppSendButtons'
+import { ReceiptButton } from '@/components/ReceiptButton'
 import { useRoleCtx } from '@/contexts/RoleContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -463,12 +464,15 @@ function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat
         ) : (
           <div className="flex flex-col gap-2 overflow-y-auto max-h-[220px] lg:max-h-[55vh]">
             {payments.map(p => (
-              <div key={p.id} className="flex justify-between text-[13px]">
+              <div key={p.id} className="flex justify-between items-center text-[13px]">
                 <div>
                   <p className="font-medium">{p.fiscal_label}</p>
                   <p className="text-[11.5px] mono" style={{ color: 'var(--ink-400)' }}>{p.value_date}</p>
                 </div>
-                <p className="font-bold" style={{ color: 'var(--ok)' }}>{formatINR(p.amount)}</p>
+                <div className="flex items-center gap-2">
+                  <p className="font-bold" style={{ color: 'var(--ok)' }}>{formatINR(p.amount)}</p>
+                  <ReceiptButton txn={p} flat={{ code: flat.flat_code, block: flat.block }} />
+                </div>
               </div>
             ))}
           </div>
