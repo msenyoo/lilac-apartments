@@ -703,7 +703,7 @@ export function CashbookDoc({
           <Text style={[S.colR, S.bold]}>{formatINR(closingBalance)}</Text>
         </View>
 
-        <Text style={[S.sectionHead, { marginTop: 12 }]}>PENDING DUES (AS OF TODAY)</Text>
+        <Text style={[S.sectionHead, { marginTop: 12 }]}>PENDING DUES (AS OF {generated.toUpperCase()})</Text>
         <View style={S.table}>
           {dues.map((d, i) => (
             <View key={d.label} style={i === dues.length - 1 ? S.rowTotal : S.row}>

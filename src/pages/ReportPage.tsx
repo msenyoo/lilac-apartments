@@ -1851,6 +1851,7 @@ function CashbookTab() {
   const [month, setMonth] = useState(currentFiscalLabel)
   const { start, end, prevEnd } = monthLabelToRange(month)
   const [generating, setGenerating] = useState(false)
+  const asOfDate = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
 
   const { data: openingBalance = 0 } = useQuery({
     queryKey: ['cashbook-opening', prevEnd],
@@ -1965,7 +1966,7 @@ function CashbookTab() {
       [],
       ['Closing Balance', closingBalance],
       [],
-      ['PENDING DUES (as of today)'],
+      [`PENDING DUES (as of ${asOfDate})`],
       ['  Current FY Pending', pendingTotal, `${pendingRows.length} flats`],
       ['  Arrears (prior years)', arrearsTotal, `${arrearsRows.length} flats`],
       ['  Total Outstanding', outstandingTotal, `${outstandingRows.length} flats`],
@@ -2101,7 +2102,7 @@ function CashbookTab() {
       <div className="surface !p-0 overflow-hidden">
         <div className="px-5 py-3 border-b hairline flex items-center gap-2" style={{ background: 'var(--ink-50)' }}>
           <AlertTriangle size={15} className="text-amber-500" />
-          <h3 className="font-semibold text-sm" style={{ color: 'var(--ink-700)' }}>PENDING DUES (as of today)</h3>
+          <h3 className="font-semibold text-sm" style={{ color: 'var(--ink-700)' }}>PENDING DUES (as of {asOfDate})</h3>
         </div>
         <div className="flex justify-between items-center px-5 py-3 border-b hairline text-sm">
           <span style={{ color: 'var(--ink-600)' }}>Current FY Pending</span>
