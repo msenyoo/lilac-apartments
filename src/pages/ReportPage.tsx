@@ -1839,15 +1839,21 @@ interface CrCategoryRow { category: string; amount: number }
 interface DrPayeeRow { name: string; amount: number }
 interface DrCategoryGroup { category: string; total: number; payees: DrPayeeRow[] }
 
-function resolveExpensePayee(e: {
+interface PayeeCandidate {
   payee_type: string
   payee_name_raw: string | null
   vendor: { name: string } | null
   staff_member: { name: string } | null
-}): string {
-  if (e.payee_type === 'Staff')  return e.staff_member?.name ?? e.payee_name_raw ?? 'Cash / Misc'
-  if (e.payee_type === 'Vendor') return e.vendor?.name ?? e.payee_name_raw ?? 'Cash / Misc'
-  return e.payee_name_raw ?? 'Cash / Misc'
+}
+
+function resolvePayeeCandidate(e: PayeeCandidate): string | null {
+  if (e.payee_type === 'Staff')  return e.staff_member?.name ?? e.payee_name_raw ?? null
+  if (e.payee_type === 'Vendor') return e.vendor?.name ?? e.payee_name_raw ?? null
+  return e.payee_name_raw ?? null
+}
+
+function resolveLinePayee(line: PayeeCandidate, header: PayeeCandidate | undefined): string {
+  return resolvePayeeCandidate(line) ?? (header ? resolvePayeeCandidate(header) : null) ?? 'Cash / Misc'
 }
 
 function CashbookTab() {
@@ -1898,10 +1904,10 @@ function CashbookTab() {
   const { data: drSplitup } = useQuery({
     queryKey: ['cashbook-dr', start, end],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data: headers } = await supabase
         .from('expenses')
         .select(`
-          amount, payee_type, payee_name_raw,
+          id, amount, payee_type, payee_name_raw,
           category:category_id(name),
           vendor:vendor_id(name),
           staff_member:staff_id(name)
@@ -1909,15 +1915,52 @@ function CashbookTab() {
         .gte('expense_date', start)
         .lte('expense_date', end)
         .is('voided_at', null)
-      const grouped = new Map<string, Map<string, number>>()
-      for (const row of data ?? []) {
-        const e = row as any
-        const cat = e.category?.name ?? 'Uncategorised'
-        const payee = resolveExpensePayee(e)
-        if (!grouped.has(cat)) grouped.set(cat, new Map())
-        const payeeMap = grouped.get(cat)!
-        payeeMap.set(payee, (payeeMap.get(payee) ?? 0) + (e.amount ?? 0))
+
+      const headerRows = (headers ?? []) as any[]
+      const headerIds = headerRows.map(h => h.id)
+
+      const { data: lineItems } = headerIds.length
+        ? await supabase
+            .from('expense_line_items')
+            .select(`
+              expense_id, amount, payee_type, payee_name_raw,
+              category:category_id(name),
+              vendor:vendor_id(name),
+              staff_member:staff_id(name)
+            `)
+            .in('expense_id', headerIds)
+        : { data: [] }
+
+      const lineRows = (lineItems ?? []) as any[]
+      const linesByHeader = new Map<string, any[]>()
+      for (const li of lineRows) {
+        if (!linesByHeader.has(li.expense_id)) linesByHeader.set(li.expense_id, [])
+        linesByHeader.get(li.expense_id)!.push(li)
       }
+
+      const grouped = new Map<string, Map<string, number>>()
+      function addToGroup(category: string, payee: string, amount: number) {
+        if (!grouped.has(category)) grouped.set(category, new Map())
+        const payeeMap = grouped.get(category)!
+        payeeMap.set(payee, (payeeMap.get(payee) ?? 0) + amount)
+      }
+
+      for (const header of headerRows) {
+        const lines = linesByHeader.get(header.id) ?? []
+        if (lines.length === 0) {
+          // No line items recorded for this expense — fall back to header-level category/amount
+          const cat = header.category?.name ?? 'Uncategorised'
+          const payee = resolvePayeeCandidate(header) ?? 'Cash / Misc'
+          addToGroup(cat, payee, header.amount ?? 0)
+          continue
+        }
+        for (const line of lines) {
+          const cat = line.category?.name ?? 'Uncategorised'
+          const payee = resolveLinePayee(line, header)
+          addToGroup(cat, payee, line.amount ?? 0)
+        }
+      }
+
       return Array.from(grouped.entries())
         .map(([category, payeeMap]) => ({
           category,
