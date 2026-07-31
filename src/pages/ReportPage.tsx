@@ -35,10 +35,13 @@ function monthLabelToRange(label: string) {
   const year = 2000 + Number(yy)
   const lastDay = new Date(year, monthIndex + 1, 0).getDate()
   const pad = (n: number) => String(n).padStart(2, '0')
+  const prevMonthIndex = monthIndex === 0 ? 11 : monthIndex - 1
+  const prevYear = monthIndex === 0 ? year - 1 : year
+  const prevLastDay = new Date(prevYear, prevMonthIndex + 1, 0).getDate()
   return {
     start:   `${year}-${pad(monthIndex + 1)}-01`,
     end:     `${year}-${pad(monthIndex + 1)}-${pad(lastDay)}`,
-    prevEnd: new Date(year, monthIndex, 0).toISOString().slice(0, 10),
+    prevEnd: `${prevYear}-${pad(prevMonthIndex + 1)}-${pad(prevLastDay)}`,
   }
 }
 
@@ -1940,6 +1943,8 @@ function CashbookTab() {
   const totalReceipts = (crSplitup ?? []).reduce((s, r) => s + r.amount, 0)
   const totalPayments = (drSplitup ?? []).reduce((s, r) => s + r.total, 0)
 
+  const isLoading = crSplitup === undefined || drSplitup === undefined || duesRows === undefined
+
   const pendingRows     = (duesRows ?? []).filter(r => r.pending > 0)
   const arrearsRows     = (duesRows ?? []).filter(r => r.arrears_maintenance > 0)
   const outstandingRows = (duesRows ?? []).filter(r => r.total_outstanding > 0)
@@ -1970,6 +1975,8 @@ function CashbookTab() {
       ['  Current FY Pending', pendingTotal, `${pendingRows.length} flats`],
       ['  Arrears (prior years)', arrearsTotal, `${arrearsRows.length} flats`],
       ['  Total Outstanding', outstandingTotal, `${outstandingRows.length} flats`],
+      [],
+      ['Note: Opening/Closing balance is the audited bank position. Total Payments is the sum of recorded expenses and may not exactly match the bank-derived Closing − Opening delta if a cash expense isn\'t yet linked to a bank transaction.'],
     ]
     const ws = XLSX.utils.aoa_to_sheet(rows)
     ws['!cols'] = [32, 14, 14].map(w => ({ wch: w }))
@@ -2013,11 +2020,11 @@ function CashbookTab() {
           {FISCAL_MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
         </select>
         <div className="ml-auto flex items-center gap-2">
-          <button onClick={handleExcelExport}
-            className="flex items-center gap-1.5 text-sm hover:opacity-80" style={{ color: 'var(--brand-700)' }}>
+          <button onClick={handleExcelExport} disabled={isLoading}
+            className="flex items-center gap-1.5 text-sm hover:opacity-80 disabled:opacity-50" style={{ color: 'var(--brand-700)' }}>
             <Download size={14} /> Export Excel
           </button>
-          <button onClick={handlePdf} disabled={generating}
+          <button onClick={handlePdf} disabled={generating || isLoading}
             className="btn-primary flex items-center gap-2 py-2 px-4 text-sm disabled:opacity-50">
             {generating
               ? <><Loader2 size={14} className="animate-spin" /> Generating PDF…</>

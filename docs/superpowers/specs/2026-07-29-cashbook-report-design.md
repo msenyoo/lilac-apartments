@@ -58,10 +58,13 @@ function monthLabelToRange(label: string) {
   const year = 2000 + Number(yy)
   const lastDay = new Date(year, monthIndex + 1, 0).getDate()
   const pad = (n: number) => String(n).padStart(2, '0')
+  const prevMonthIndex = monthIndex === 0 ? 11 : monthIndex - 1
+  const prevYear = monthIndex === 0 ? year - 1 : year
+  const prevLastDay = new Date(prevYear, prevMonthIndex + 1, 0).getDate()
   return {
     start: `${year}-${pad(monthIndex + 1)}-01`,
     end:   `${year}-${pad(monthIndex + 1)}-${pad(lastDay)}`,
-    prevEnd: new Date(year, monthIndex, 0).toISOString().slice(0, 10), // last day of prior month
+    prevEnd: `${prevYear}-${pad(prevMonthIndex + 1)}-${pad(prevLastDay)}`, // last day of prior month, plain arithmetic (no Date→toISOString round-trip, which rolls back a day in UTC+5:30)
   }
 }
 ```

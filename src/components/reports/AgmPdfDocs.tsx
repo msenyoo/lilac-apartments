@@ -715,6 +715,12 @@ export function CashbookDoc({
           ))}
         </View>
 
+        <Text style={[S.small, { marginTop: 8, textAlign: 'center' }]}>
+          Opening/Closing balance is the audited bank position for {month}. Total Payments is the sum of
+          recorded expenses and may not exactly match the bank-derived Closing - Opening delta if a cash
+          expense isn't yet linked to a bank transaction.
+        </Text>
+
         <LetterheadFooter style={S.footer} generated={generated} />
       </Page>
     </Document>
