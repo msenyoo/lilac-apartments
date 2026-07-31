@@ -8,6 +8,7 @@ import { supabase, CorpusEntry, CorpusPlan, Flat } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
 import { fetchFlatContactsByCode } from '@/lib/contacts'
 import { WhatsAppSendButtons } from '@/components/WhatsAppSendButtons'
+import { ReceiptButton } from '@/components/ReceiptButton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog'
@@ -854,12 +855,15 @@ function FlatCorpusPanel({ flat, onClose }: { flat: CorpusEntry; onClose: () => 
         ) : (
           <div className="space-y-2">
             {payments.map((p: any) => (
-              <div key={p.id} className="flex justify-between text-sm">
+              <div key={p.id} className="flex justify-between items-center text-sm">
                 <div>
                   <p className="font-medium">{p.fiscal_label}</p>
                   <p className="text-xs" style={{ color: 'var(--ink-400)' }}>{p.value_date}</p>
                 </div>
-                <p className="font-semibold text-green-700">{formatINR(p.amount)}</p>
+                <div className="flex items-center gap-2">
+                  <p className="font-semibold text-green-700">{formatINR(p.amount)}</p>
+                  <ReceiptButton txn={p} flat={{ code: flat.flat_code, block: flat.block }} planName={flat.plan_name} />
+                </div>
               </div>
             ))}
           </div>
