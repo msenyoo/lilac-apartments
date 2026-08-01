@@ -96,7 +96,7 @@ export function parseClipboard(
 }
 
 export function isRowEmpty(r: BulkDraftRow): boolean {
-  return !r.paid_date && !r.description.trim() && !r.amount
+  return !r.paid_date && !r.description.trim() && !r.amount && !r.utility_units && !r.utility_rate
 }
 
 export function rowErrors(r: BulkDraftRow): Partial<Record<'paid_date' | 'description' | 'amount' | 'category_id', string>> {

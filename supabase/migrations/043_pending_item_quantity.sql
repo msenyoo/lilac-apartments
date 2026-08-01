@@ -50,6 +50,7 @@ BEGIN
     RAISE EXCEPTION 'invalid payment_mode';
   END IF;
 
+  -- Lock first (FOR UPDATE cannot be combined with aggregates)
   PERFORM 1
   FROM   public.pending_line_items
   WHERE  id = ANY(p_ids) AND voided_at IS NULL

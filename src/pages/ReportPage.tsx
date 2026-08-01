@@ -2281,7 +2281,7 @@ function CashbookTab() {
       ['  Arrears (prior years)', arrearsTotal, `${arrearsRows.length} flats`],
       ['  Total Outstanding', outstandingTotal, `${outstandingRows.length} flats`],
       [],
-      ['Note: Opening/Closing balance is the audited bank position. Total Payments is the sum of recorded expenses and may not exactly match the bank-derived Closing − Opening delta if a cash expense isn\'t yet linked to a bank transaction.'],
+      ['Note: Opening/Closing balance is the audited bank position. Total Payments reflects only approved expenses that are Cash, Direct (owner-paid), or already reconciled with the bank; expenses still pending committee approval or not yet bank-reconciled are excluded from this total.'],
     ]
     const ws = XLSX.utils.aoa_to_sheet(rows)
     ws['!cols'] = [32, 14, 14].map(w => ({ wch: w }))
@@ -2446,9 +2446,10 @@ function CashbookTab() {
       </div>
 
       <p className="text-xs text-center" style={{ color: 'var(--ink-400)' }}>
-        Opening/Closing balance is the audited bank position for {month}. Total Payments (above) is
-        the sum of recorded expenses for the month and may not exactly match the bank-derived
-        Closing − Opening delta if a cash expense isn't yet linked to a bank transaction.
+        Opening/Closing balance is the audited bank position for {month}. Total Payments (above)
+        reflects only approved expenses that are Cash, Direct (owner-paid), or already reconciled
+        with the bank; expenses still pending committee approval or not yet bank-reconciled are
+        excluded from this total.
       </p>
     </div>
   )

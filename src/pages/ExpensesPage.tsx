@@ -321,7 +321,7 @@ function DayBook() {
 
   useEffect(() => {
     setPage(1)
-  }, [search, dateFrom, dateTo, categoryFilter])
+  }, [search, dateFrom, dateTo, categoryFilter, showVoided, showPending])
 
   const totalPages = Math.max(1, Math.ceil(filteredExpenses.length / pageSize))
   const pageSafe = Math.min(page, totalPages)
