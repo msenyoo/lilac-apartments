@@ -898,9 +898,13 @@ function ExpenseDetailPanel({
                   </span>
                   <span style={{ color: 'var(--ink-800)' }}>{formatINR(li.amount)}</span>
                 </div>
-                <div className="flex gap-2 flex-wrap" style={{ color: 'var(--ink-400)' }}>
+                <div className="flex items-center gap-2 flex-wrap" style={{ color: 'var(--ink-400)' }}>
                   <span>{li.cost_center}</span>
-                  {li.category && <span>· {li.category.name}</span>}
+                  {li.category && (
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${categoryBadgeClass(li.category.name)}`}>
+                      {li.category.name}
+                    </span>
+                  )}
                   {li.payment_mode && <span>· {li.payment_mode}</span>}
                   {li.reference_no && <span>· {li.reference_no}</span>}
                   {li.utility_units != null && li.utility_rate != null && (
