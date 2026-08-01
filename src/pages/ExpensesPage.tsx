@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useRoleCtx } from '@/contexts/RoleContext'
 import { useForm, useFieldArray, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Plus, Trash2, Download, Receipt, Users, Building, X, GitMerge, CheckCircle2, Paperclip, RefreshCcw, Coins, Upload, Loader2, Trash, Pencil, Ban, Unlink, AlertTriangle, PiggyBank, ListChecks, ListPlus, Eye, Share2 } from 'lucide-react'
+import { Plus, Trash2, Download, Receipt, Users, Building, X, GitMerge, CheckCircle2, Paperclip, RefreshCcw, Coins, Upload, Loader2, Trash, Pencil, Ban, Unlink, AlertTriangle, PiggyBank, ListChecks, ListPlus, Eye, Share2, Search } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
@@ -227,6 +227,7 @@ function DayBook() {
   const [showPending, setShowPending] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [sharing, setSharing] = useState(false)
+  const [search, setSearch] = useState('')
 
   const { data: expenses = [], isLoading } = useQuery({
     queryKey: ['expenses', showVoided, showPending],
@@ -261,8 +262,20 @@ function DayBook() {
     if (detailId) document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' })
   }, [detailId])
 
+  const filteredExpenses = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return expenses
+    return expenses.filter(e => {
+      const haystack = [
+        e.description, e.payee_name_raw, e.vendor?.name, e.staff_member?.name,
+        e.voucher_no, e.category?.name, e.reference_no, e.cheque_number,
+      ].filter(Boolean).join(' ').toLowerCase()
+      return haystack.includes(q)
+    })
+  }, [expenses, search])
+
   function handleExport() {
-    const ws = XLSX.utils.json_to_sheet(expenses.map(e => ({
+    const ws = XLSX.utils.json_to_sheet(filteredExpenses.map(e => ({
       Date:        e.expense_date,
       Voucher:     e.voucher_no,
       Description: e.description,
@@ -376,6 +389,25 @@ function DayBook() {
               </span>
             )}
           </label>
+          <div className="relative" style={{ width: 260 }}>
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--ink-400)' }} />
+            <Input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search description, payee, voucher…"
+              className="text-[13px]"
+              style={{ paddingLeft: '2rem', paddingRight: search ? '2rem' : undefined }}
+            />
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 hover:opacity-70"
+                style={{ color: 'var(--ink-400)' }}
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-3">
           {selectedIds.size > 0 && (
@@ -385,7 +417,7 @@ function DayBook() {
               {sharing ? 'Generating…' : `Share PDF (${selectedExpenses.length}) · ${formatINR(selectedTotal)}`}
             </button>
           )}
-          <button onClick={handleExport} disabled={!expenses.length}
+          <button onClick={handleExport} disabled={!filteredExpenses.length}
             className="flex items-center gap-1.5 text-sm text-brand-700 hover:text-brand-900 disabled:opacity-40">
             <Download size={14} /> Export
           </button>
@@ -402,11 +434,21 @@ function DayBook() {
             <p className="text-sm mt-1" style={{ color: 'var(--ink-500)' }}>Click "Add Expense" to record the first entry.</p>
           </div>
         </div>
+      ) : filteredExpenses.length === 0 ? (
+        <div className="surface !p-12 flex flex-col items-center justify-center text-center gap-4">
+          <div className="w-14 h-14 rounded-full flex items-center justify-center" style={{ background: 'var(--ink-100)' }}>
+            <Search size={26} style={{ color: 'var(--ink-400)' }} />
+          </div>
+          <div>
+            <p className="text-base font-medium" style={{ color: 'var(--ink-800)' }}>No matches for "{search}"</p>
+            <p className="text-sm mt-1" style={{ color: 'var(--ink-500)' }}>Try a different description, payee, or voucher number.</p>
+          </div>
+        </div>
       ) : (
         <div className="flex gap-4">
           {/* List */}
           <div className="flex-1 min-w-0 surface !p-0 divide-rows">
-            {expenses.map(e => {
+            {filteredExpenses.map(e => {
               const status = expenseStatus(e)
               const payeeName = e.payee_name_raw ?? e.vendor?.name ?? e.staff_member?.name ?? ''
               const isVoided = !!e.voided_at

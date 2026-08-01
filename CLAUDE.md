@@ -116,7 +116,13 @@ user_roles                 — RBAC: admin | committee | auditor
 audit_log                  — who changed what, when (Postgres triggers)
 ```
 
-Key views: `v_dues_tracker`, `v_corpus_tracker`, `v_expense_reconciliation`, `v_users`
+Key views: `v_dues_tracker`, `v_corpus_tracker`, `v_expense_reconciliation`, `v_users`, `v_expense_category_spend`
+
+`v_expense_category_spend` — one row per "spend" (line item, falling back to header for
+headers with no line items), each with its own effective category. `expenses.category_id`
+is often NULL on vouchers split across categories at entry time — the real categorisation
+lives on `expense_line_items.category_id`. Any new report/query that groups or filters
+expenses by category should read from this view, not `expenses.category_id` directly.
 
 ---
 
@@ -138,7 +144,15 @@ const { isAdmin, canWrite, canApprove } = useRoleCtx()
 
 ## Migrations — Apply Order
 
-All migrations 001–014 are applied to production.
+All migrations through 041 are applied to production and dev.
+
+`supabase db push --linked` may report old migrations (017+) as pending even though they're
+already live — the remote migration-history ledger has drifted from actual schema state, for
+reasons predating this instruction. Don't blindly `db push` a batch. For a single new
+migration, apply its SQL directly via the Management API instead:
+`POST https://api.supabase.com/v1/projects/<ref>/database/query` with `{"query": "<sql>"}`,
+Bearer `SUPABASE_ACCESS_TOKEN`. Apply to both prod (`aulttcsvxzcwyceezzpz`) and dev
+(`qcoezjcwrsqchulqgydm`).
 
 ---
 
