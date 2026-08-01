@@ -30,10 +30,20 @@ export interface PaymentReceiptData {
   block: string
   amount: number
   valueDate: string
+  paidTime: string | null
+  transactionId: string | null
   categoryLabel: string
   periodCovered: string | null
   reference: string
   generated: string
+}
+
+function fmtTime12h(time: string): string {
+  const [hStr, m] = time.split(':')
+  const h = parseInt(hStr, 10)
+  const ampm = h >= 12 ? 'PM' : 'AM'
+  const h12 = h % 12 === 0 ? 12 : h % 12
+  return `${h12}:${m} ${ampm}`
 }
 
 function DetailRow({ label, value }: { label: string; value: string }) {
@@ -63,8 +73,10 @@ export function PaymentReceiptDoc({ data }: { data: PaymentReceiptData }) {
           label="Date paid"
           value={new Date(data.valueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
         />
+        {data.paidTime && <DetailRow label="Time paid" value={fmtTime12h(data.paidTime)} />}
         <DetailRow label="Category" value={data.categoryLabel} />
         {data.periodCovered && <DetailRow label="Period covered" value={data.periodCovered} />}
+        {data.transactionId && <DetailRow label="Transaction ID" value={data.transactionId} />}
         <DetailRow label="Reference" value={data.reference || '—'} />
 
         <Text style={S.note}>This is a system-generated receipt and does not require a signature.</Text>

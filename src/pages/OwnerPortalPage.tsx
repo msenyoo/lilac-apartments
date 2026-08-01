@@ -30,7 +30,7 @@ interface CorpusRow {
   status: string
 }
 interface ArrearRow { id: string; arrears_type: string; source_label: string; amount: number }
-interface TxnRow { id: string; value_date: string; description: string; amount: number; category: string | null; fiscal_label: string | null; corpus: 'YES' | 'NO'; plan_id: string | null; months_covered: string | null }
+interface TxnRow { id: string; value_date: string; description: string; amount: number; category: string | null; fiscal_label: string | null; corpus: 'YES' | 'NO'; plan_id: string | null; months_covered: string | null; txn_id: string | null; posted_time: string | null }
 
 interface CorpusExpenseRow {
   amount: number
@@ -199,7 +199,7 @@ export default function OwnerPortalPage() {
     queryFn: async () => {
       const { data } = await supabase
         .from('transactions')
-        .select('id,value_date,description,amount,category,fiscal_label,corpus,plan_id,months_covered')
+        .select('id,value_date,description,amount,category,fiscal_label,corpus,plan_id,months_covered,txn_id,posted_time')
         .eq('flat_code', myFlat!.code)
         .eq('cr_dr', 'CR')
         .neq('row_type', 'VOIDED')

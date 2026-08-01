@@ -1,7 +1,9 @@
 import type { Transaction } from '@/lib/supabase'
 import type { PaymentReceiptData } from '@/components/reports/PaymentReceiptPdf'
 
-export type ReceiptTxn = Pick<Transaction, 'value_date' | 'amount' | 'description' | 'category' | 'corpus' | 'months_covered'>
+export type ReceiptTxn = Pick<Transaction,
+  'value_date' | 'amount' | 'description' | 'category' | 'corpus' | 'months_covered' | 'txn_id' | 'posted_time'
+>
 
 export function buildReceiptData(
   txn: ReceiptTxn,
@@ -17,6 +19,8 @@ export function buildReceiptData(
     block: flat.block,
     amount: txn.amount,
     valueDate: txn.value_date,
+    paidTime: txn.posted_time,
+    transactionId: txn.txn_id,
     categoryLabel,
     periodCovered: txn.months_covered,
     reference: txn.description,
