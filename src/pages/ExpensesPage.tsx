@@ -69,7 +69,6 @@ interface ExpenseLineItem {
   id: string; payee_type: string; payee_name_raw: string | null
   description: string; cost_center: string; amount: number
   utility_units: number | null; utility_rate: number | null; unit_label: string | null
-  period_from: string | null; period_to: string | null
   payment_mode: string | null
   reference_no: string | null
   paid_date: string | null
@@ -117,8 +116,6 @@ const lineItemSchema = z.object({
   utility_units:  z.coerce.number().optional(),
   utility_rate:   z.coerce.number().optional(),
   unit_label:     z.string().optional(),
-  period_from:    z.string().optional(),
-  period_to:      z.string().optional(),
   paid_date:      z.string().optional(),
   payment_mode:   z.string().optional(),
   reference_no:   z.string().optional(),
@@ -909,7 +906,6 @@ function ExpenseDetailPanel({
                   {li.utility_units != null && li.utility_rate != null && (
                     <span>· {li.utility_units} {li.unit_label || 'units'} × ₹{li.utility_rate}</span>
                   )}
-                  {li.period_from && <span>· {formatDateDMY(li.period_from)} – {formatDateDMY(li.period_to)}</span>}
                 </div>
               </div>
             ))}
@@ -1098,8 +1094,6 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
             utility_units:  li.utility_units ?? undefined,
             utility_rate:   li.utility_rate ?? undefined,
             unit_label:     li.unit_label ?? undefined,
-            period_from:    li.period_from ?? '',
-            period_to:      li.period_to ?? '',
             paid_date:      li.paid_date ?? '',
             payment_mode:   li.payment_mode ?? '',
             reference_no:   li.reference_no ?? '',
@@ -1224,8 +1218,6 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
         utility_units:  li.utility_units  || null,
         utility_rate:   li.utility_rate   || null,
         unit_label:     li.unit_label     || null,
-        period_from:    li.period_from    || null,
-        period_to:      li.period_to      || null,
         paid_date:      li.paid_date      || null,
         payment_mode:   li.payment_mode   || null,
         reference_no:   li.reference_no   || null,
@@ -1246,8 +1238,6 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
             utility_units:  li.utility_units ?? null,
             utility_rate:   li.utility_rate ?? null,
             unit_label:     li.unit_label ?? null,
-            period_from:    li.period_from ?? null,
-            period_to:      li.period_to ?? null,
             staff_id:       li.staff_id ?? null,
             vendor_id:      li.vendor_id ?? null,
             paid_date:      li.paid_date ?? null,
@@ -1639,18 +1629,6 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
                         </div>
                       )
                     })()}
-
-                    {/* Period */}
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="flex flex-col gap-1">
-                        <Label className="text-xs">Period from</Label>
-                        <Input type="date" {...register(`line_items.${idx}.period_from`)} />
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        <Label className="text-xs">Period to</Label>
-                        <Input type="date" {...register(`line_items.${idx}.period_to`)} />
-                      </div>
-                    </div>
 
                     {/* Payee name picker — conditional on payee_type */}
                     <div className="grid grid-cols-1 gap-2">

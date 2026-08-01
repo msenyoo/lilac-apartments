@@ -1889,9 +1889,10 @@ function UtilityReport({ catId, catName, unitLabel: unitLabelProp, fyYear }: {
   const { data: items, isLoading } = useQuery({
     queryKey: ['utility-report', catId, fyYear],
     queryFn: async () => {
-      // Bucket by payment date (expense_date), not billing period (period_from) — matches
-      // the cash-basis logic used by every other report (Cashbook, Expenditure). A bill
-      // whose period straddles the FY boundary still shows up in the FY it was actually paid.
+      // Bucket by payment date (expense_date), not per-line paid_date — matches the
+      // cash-basis logic used by every other report (Cashbook, Expenditure). A line item
+      // paid on a different date than the header still shows up in the FY the header
+      // expense was recorded in; paid_date is used only for the row's own date column.
       const { data: headers } = await applyReportableFilter(supabase
         .from('expenses')
         .select('id, expense_date'))
@@ -1904,7 +1905,7 @@ function UtilityReport({ catId, catName, unitLabel: unitLabelProp, fyYear }: {
 
       const { data } = await supabase
         .from('expense_line_items')
-        .select('id, expense_id, cost_center, utility_units, utility_rate, amount, period_from, description')
+        .select('id, expense_id, cost_center, utility_units, utility_rate, amount, paid_date, description')
         .eq('category_id', catId)
         .in('expense_id', headerIds)
 
@@ -1941,12 +1942,12 @@ function UtilityReport({ catId, catName, unitLabel: unitLabelProp, fyYear }: {
     const rows: any[][] = [
       [`${catName} — ${fy.label}`], [],
       hasUnits
-        ? ['Period', 'Block', unitLabel, 'Rate', 'Amount', 'Notes']
-        : ['Period', 'Block', 'Amount', 'Notes'],
+        ? ['Date', 'Block', unitLabel, 'Rate', 'Amount', 'Notes']
+        : ['Date', 'Block', 'Amount', 'Notes'],
       ...(items ?? []).map((i: any) =>
         hasUnits
-          ? [formatDateDMY(i.period_from ?? i.expense_date), i.cost_center, i.utility_units ?? '', i.utility_rate ?? '', i.amount, i.description ?? '']
-          : [formatDateDMY(i.period_from ?? i.expense_date), i.cost_center, i.amount, i.description ?? '']
+          ? [formatDateDMY(i.paid_date ?? i.expense_date), i.cost_center, i.utility_units ?? '', i.utility_rate ?? '', i.amount, i.description ?? '']
+          : [formatDateDMY(i.paid_date ?? i.expense_date), i.cost_center, i.amount, i.description ?? '']
       ),
       [], hasUnits
         ? ['TOTAL', '', totalUnits, '', totalAmt, '']
@@ -2027,7 +2028,7 @@ function UtilityReport({ catId, catName, unitLabel: unitLabelProp, fyYear }: {
           <table className="w-full text-sm">
             <thead className="border-b hairline" style={{ background: 'var(--ink-50)' }}>
               <tr>
-                <th className="text-left px-4 py-2 font-semibold" style={{ color: 'var(--ink-600)' }}>Period</th>
+                <th className="text-left px-4 py-2 font-semibold" style={{ color: 'var(--ink-600)' }}>Date</th>
                 <th className="text-left px-4 py-2 font-semibold" style={{ color: 'var(--ink-600)' }}>Area / Block</th>
                 {hasUnits && <>
                   <th className="text-right px-4 py-2 font-semibold" style={{ color: 'var(--ink-600)' }}>{unitLabel}</th>
@@ -2040,7 +2041,7 @@ function UtilityReport({ catId, catName, unitLabel: unitLabelProp, fyYear }: {
             <tbody className="divide-rows">
               {(items ?? []).map((item: any, i: number) => (
                 <tr key={item.id} className={i % 2 === 1 ? 'bg-slate-50/50' : ''}>
-                  <td className="px-4 py-2.5" style={{ color: 'var(--ink-600)' }}>{formatDateDMY(item.period_from ?? item.expense_date)}</td>
+                  <td className="px-4 py-2.5" style={{ color: 'var(--ink-600)' }}>{formatDateDMY(item.paid_date ?? item.expense_date)}</td>
                   <td className="px-4 py-2.5 font-medium">{item.cost_center ?? '—'}</td>
                   {hasUnits && <>
                     <td className="px-4 py-2.5 text-right">{item.utility_units != null ? Number(item.utility_units).toLocaleString('en-IN') : '—'}</td>
