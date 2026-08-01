@@ -1210,6 +1210,9 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
         paid_date:      item.paid_date,
         payment_mode:   item.payment_mode,
         reference_no:   item.reference_no ?? '',
+        utility_units:  item.utility_units ?? undefined,
+        utility_rate:   item.utility_rate ?? undefined,
+        unit_label:     item.unit_label ?? '',
         pending_id:     item.id,
       })
     }
