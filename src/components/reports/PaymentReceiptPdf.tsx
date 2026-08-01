@@ -12,6 +12,7 @@ const S = StyleSheet.create({
   detailRow:   { flexDirection: 'row', borderBottom: '0.3pt solid #f1f5f9', paddingVertical: 6 },
   detailLabel: { width: 120, color: '#64748b' },
   detailValue: { flex: 1, fontFamily: 'Helvetica-Bold', color: '#1e293b' },
+  note:        { marginTop: 16, fontSize: 8, color: '#94a3b8', textAlign: 'center' },
   footer:      { position: 'absolute', bottom: 20, left: 36, right: 36, fontSize: 7, color: '#94a3b8', textAlign: 'center' },
 })
 
@@ -65,6 +66,8 @@ export function PaymentReceiptDoc({ data }: { data: PaymentReceiptData }) {
         <DetailRow label="Category" value={data.categoryLabel} />
         {data.periodCovered && <DetailRow label="Period covered" value={data.periodCovered} />}
         <DetailRow label="Reference" value={data.reference || '—'} />
+
+        <Text style={S.note}>This is a system-generated receipt and does not require a signature.</Text>
 
         <LetterheadFooter style={S.footer} generated={data.generated} />
       </Page>
