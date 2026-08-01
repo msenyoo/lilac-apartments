@@ -598,7 +598,6 @@ function CategoriesSettings() {
   const qc = useQueryClient()
   const [editTarget,    setEditTarget]    = useState<ExpenseCategory | null>(null)
   const [addOpen,       setAddOpen]       = useState(false)
-  const [showInactive,  setShowInactive]  = useState(false)
   const [deleteTarget,  setDeleteTarget]  = useState<ExpenseCategory | null>(null)
 
   const { data: categories = [], isLoading } = useQuery({
@@ -641,9 +640,8 @@ function CategoriesSettings() {
     invalidateAll()
   }
 
-  const visibleCategories = showInactive ? categories : categories.filter(c => c.is_active)
-  const maintenance = visibleCategories.filter(c => c.budget_type === 'Maintenance')
-  const corpus      = visibleCategories.filter(c => c.budget_type === 'Corpus')
+  const maintenance = categories.filter(c => c.budget_type === 'Maintenance')
+  const corpus      = categories.filter(c => c.budget_type === 'Corpus')
 
   async function toggleUtility(cat: ExpenseCategory) {
     const { error } = await supabase
@@ -664,16 +662,6 @@ function CategoriesSettings() {
           Categories marked as utility appear in the Utility report tab with per-block tracking.
         </p>
         <div className="flex items-center gap-2 shrink-0">
-          <button
-            onClick={() => setShowInactive(v => !v)}
-            className="flex items-center gap-1.5 text-[12px] px-3 py-1.5 rounded-lg font-medium transition-colors"
-            style={showInactive
-              ? { background: 'var(--ink-200)', color: 'var(--ink-700)' }
-              : { background: 'var(--ink-100)', color: 'var(--ink-500)' }
-            }
-          >
-            Show inactive
-          </button>
           {isAdmin && (
             <Button size="sm" onClick={() => setAddOpen(true)} className="flex items-center gap-1.5">
               <Plus size={14} /> Add Category
@@ -696,15 +684,17 @@ function CategoriesSettings() {
                 <div key={cat.id} className="flex items-center gap-3 px-5 py-3">
                   <span className="text-[11.5px] w-5 shrink-0 text-right tnum" style={{ color: 'var(--ink-400)' }}>{cat.sort_order}</span>
                   <span className="flex-1 text-[13.5px] font-medium" style={!cat.is_active ? { color: 'var(--ink-400)' } : undefined}>{cat.name}</span>
-                  <span
-                    className="text-[11px] px-2 py-0.5 rounded-full font-semibold shrink-0"
-                    style={cat.is_active
-                      ? { background: 'var(--good-bg)', color: 'var(--good)' }
-                      : { background: 'var(--ink-100)', color: 'var(--ink-400)' }
-                    }
-                  >
-                    {cat.is_active ? 'Active' : 'Inactive'}
-                  </span>
+                  {!isAdmin && (
+                    <span
+                      className="text-[11px] px-2 py-0.5 rounded-full font-semibold shrink-0"
+                      style={cat.is_active
+                        ? { background: 'var(--good-bg)', color: 'var(--good)' }
+                        : { background: 'var(--ink-100)', color: 'var(--ink-400)' }
+                      }
+                    >
+                      {cat.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                  )}
                   {cat.is_utility && cat.unit_label && (
                     <span className="ds-badge ds-badge-warn shrink-0">{cat.unit_label}</span>
                   )}
@@ -733,20 +723,17 @@ function CategoriesSettings() {
                     </span>
                   )}
                   {isAdmin && (
-                    <button onClick={() => setEditTarget(cat)} className="p-1 rounded-lg transition-colors hover:bg-[var(--ink-100)] shrink-0" style={{ color: 'var(--ink-400)' }}>
-                      <Pencil size={13} />
+                    <button
+                      onClick={() => toggleActive(cat)}
+                      className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${cat.is_active ? 'bg-emerald-500' : 'bg-slate-200'}`}
+                      title={cat.is_active ? 'Active — click to deactivate' : 'Inactive — click to activate'}
+                    >
+                      <span className={`absolute left-0 top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${cat.is_active ? 'translate-x-4' : 'translate-x-0.5'}`} />
                     </button>
                   )}
                   {isAdmin && (
-                    <button
-                      onClick={() => toggleActive(cat)}
-                      className="text-[11.5px] px-2 py-0.5 rounded-lg font-medium transition-colors shrink-0"
-                      style={cat.is_active
-                        ? { background: 'var(--ink-100)', color: 'var(--ink-500)' }
-                        : { background: 'var(--good-bg)', color: 'var(--good)' }
-                      }
-                    >
-                      {cat.is_active ? 'Deactivate' : 'Activate'}
+                    <button onClick={() => setEditTarget(cat)} className="p-1 rounded-lg transition-colors hover:bg-[var(--ink-100)] shrink-0" style={{ color: 'var(--ink-400)' }}>
+                      <Pencil size={13} />
                     </button>
                   )}
                   {isAdmin && (
@@ -878,7 +865,7 @@ function AddEditCategoryDialog({ open, initial, onClose, onSuccess }: {
                 onClick={() => setIsUtility(u => !u)}
                 className={`relative w-10 h-5 rounded-full transition-colors ${isUtility ? 'bg-amber-500' : 'bg-slate-200'}`}
               >
-                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${isUtility ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                <span className={`absolute left-0 top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${isUtility ? 'translate-x-5' : 'translate-x-0.5'}`} />
               </button>
             </div>
 
