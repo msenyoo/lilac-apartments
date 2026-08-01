@@ -84,6 +84,9 @@ interface PendingItem {
   amount: number
   payment_mode: 'Cash' | 'Online' | 'Bank Transfer' | 'Cheque'
   reference_no: string | null
+  utility_units: number | null
+  utility_rate: number | null
+  unit_label: string | null
   payee_type: string
   staff_id: string | null
   vendor_id: string | null
@@ -3502,6 +3505,9 @@ const pendingItemSchema = z.object({
   amount:         z.coerce.number().int().positive('Must be > 0'),
   payment_mode:   z.enum(['Cash','Online','Bank Transfer','Cheque']),
   reference_no:   z.string().optional(),
+  utility_units:  z.coerce.number().optional(),
+  utility_rate:   z.coerce.number().optional(),
+  unit_label:     z.string().optional(),
   payee_type:     z.enum(['Staff','Vendor','Utility','Municipal','Other']),
   staff_id:       z.string().optional(),
   vendor_id:      z.string().optional(),
