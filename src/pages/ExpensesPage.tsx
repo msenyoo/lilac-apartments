@@ -3639,7 +3639,7 @@ function PendingItemDialog({ item, onClose }: { item?: PendingItem; onClose: () 
   })
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { register, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm<PendingItemForm>({
+  const { register, handleSubmit, watch, setValue, formState: { errors, isSubmitting } } = useForm<PendingItemForm>({
     resolver: zodResolver(pendingItemSchema) as any,
     defaultValues: item ? {
       paid_date:      item.paid_date,
@@ -3647,6 +3647,9 @@ function PendingItemDialog({ item, onClose }: { item?: PendingItem; onClose: () 
       amount:         item.amount,
       payment_mode:   item.payment_mode,
       reference_no:   item.reference_no ?? '',
+      utility_units:  item.utility_units ?? undefined,
+      utility_rate:   item.utility_rate ?? undefined,
+      unit_label:     item.unit_label ?? '',
       payee_type:     item.payee_type as PendingItemForm['payee_type'],
       staff_id:       item.staff_id ?? '',
       vendor_id:      item.vendor_id ?? '',
@@ -3662,6 +3665,10 @@ function PendingItemDialog({ item, onClose }: { item?: PendingItem; onClose: () 
       cost_center:  'Common',
     },
   })
+
+  function autoCalcAmount(units: number, rate: number) {
+    if (units > 0 && rate > 0) setValue('amount', Math.round(units * rate))
+  }
 
   const payeeType = watch('payee_type')
 
@@ -3718,6 +3725,9 @@ function PendingItemDialog({ item, onClose }: { item?: PendingItem; onClose: () 
       amount:          form.amount,
       payment_mode:    form.payment_mode,
       reference_no:    form.reference_no || null,
+      utility_units:   form.utility_units || null,
+      utility_rate:    form.utility_rate || null,
+      unit_label:      form.unit_label || null,
       payee_type:      form.payee_type,
       staff_id:        form.payee_type === 'Staff'  && form.staff_id  ? form.staff_id  : null,
       vendor_id:       form.payee_type === 'Vendor' && form.vendor_id ? form.vendor_id : null,
@@ -3791,6 +3801,39 @@ function PendingItemDialog({ item, onClose }: { item?: PendingItem; onClose: () 
               </select>
             </div>
           </div>
+
+          {(() => {
+            const unitsReg = register('utility_units')
+            const rateReg = register('utility_rate')
+            return (
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <Label className="text-xs">Quantity</Label>
+                  <Input type="number" step="0.01" placeholder="0"
+                    {...unitsReg}
+                    onChange={e => {
+                      unitsReg.onChange(e)
+                      autoCalcAmount(Number(e.target.value), Number(watch('utility_rate')) || 0)
+                    }}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Unit</Label>
+                  <Input placeholder="liters, trips, pcs…" {...register('unit_label')} />
+                </div>
+                <div>
+                  <Label className="text-xs">Rate per unit (₹)</Label>
+                  <Input type="number" step="0.01" placeholder="₹/unit"
+                    {...rateReg}
+                    onChange={e => {
+                      rateReg.onChange(e)
+                      autoCalcAmount(Number(watch('utility_units')) || 0, Number(e.target.value))
+                    }}
+                  />
+                </div>
+              </div>
+            )
+          })()}
 
           <div className="grid grid-cols-2 gap-3">
             <div>
