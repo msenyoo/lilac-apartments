@@ -1672,14 +1672,29 @@ function UtilityReport({ catId, catName, unitLabel: unitLabelProp, fyYear }: {
   const { data: items, isLoading } = useQuery({
     queryKey: ['utility-report', catId, fyYear],
     queryFn: async () => {
+      // Bucket by payment date (expense_date), not billing period (period_from) — matches
+      // the cash-basis logic used by every other report (Cashbook, Expenditure). A bill
+      // whose period straddles the FY boundary still shows up in the FY it was actually paid.
+      const { data: headers } = await supabase
+        .from('expenses')
+        .select('id, expense_date')
+        .gte('expense_date', fy.start)
+        .lte('expense_date', fy.end)
+        .is('voided_at', null)
+
+      const headerIds = (headers ?? []).map(h => h.id)
+      if (headerIds.length === 0) return []
+      const expenseDateById = new Map((headers ?? []).map(h => [h.id, h.expense_date]))
+
       const { data } = await supabase
         .from('expense_line_items')
-        .select('id, cost_center, utility_units, utility_rate, amount, period_from, description')
+        .select('id, expense_id, cost_center, utility_units, utility_rate, amount, period_from, description')
         .eq('category_id', catId)
-        .gte('period_from', fy.start)
-        .lte('period_from', fy.end)
-        .order('period_from')
-      return data ?? []
+        .in('expense_id', headerIds)
+
+      return (data ?? [])
+        .map(item => ({ ...item, expense_date: expenseDateById.get(item.expense_id) ?? null }))
+        .sort((a, b) => (a.expense_date ?? '').localeCompare(b.expense_date ?? ''))
     },
   })
 
@@ -1694,8 +1709,8 @@ function UtilityReport({ catId, catName, unitLabel: unitLabelProp, fyYear }: {
   const chartData = useMemo(() => {
     const map = new Map<string, Record<string, number>>()
     for (const item of items ?? []) {
-      if (!item.period_from) continue
-      const d    = new Date((item as any).period_from)
+      if (!item.expense_date) continue
+      const d    = new Date((item as any).expense_date)
       const mon  = `${MONTHS_SHORT[d.getMonth()]}-${String(d.getFullYear()).slice(-2)}`
       if (!map.has(mon)) map.set(mon, {})
       const row  = map.get(mon)!
