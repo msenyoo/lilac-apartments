@@ -63,6 +63,12 @@ export function BulkAddPendingDialog({ onClose }: { onClose: () => void }) {
   function removeRow(key: string) {
     setRows(prev => (prev.length === 1 ? [emptyRow()] : prev.filter(r => r.key !== key)))
   }
+  function updateQuantity(r: BulkDraftRow, patch: { utility_units?: string; utility_rate?: string }) {
+    const units = Number(patch.utility_units ?? r.utility_units) || 0
+    const rate  = Number(patch.utility_rate ?? r.utility_rate) || 0
+    const amount = units > 0 && rate > 0 ? { amount: String(Math.round(units * rate)) } : {}
+    update(r.key, { ...patch, ...amount })
+  }
   function handlePaste(text: string) {
     const parsed = parseClipboard(text, categories)
     if (parsed.length === 0) {
@@ -84,6 +90,9 @@ export function BulkAddPendingDialog({ onClose }: { onClose: () => void }) {
         amount: Number(r.amount),
         payment_mode: r.payment_mode,
         reference_no: r.reference_no || null,
+        utility_units: r.utility_units ? Number(r.utility_units) : null,
+        utility_rate: r.utility_rate ? Number(r.utility_rate) : null,
+        unit_label: r.unit_label || null,
         payee_type: r.payee_type,
         staff_id: r.payee_type === 'Staff' && r.staff_id ? r.staff_id : null,
         vendor_id: r.payee_type === 'Vendor' && r.vendor_id ? r.vendor_id : null,
@@ -160,12 +169,15 @@ export function BulkAddPendingDialog({ onClose }: { onClose: () => void }) {
         <div className="flex-1 overflow-y-auto -mx-1 px-1">
           {/* Desktop grid */}
           <div className="hidden lg:block overflow-x-auto">
-            <table className="w-full border-separate" style={{ borderSpacing: '0 4px', minWidth: 1320 }}>
+            <table className="w-full border-separate" style={{ borderSpacing: '0 4px', minWidth: 1560 }}>
               <thead>
                 <tr className="text-left text-xs uppercase" style={{ color: 'var(--ink-400)' }}>
                   <th className="w-[130px] px-1 font-medium">Date</th>
                   <th className="min-w-[210px] px-1 font-medium">Description</th>
                   <th className="w-[90px] px-1 font-medium">Amount</th>
+                  <th className="w-[70px] px-1 font-medium">Qty</th>
+                  <th className="w-[80px] px-1 font-medium">Unit</th>
+                  <th className="w-[80px] px-1 font-medium">Rate</th>
                   <th className="w-[150px] px-1 font-medium">Category</th>
                   <th className="w-[110px] px-1 font-medium">Cost centre</th>
                   <th className="w-[110px] px-1 font-medium">Mode</th>
@@ -184,6 +196,9 @@ export function BulkAddPendingDialog({ onClose }: { onClose: () => void }) {
                       <td className="px-1"><input type="date" className={`${inputCls} ${errs.paid_date ? errCls : ''}`} value={r.paid_date} onChange={e => update(r.key, { paid_date: e.target.value })} /></td>
                       <td className="px-1"><input className={`${inputCls} ${errs.description ? errCls : ''}`} value={r.description} onChange={e => update(r.key, { description: e.target.value })} /></td>
                       <td className="px-1"><input type="number" min="1" className={`${inputCls} ${errs.amount ? errCls : ''}`} value={r.amount} onChange={e => update(r.key, { amount: e.target.value })} /></td>
+                      <td className="px-1"><input type="number" step="0.01" min="0" className={inputCls} value={r.utility_units} onChange={e => updateQuantity(r, { utility_units: e.target.value })} /></td>
+                      <td className="px-1"><input className={inputCls} placeholder="unit" value={r.unit_label} onChange={e => update(r.key, { unit_label: e.target.value })} /></td>
+                      <td className="px-1"><input type="number" step="0.01" min="0" className={inputCls} value={r.utility_rate} onChange={e => updateQuantity(r, { utility_rate: e.target.value })} /></td>
                       <td className="px-1">
                         <select className={`${inputCls} ${errs.category_id ? errCls : ''}`} value={r.category_id} onChange={e => update(r.key, { category_id: e.target.value })}>
                           <option value="">Select…</option>
@@ -246,6 +261,20 @@ export function BulkAddPendingDialog({ onClose }: { onClose: () => void }) {
                   <div>
                     <p className="text-[11px] mb-0.5" style={{ color: 'var(--ink-500)' }}>Description</p>
                     <input className={`${inputCls} ${errs.description ? errCls : ''}`} value={r.description} onChange={e => update(r.key, { description: e.target.value })} />
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <p className="text-[11px] mb-0.5" style={{ color: 'var(--ink-500)' }}>Qty</p>
+                      <input type="number" step="0.01" min="0" className={inputCls} value={r.utility_units} onChange={e => updateQuantity(r, { utility_units: e.target.value })} />
+                    </div>
+                    <div>
+                      <p className="text-[11px] mb-0.5" style={{ color: 'var(--ink-500)' }}>Unit</p>
+                      <input className={inputCls} placeholder="unit" value={r.unit_label} onChange={e => update(r.key, { unit_label: e.target.value })} />
+                    </div>
+                    <div>
+                      <p className="text-[11px] mb-0.5" style={{ color: 'var(--ink-500)' }}>Rate (₹)</p>
+                      <input type="number" step="0.01" min="0" className={inputCls} value={r.utility_rate} onChange={e => updateQuantity(r, { utility_rate: e.target.value })} />
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
