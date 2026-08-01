@@ -11,6 +11,7 @@ import { WhatsAppSendButtons } from '@/components/WhatsAppSendButtons'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { formatDateDMY } from '@/lib/date'
+import { applyReportableFilter } from '@/lib/expenseFilters'
 
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
@@ -567,10 +568,9 @@ function AGMReportsTab() {
     queryKey: ['agm-expenses', selectedFyYear],
     queryFn: async () => {
       const [{ data: exps }, { data: cats }] = await Promise.all([
-        supabase.from('expenses').select('amount, category_id')
+        applyReportableFilter(supabase.from('expenses').select('amount, category_id'))
           .gte('expense_date', selectedFy.start)
-          .lte('expense_date', selectedFy.end)
-          .is('voided_at', null),
+          .lte('expense_date', selectedFy.end),
         supabase.from('expense_categories').select('id, name'),
       ])
       const catMap = new Map((cats ?? []).map((c: any) => [c.id, c.name as string]))
@@ -1174,10 +1174,9 @@ function ExpenditureReportsTab() {
     queryKey: ['exp-by-category', selectedFyYear, fund],
     queryFn: async () => {
       const { data: headers } = await applyFund(
-        supabase.from('expenses').select('id, amount, category_id')
+        applyReportableFilter(supabase.from('expenses').select('id, amount, category_id'))
           .gte('expense_date', selectedFy.start)
           .lte('expense_date', selectedFy.end)
-          .is('voided_at', null)
       )
       const headerIds = (headers ?? []).map((h: any) => h.id)
       const [{ data: lineItems }, { data: cats }] = await Promise.all([
@@ -1218,10 +1217,9 @@ function ExpenditureReportsTab() {
     queryFn: async () => {
       const [{ data: exps }, { data: vendors }] = await Promise.all([
         applyFund(
-          supabase.from('expenses').select('amount, vendor_id, payee_name_raw, payment_mode')
+          applyReportableFilter(supabase.from('expenses').select('amount, vendor_id, payee_name_raw, payment_mode'))
             .gte('expense_date', selectedFy.start)
             .lte('expense_date', selectedFy.end)
-            .is('voided_at', null)
         ),
         supabase.from('vendors').select('id, name'),
       ])
@@ -1244,9 +1242,11 @@ function ExpenditureReportsTab() {
     queryKey: ['exp-monthly-trend', selectedFyYear, fund],
     queryFn: async () => {
       const { data: exps } = await applyFund(
-        supabase
-          .from('expenses')
-          .select('expense_date, amount')
+        applyReportableFilter(
+          supabase
+            .from('expenses')
+            .select('expense_date, amount')
+        )
           .gte('expense_date', selectedFy.start)
           .lte('expense_date', selectedFy.end)
       )
@@ -1272,10 +1272,18 @@ function ExpenditureReportsTab() {
   const { data: tdsRows, isLoading: loadingTds } = useQuery({
     queryKey: ['tds-register', selectedFyYear],
     queryFn: async () => {
+      const { data: reportableHeaders } = await applyReportableFilter(
+        supabase.from('expenses').select('id')
+      )
+        .gte('expense_date', selectedFy.start)
+        .lte('expense_date', selectedFy.end)
+      const reportableIds = (reportableHeaders ?? []).map(h => h.id)
+      if (reportableIds.length === 0) return []
       const [{ data: lineItems }, { data: vendors }] = await Promise.all([
         supabase
           .from('expense_line_items')
           .select('amount, vendor_id, payee_name_raw, category_id')
+          .in('expense_id', reportableIds)
           .gte('created_at', selectedFy.start + 'T00:00:00')
           .lte('created_at', selectedFy.end + 'T23:59:59'),
         supabase.from('vendors').select('id, name, pan_number'),
@@ -1663,16 +1671,15 @@ function CategoryDrillDownDialog({ category, fy, fund, onClose }: {
     queryFn: async () => {
       // Match the exp-by-category grouping: a header with line items is broken down by
       // each line's own category (falling back to the header's), not the header's category.
-      let q = supabase
+      let q = applyReportableFilter(supabase
         .from('expenses')
         .select(`
           id, expense_date, amount, description, payee_type, payee_name_raw, voucher_no, category_id, corpus_plan_id,
           vendor:vendor_id(name),
           staff_member:staff_id(name)
-        `)
+        `))
         .gte('expense_date', fy.start)
         .lte('expense_date', fy.end)
-        .is('voided_at', null)
       if (fund === 'corpus') q = q.not('corpus_plan_id', 'is', null)
       if (fund === 'maintenance') q = q.is('corpus_plan_id', null)
       const { data: headers } = await q.order('expense_date', { ascending: false })
@@ -1885,12 +1892,11 @@ function UtilityReport({ catId, catName, unitLabel: unitLabelProp, fyYear }: {
       // Bucket by payment date (expense_date), not billing period (period_from) — matches
       // the cash-basis logic used by every other report (Cashbook, Expenditure). A bill
       // whose period straddles the FY boundary still shows up in the FY it was actually paid.
-      const { data: headers } = await supabase
+      const { data: headers } = await applyReportableFilter(supabase
         .from('expenses')
-        .select('id, expense_date')
+        .select('id, expense_date'))
         .gte('expense_date', fy.start)
         .lte('expense_date', fy.end)
-        .is('voided_at', null)
 
       const headerIds = (headers ?? []).map(h => h.id)
       if (headerIds.length === 0) return []
@@ -2130,17 +2136,16 @@ function CashbookTab() {
   const { data: drSplitup } = useQuery({
     queryKey: ['cashbook-dr', start, end],
     queryFn: async () => {
-      const { data: headers } = await supabase
+      const { data: headers } = await applyReportableFilter(supabase
         .from('expenses')
         .select(`
           id, amount, description, expense_date, payee_type, payee_name_raw,
           category:category_id(name),
           vendor:vendor_id(name),
           staff_member:staff_id(name)
-        `)
+        `))
         .gte('expense_date', start)
         .lte('expense_date', end)
-        .is('voided_at', null)
 
       const headerRows = (headers ?? []) as any[]
       const headerIds = headerRows.map(h => h.id)
@@ -2520,11 +2525,10 @@ function RPStatementTab() {
     queryKey: ['rp-payments', selectedFyYear],
     queryFn: async () => {
       const [{ data: exps }, { data: cats }] = await Promise.all([
-        supabase.from('expenses')
-          .select('amount, category_id')
+        applyReportableFilter(supabase.from('expenses')
+          .select('amount, category_id'))
           .gte('expense_date', selectedFy.start)
-          .lte('expense_date', selectedFy.end)
-          .is('voided_at', null),
+          .lte('expense_date', selectedFy.end),
         supabase.from('expense_categories').select('id, name'),
       ])
       const catMap = new Map((cats ?? []).map((c: any) => [c.id, c.name as string]))
