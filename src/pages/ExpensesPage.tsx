@@ -167,6 +167,24 @@ const STATUS_INLINE: Record<string, React.CSSProperties> = {
   Cash: { background: 'var(--ink-100)', color: 'var(--ink-600)' },
 }
 
+const CATEGORY_BADGE_COLORS = [
+  'bg-rose-100 text-rose-700',
+  'bg-amber-100 text-amber-700',
+  'bg-lime-100 text-lime-700',
+  'bg-emerald-100 text-emerald-700',
+  'bg-cyan-100 text-cyan-700',
+  'bg-blue-100 text-blue-700',
+  'bg-violet-100 text-violet-700',
+  'bg-fuchsia-100 text-fuchsia-700',
+]
+
+function categoryBadgeClass(name: string | null | undefined): string {
+  const key = name ?? 'Uncategorised'
+  let hash = 0
+  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0
+  return CATEGORY_BADGE_COLORS[hash % CATEGORY_BADGE_COLORS.length]
+}
+
 // ── Page ──────────────────────────────────────────────────────
 
 export default function ExpensesPage() {
@@ -548,9 +566,12 @@ function DayBook() {
 
                   <div className="flex-1 min-w-0">
                     <p className={`text-sm font-medium line-clamp-2 leading-snug ${isVoided ? 'line-through text-muted-foreground' : ''}`} style={isVoided ? undefined : { color: 'var(--ink-800)' }}>{e.description}</p>
-                    <p className="text-xs mt-0.5" style={{ color: 'var(--ink-500)' }}>
-                      {payeeName} · {e.category?.name ?? e.payment_mode}
-                      {e.voucher_no && <span className="ml-1.5" style={{ color: 'var(--ink-400)' }}>{e.voucher_no}</span>}
+                    <p className="text-xs mt-0.5 flex items-center gap-1 flex-wrap" style={{ color: 'var(--ink-500)' }}>
+                      {payeeName}
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${categoryBadgeClass(e.category?.name ?? e.payment_mode)}`}>
+                        {e.category?.name ?? e.payment_mode}
+                      </span>
+                      {e.voucher_no && <span className="ml-1" style={{ color: 'var(--ink-400)' }}>{e.voucher_no}</span>}
                     </p>
                   </div>
 
@@ -3553,12 +3574,17 @@ function PendingItemsTab() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate" style={{ color: 'var(--ink-800)' }}>{i.description}</p>
-                <p className="text-xs truncate" style={{ color: 'var(--ink-500)' }}>
-                  {i.category?.name ?? 'Uncategorised'} · {i.cost_center} · {i.payment_mode}
-                  {i.attachment_url && <Paperclip size={11} className="inline ml-1.5 align-text-bottom" style={{ color: 'var(--ink-400)' }} />}
-                  {(i.payee_name_raw || i.staff_member?.name || i.vendor?.name) && (
-                    <> · {i.payee_name_raw || i.staff_member?.name || i.vendor?.name}</>
-                  )}
+                <p className="text-xs truncate flex items-center gap-1" style={{ color: 'var(--ink-500)' }}>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ${categoryBadgeClass(i.category?.name)}`}>
+                    {i.category?.name ?? 'Uncategorised'}
+                  </span>
+                  <span className="truncate min-w-0">
+                    {i.cost_center} · {i.payment_mode}
+                    {i.attachment_url && <Paperclip size={11} className="inline ml-1.5 align-text-bottom" style={{ color: 'var(--ink-400)' }} />}
+                    {(i.payee_name_raw || i.staff_member?.name || i.vendor?.name) && (
+                      <> · {i.payee_name_raw || i.staff_member?.name || i.vendor?.name}</>
+                    )}
+                  </span>
                 </p>
               </div>
               <span className="text-sm font-semibold shrink-0" style={{ color: 'var(--ink-800)' }}>
