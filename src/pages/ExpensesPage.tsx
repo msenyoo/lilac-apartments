@@ -232,6 +232,9 @@ function DayBook() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [sharing, setSharing] = useState(false)
   const [search, setSearch] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('')
 
   const { data: expenses = [], isLoading } = useQuery({
     queryKey: ['expenses', showVoided, showPending],
@@ -260,6 +263,14 @@ function DayBook() {
     },
   })
 
+  const { data: dayBookCategories = [] } = useQuery({
+    queryKey: ['expense-categories'],
+    queryFn: async () => {
+      const { data } = await supabase.from('expense_categories').select('id, name').order('sort_order')
+      return (data ?? []) as { id: string; name: string }[]
+    },
+  })
+
   const selectedExpense = expenses.find(e => e.id === detailId) ?? null
 
   useEffect(() => {
@@ -268,15 +279,24 @@ function DayBook() {
 
   const filteredExpenses = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return expenses
     return expenses.filter(e => {
-      const haystack = [
-        e.description, e.payee_name_raw, e.vendor?.name, e.staff_member?.name,
-        e.voucher_no, e.category?.name, e.reference_no, e.cheque_number,
-      ].filter(Boolean).join(' ').toLowerCase()
-      return haystack.includes(q)
+      if (q) {
+        const haystack = [
+          e.description, e.payee_name_raw, e.vendor?.name, e.staff_member?.name,
+          e.voucher_no, e.category?.name, e.reference_no, e.cheque_number,
+        ].filter(Boolean).join(' ').toLowerCase()
+        if (!haystack.includes(q)) return false
+      }
+      if (dateFrom && e.expense_date < dateFrom) return false
+      if (dateTo && e.expense_date > dateTo) return false
+      if (categoryFilter) {
+        const matchesHeader = e.category?.id === categoryFilter
+        const matchesLine = e.line_items.some(li => (li.category?.id ?? e.category?.id) === categoryFilter)
+        if (!matchesHeader && !matchesLine) return false
+      }
+      return true
     })
-  }, [expenses, search])
+  }, [expenses, search, dateFrom, dateTo, categoryFilter])
 
   function handleExport() {
     const ws = XLSX.utils.json_to_sheet(filteredExpenses.map(e => ({
@@ -428,6 +448,35 @@ function DayBook() {
         </div>
       </div>
 
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-1.5">
+          <Label className="text-xs" style={{ color: 'var(--ink-500)' }}>From</Label>
+          <Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className="text-[13px] h-8 w-[150px]" />
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Label className="text-xs" style={{ color: 'var(--ink-500)' }}>To</Label>
+          <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="text-[13px] h-8 w-[150px]" />
+        </div>
+        <select
+          value={categoryFilter}
+          onChange={e => setCategoryFilter(e.target.value)}
+          className="h-8 px-2 border rounded text-[13px]"
+          style={{ borderColor: 'var(--ink-200, #e2e8f0)' }}
+        >
+          <option value="">All categories</option>
+          {dayBookCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        {(dateFrom || dateTo || categoryFilter) && (
+          <button
+            onClick={() => { setDateFrom(''); setDateTo(''); setCategoryFilter('') }}
+            className="text-xs hover:opacity-70"
+            style={{ color: 'var(--brand-700)' }}
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
+
       {expenses.length === 0 ? (
         <div className="surface !p-12 flex flex-col items-center justify-center text-center gap-4">
           <div className="w-14 h-14 rounded-full flex items-center justify-center" style={{ background: 'var(--brand-100)' }}>
@@ -444,8 +493,10 @@ function DayBook() {
             <Search size={26} style={{ color: 'var(--ink-400)' }} />
           </div>
           <div>
-            <p className="text-base font-medium" style={{ color: 'var(--ink-800)' }}>No matches for "{search}"</p>
-            <p className="text-sm mt-1" style={{ color: 'var(--ink-500)' }}>Try a different description, payee, or voucher number.</p>
+            <p className="text-base font-medium" style={{ color: 'var(--ink-800)' }}>
+              {search ? `No matches for "${search}"` : 'No expenses match the current filters'}
+            </p>
+            <p className="text-sm mt-1" style={{ color: 'var(--ink-500)' }}>Try a different description, payee, voucher number, date range, or category.</p>
           </div>
         </div>
       ) : (
