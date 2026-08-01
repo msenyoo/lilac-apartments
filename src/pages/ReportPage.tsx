@@ -1681,7 +1681,7 @@ function CategoryDrillDownDialog({ category, fy, fund, onClose }: {
       const { data: lineItems } = headerIds.length
         ? await supabase
             .from('expense_line_items')
-            .select('id, expense_id, amount, description, category_id, payee_type, payee_name_raw, vendor:vendor_id(name), staff_member:staff_id(name)')
+            .select('id, expense_id, amount, description, category_id, payee_type, payee_name_raw, utility_units, utility_rate, unit_label, vendor:vendor_id(name), staff_member:staff_id(name)')
             .in('expense_id', headerIds)
         : { data: [] as any[] }
       const linesByHeader = new Map<string, any[]>()
@@ -1691,8 +1691,10 @@ function CategoryDrillDownDialog({ category, fy, fund, onClose }: {
       }
 
       const matches = (catId: string | null) => category.id ? catId === category.id : catId === null
+      const qtyOf = (units: number | null, unitLabel: string | null) =>
+        units != null ? `${Number(units).toLocaleString('en-IN')} ${unitLabel || 'units'}` : ''
 
-      const out: { id: string; date: string; payee: string; description: string; amount: number }[] = []
+      const out: { id: string; date: string; payee: string; description: string; qty: string; amount: number }[] = []
       for (const h of headers ?? []) {
         const lines = linesByHeader.get((h as any).id) ?? []
         if (lines.length === 0) {
@@ -1702,6 +1704,7 @@ function CategoryDrillDownDialog({ category, fy, fund, onClose }: {
               date: (h as any).expense_date,
               payee: resolvePayeeCandidate(h as any) ?? 'Cash / Misc',
               description: (h as any).description ?? '',
+              qty: '',
               amount: (h as any).amount ?? 0,
             })
           }
@@ -1713,6 +1716,7 @@ function CategoryDrillDownDialog({ category, fy, fund, onClose }: {
                 date: (h as any).expense_date,
                 payee: resolvePayeeCandidate(li) ?? resolvePayeeCandidate(h as any) ?? 'Cash / Misc',
                 description: li.description ?? '',
+                qty: qtyOf(li.utility_units, li.unit_label),
                 amount: li.amount ?? 0,
               })
             }
@@ -1730,9 +1734,9 @@ function CategoryDrillDownDialog({ category, fy, fund, onClose }: {
     const wb = XLSX.utils.book_new()
     const sheetRows: any[][] = [
       [`${category.name} — ${fy.label}`], [],
-      ['Date', 'Payee', 'Description', 'Amount'],
-      ...rows.map(r => [formatDateDMY(r.date), r.payee, r.description, r.amount]),
-      [], ['TOTAL', '', '', total],
+      ['Date', 'Payee', 'Description', 'Qty', 'Amount'],
+      ...rows.map(r => [formatDateDMY(r.date), r.payee, r.description, r.qty, r.amount]),
+      [], ['TOTAL', '', '', '', total],
     ]
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sheetRows), category.name.slice(0, 31))
     XLSX.writeFile(wb, `${category.name.replace(/[^a-zA-Z0-9]/g, '_')}_${fy.label.replace(/\s/g, '_')}.xlsx`)
@@ -1773,7 +1777,10 @@ function CategoryDrillDownDialog({ category, fy, fund, onClose }: {
                   <tr key={r.id} className={i % 2 === 1 ? 'bg-slate-50/50' : ''}>
                     <td className="px-4 py-2.5" style={{ color: 'var(--ink-600)' }}>{formatDateDMY(r.date)}</td>
                     <td className="px-4 py-2.5 font-medium">{r.payee}</td>
-                    <td className="px-4 py-2.5 text-xs max-w-[220px] truncate" style={{ color: 'var(--ink-500)' }}>{r.description}</td>
+                    <td className="px-4 py-2.5 text-xs max-w-[220px] truncate" style={{ color: 'var(--ink-500)' }}>
+                      {r.description}
+                      {r.qty && <span className="ml-1.5" style={{ color: 'var(--ink-400)' }}>· {r.qty}</span>}
+                    </td>
                     <td className="px-4 py-2.5 text-right font-semibold">{formatINR(r.amount)}</td>
                   </tr>
                 ))}
@@ -2059,7 +2066,7 @@ function UtilityReport({ catId, catName, unitLabel: unitLabelProp, fyYear }: {
 // ── CASHBOOK TAB ──────────────────────────────────────────────
 
 interface CrCategoryRow { category: string; amount: number }
-interface DrItemRow { date: string | null; label: string; amount: number }
+interface DrItemRow { date: string | null; label: string; qty: string; amount: number }
 interface DrCategoryGroup { category: string; total: number; items: DrItemRow[] }
 
 interface PayeeCandidate {
@@ -2143,6 +2150,7 @@ function CashbookTab() {
             .from('expense_line_items')
             .select(`
               expense_id, amount, description, paid_date, payee_type, payee_name_raw,
+              utility_units, utility_rate, unit_label,
               category:category_id(name),
               vendor:vendor_id(name),
               staff_member:staff_id(name)
@@ -2162,6 +2170,10 @@ function CashbookTab() {
         if (!grouped.has(category)) grouped.set(category, [])
         grouped.get(category)!.push(item)
       }
+      const qtyOf = (units: number | null, unitLabel: string | null, rate: number | null) =>
+        units != null && rate != null
+          ? `${Number(units).toLocaleString('en-IN')} ${unitLabel || 'units'} × ${formatINR(rate)}`
+          : ''
 
       for (const header of headerRows) {
         const lines = linesByHeader.get(header.id) ?? []
@@ -2171,8 +2183,8 @@ function CashbookTab() {
           const cat = header.category?.name ?? 'Uncategorised'
           const payee = resolvePayeeCandidate(header)
           addItem(cat, payee
-            ? { date: header.expense_date, label: payee, amount: header.amount ?? 0 }
-            : { date: header.expense_date, label: header.description, amount: header.amount ?? 0 })
+            ? { date: header.expense_date, label: payee, qty: '', amount: header.amount ?? 0 }
+            : { date: header.expense_date, label: header.description, qty: '', amount: header.amount ?? 0 })
           continue
         }
 
@@ -2190,6 +2202,7 @@ function CashbookTab() {
           addItem(cat, {
             date: line.paid_date ?? header.expense_date,
             label: isPassThrough ? line.description : (linePayees[i] ?? 'Cash / Misc'),
+            qty: qtyOf(line.utility_units, line.unit_label, line.utility_rate),
             amount: line.amount ?? 0,
           })
         })
@@ -2246,7 +2259,11 @@ function CashbookTab() {
       ...(drSplitup ?? []).flatMap(group => [
         [`  ${group.category}`, group.total],
         ...group.items.map(item => [
-          item.date ? `    ${formatShortDate(item.date)}  ${item.label}` : `    ${item.label}`,
+          [
+            '   ',
+            item.date ? `${formatShortDate(item.date)}  ${item.label}` : item.label,
+            item.qty ? `(${item.qty})` : '',
+          ].filter(Boolean).join(' '),
           item.amount,
         ]),
       ]),
@@ -2373,12 +2390,15 @@ function CashbookTab() {
                   <span>{formatINR(group.total)}</span>
                 </div>
                 {group.items.map((item, i) => (
-                  <div key={`${item.label}_${item.date ?? ''}_${i}`} className="flex justify-between items-center pl-8 pr-5 py-1.5 text-[13px]">
-                    <span style={{ color: 'var(--ink-500)' }}>
-                      {item.date && <span className="mr-2" style={{ color: 'var(--ink-400)' }}>{formatShortDate(item.date)}</span>}
-                      {item.label}
-                    </span>
-                    <span style={{ color: 'var(--ink-600)' }}>{formatINR(item.amount)}</span>
+                  <div key={`${item.label}_${item.date ?? ''}_${i}`} className="flex flex-col gap-0.5 pl-8 pr-5 py-1.5 text-[13px]">
+                    <div className="flex justify-between items-center">
+                      <span style={{ color: 'var(--ink-500)' }}>
+                        {item.date && <span className="mr-2" style={{ color: 'var(--ink-400)' }}>{formatShortDate(item.date)}</span>}
+                        {item.label}
+                      </span>
+                      <span style={{ color: 'var(--ink-600)' }}>{formatINR(item.amount)}</span>
+                    </div>
+                    {item.qty && <span className="text-[11.5px]" style={{ color: 'var(--ink-400)' }}>{item.qty}</span>}
                   </div>
                 ))}
               </div>

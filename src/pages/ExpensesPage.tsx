@@ -32,7 +32,7 @@ import { toast } from 'sonner'
 
 // ── Types ─────────────────────────────────────────────────────
 
-interface ExpenseCategory { id: string; name: string; budget_type: string; is_utility: boolean }
+interface ExpenseCategory { id: string; name: string; budget_type: string; is_utility: boolean; unit_label: string | null }
 interface Vendor  { id: string; name: string; type: string | null; phone: string | null; pan_number: string | null; notes: string | null; is_active: boolean }
 interface RecurringTemplate {
   id: string; name: string; description: string | null
@@ -68,7 +68,7 @@ interface Expense {
 interface ExpenseLineItem {
   id: string; payee_type: string; payee_name_raw: string | null
   description: string; cost_center: string; amount: number
-  utility_units: number | null; utility_rate: number | null
+  utility_units: number | null; utility_rate: number | null; unit_label: string | null
   period_from: string | null; period_to: string | null
   payment_mode: string | null
   reference_no: string | null
@@ -113,6 +113,7 @@ const lineItemSchema = z.object({
   amount:         z.coerce.number().int().positive('Must be > 0'),
   utility_units:  z.coerce.number().optional(),
   utility_rate:   z.coerce.number().optional(),
+  unit_label:     z.string().optional(),
   period_from:    z.string().optional(),
   period_to:      z.string().optional(),
   paid_date:      z.string().optional(),
@@ -785,7 +786,7 @@ function ExpenseDetailPanel({
                   {li.payment_mode && <span>· {li.payment_mode}</span>}
                   {li.reference_no && <span>· {li.reference_no}</span>}
                   {li.utility_units != null && li.utility_rate != null && (
-                    <span>· {li.utility_units} units × ₹{li.utility_rate}</span>
+                    <span>· {li.utility_units} {li.unit_label || 'units'} × ₹{li.utility_rate}</span>
                   )}
                   {li.period_from && <span>· {formatDateDMY(li.period_from)} – {formatDateDMY(li.period_to)}</span>}
                 </div>
@@ -975,6 +976,7 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
             amount:         li.amount,
             utility_units:  li.utility_units ?? undefined,
             utility_rate:   li.utility_rate ?? undefined,
+            unit_label:     li.unit_label ?? undefined,
             period_from:    li.period_from ?? '',
             period_to:      li.period_to ?? '',
             paid_date:      li.paid_date ?? '',
@@ -1100,6 +1102,7 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
         amount:         li.amount,
         utility_units:  li.utility_units  || null,
         utility_rate:   li.utility_rate   || null,
+        unit_label:     li.unit_label     || null,
         period_from:    li.period_from    || null,
         period_to:      li.period_to      || null,
         paid_date:      li.paid_date      || null,
@@ -1121,6 +1124,7 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
             amount:         li.amount,
             utility_units:  li.utility_units ?? null,
             utility_rate:   li.utility_rate ?? null,
+            unit_label:     li.unit_label ?? null,
             period_from:    li.period_from ?? null,
             period_to:      li.period_to ?? null,
             staff_id:       li.staff_id ?? null,
@@ -1179,8 +1183,12 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
   const maintenanceCats = categories.filter(c => c.budget_type === 'Maintenance')
   const corpusCats      = categories.filter(c => c.budget_type === 'Corpus')
 
-  function getCategoryIsUtility(catId: string) {
-    return categories.find(c => c.id === catId)?.is_utility ?? false
+  function getCategoryUnitLabel(catId: string) {
+    return categories.find(c => c.id === catId)?.unit_label ?? null
+  }
+
+  function autoCalcAmount(idx: number, units: number, rate: number) {
+    if (units > 0 && rate > 0) setValue(`line_items.${idx}.amount`, Math.round(units * rate))
   }
 
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -1396,8 +1404,6 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
 
             <div className="flex flex-col gap-3">
               {fields.map((field, idx) => {
-                const catId = watch(`line_items.${idx}.category_id`)
-                const isUtility = getCategoryIsUtility(catId)
                 return (
                   <div key={field.id} className="rounded-xl p-3 flex flex-col gap-3" style={{ background: 'var(--ink-50)' }}>
                     <div className="flex items-center justify-between">
@@ -1430,7 +1436,13 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
                       <div className="flex flex-col gap-1">
                         <Label className="text-xs">Category *</Label>
                         <Controller name={`line_items.${idx}.category_id`} control={control} render={({ field: f }) => (
-                          <Select value={f.value} onValueChange={f.onChange}>
+                          <Select value={f.value} onValueChange={v => {
+                            f.onChange(v)
+                            if (!watch(`line_items.${idx}.unit_label`)) {
+                              const defaultUnit = getCategoryUnitLabel(v)
+                              if (defaultUnit) setValue(`line_items.${idx}.unit_label`, defaultUnit)
+                            }
+                          }}>
                             <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Category" /></SelectTrigger>
                             <SelectContent>
                               {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
@@ -1465,19 +1477,44 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
                       </div>
                     </div>
 
-                    {/* Utility fields */}
-                    {isUtility && (
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="flex flex-col gap-1">
-                          <Label className="text-xs">Units consumed</Label>
-                          <Input type="number" step="0.01" placeholder="kWh / KL / trips" {...register(`line_items.${idx}.utility_units`)} />
+                    {/* Quantity / Unit / Rate — available on every line item, not just utility
+                        categories: 5 liters of Lizol, 3 bulbs etc. all benefit from the same
+                        quantity × rate auto-calc. Unit defaults from the category's unit_label
+                        when one exists, but stays freely editable per line since non-utility
+                        categories don't have one preset unit that fits every item. */}
+                    {(() => {
+                      const unitLabel = watch(`line_items.${idx}.unit_label`) || 'unit'
+                      const unitsReg = register(`line_items.${idx}.utility_units`)
+                      const rateReg = register(`line_items.${idx}.utility_rate`)
+                      return (
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="flex flex-col gap-1">
+                            <Label className="text-xs">Quantity</Label>
+                            <Input type="number" step="0.01" placeholder="0"
+                              {...unitsReg}
+                              onChange={e => {
+                                unitsReg.onChange(e)
+                                autoCalcAmount(idx, Number(e.target.value), Number(watch(`line_items.${idx}.utility_rate`)) || 0)
+                              }}
+                            />
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <Label className="text-xs">Unit</Label>
+                            <Input placeholder="liters, trips, pcs…" {...register(`line_items.${idx}.unit_label`)} />
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <Label className="text-xs">Rate per {unitLabel} (₹)</Label>
+                            <Input type="number" step="0.01" placeholder="₹/unit"
+                              {...rateReg}
+                              onChange={e => {
+                                rateReg.onChange(e)
+                                autoCalcAmount(idx, Number(watch(`line_items.${idx}.utility_units`)) || 0, Number(e.target.value))
+                              }}
+                            />
+                          </div>
                         </div>
-                        <div className="flex flex-col gap-1">
-                          <Label className="text-xs">Rate per unit (₹)</Label>
-                          <Input type="number" step="0.01" placeholder="₹/unit" {...register(`line_items.${idx}.utility_rate`)} />
-                        </div>
-                      </div>
-                    )}
+                      )
+                    })()}
 
                     {/* Period */}
                     <div className="grid grid-cols-2 gap-2">

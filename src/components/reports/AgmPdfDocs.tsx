@@ -623,7 +623,7 @@ function formatShortDate(iso: string): string {
 }
 
 interface CashbookCrRow { category: string; amount: number }
-interface CashbookDrItem { date: string | null; label: string; amount: number }
+interface CashbookDrItem { date: string | null; label: string; qty: string; amount: number }
 interface CashbookDrGroup { category: string; total: number; items: CashbookDrItem[] }
 interface CashbookDuesRow { label: string; amount: number; flats: number }
 
@@ -691,6 +691,7 @@ export function CashbookDoc({
                       <View key={`${item.label}_${item.date ?? ''}_${i}`} style={S.row}>
                         <Text style={[S.col, S.small, { paddingLeft: 8 }]}>
                           {item.date ? `${formatShortDate(item.date)}  ${item.label}` : item.label}
+                          {item.qty ? `  (${item.qty})` : ''}
                         </Text>
                         <Text style={[S.colR, S.small]}>{formatINR(item.amount)}</Text>
                       </View>
