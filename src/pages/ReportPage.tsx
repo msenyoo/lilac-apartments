@@ -2,12 +2,13 @@ import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { formatINR, FLAT_CODES } from '@/lib/tagger'
-import { AlertTriangle, Download, FileText, Loader2, Zap, MessageCircle, Check } from 'lucide-react'
+import { AlertTriangle, Download, FileText, Loader2, Zap, MessageCircle, Check, ChevronDown } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import type { DuesEntry } from '@/lib/supabase'
 import { fetchFlatContactsByCode } from '@/lib/contacts'
 import { WhatsAppSendButtons } from '@/components/WhatsAppSendButtons'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
@@ -1618,10 +1619,13 @@ function ExpenditureReportsTab() {
 
 // ── UTILITY TAB ──────────────────────────────────────────────
 
+const MAX_VISIBLE_UTILITY_TABS = 7
+
 function UtilityTab() {
   const fy = getCurrentFy()
   const [fyYear, setFyYear]       = useState(fy.year)
   const [activeCatId, setActive]  = useState<string | null>(null)
+  const [moreOpen, setMoreOpen]   = useState(false)
 
   const { data: utilityCats = [] } = useQuery({
     queryKey: ['utility-categories'],
@@ -1637,17 +1641,47 @@ function UtilityTab() {
 
   const displayCat = utilityCats.find(c => c.id === activeCatId) ?? utilityCats[0]
 
+  // Keep the active category's tab visible even if it's past the cutoff — swap it in for
+  // the last visible slot so selecting from "More" doesn't hide the thing you just picked.
+  const activeInOverflow = displayCat && utilityCats.indexOf(displayCat) >= MAX_VISIBLE_UTILITY_TABS
+  const visibleCats = activeInOverflow
+    ? [...utilityCats.slice(0, MAX_VISIBLE_UTILITY_TABS - 1), displayCat]
+    : utilityCats.slice(0, MAX_VISIBLE_UTILITY_TABS)
+  const overflowCats = utilityCats.filter(c => !visibleCats.includes(c))
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex gap-1 bg-slate-100 rounded-lg p-0.5 text-sm flex-wrap">
-          {utilityCats.map(cat => (
+        <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5 text-sm overflow-x-auto min-w-0 max-w-full">
+          {visibleCats.map(cat => (
             <button key={cat.id} onClick={() => setActive(cat.id)}
-              className={`px-3 py-1 rounded-md font-medium transition-colors
+              className={`px-3 py-1 rounded-md font-medium transition-colors shrink-0 whitespace-nowrap
                 ${displayCat?.id === cat.id ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}>
               {cat.name}
             </button>
           ))}
+          {overflowCats.length > 0 && (
+            <Popover open={moreOpen} onOpenChange={setMoreOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  className="flex items-center gap-1 px-2 py-1 rounded-md font-medium transition-colors text-slate-500 hover:text-slate-700 shrink-0">
+                  <ChevronDown size={14} />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-48 p-1">
+                <div className="flex flex-col">
+                  {overflowCats.map(cat => (
+                    <button key={cat.id}
+                      onClick={() => { setActive(cat.id); setMoreOpen(false) }}
+                      className={`text-left px-2.5 py-1.5 rounded-md text-sm font-medium transition-colors
+                        ${displayCat?.id === cat.id ? 'bg-slate-100 text-slate-900' : 'text-slate-600 hover:bg-slate-50'}`}>
+                      {cat.name}
+                    </button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+          )}
         </div>
         <select value={fyYear} onChange={e => setFyYear(Number(e.target.value))}
           className="ds-field">
