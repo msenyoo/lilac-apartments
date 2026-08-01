@@ -3,6 +3,9 @@ export interface BulkDraftRow {
   paid_date: string
   description: string
   amount: string
+  utility_units: string
+  utility_rate: string
+  unit_label: string
   category_id: string
   cost_center: string
   payment_mode: 'Cash' | 'Online' | 'Bank Transfer' | 'Cheque'
@@ -25,6 +28,9 @@ export function emptyRow(): BulkDraftRow {
     paid_date: '',
     description: '',
     amount: '',
+    utility_units: '',
+    utility_rate: '',
+    unit_label: '',
     category_id: '',
     cost_center: 'Common',
     payment_mode: 'Cash',
