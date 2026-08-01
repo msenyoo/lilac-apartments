@@ -6,6 +6,7 @@ import { Download, X, TrendingDown, ChevronDown, Layers, Plus, Trash2, Send, Mes
 import * as XLSX from 'xlsx'
 import { supabase, CorpusEntry, CorpusPlan, Flat } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
+import { formatDateDMY } from '@/lib/date'
 import { fetchFlatContactsByCode } from '@/lib/contacts'
 import { WhatsAppSendButtons } from '@/components/WhatsAppSendButtons'
 import { ReceiptButton } from '@/components/ReceiptButton'
@@ -564,7 +565,7 @@ function CollectionGrid({ corpus, isLoading, multiPlan }: { corpus: CorpusEntry[
         }`}>{p.value}</span>
       ),
     },
-    { field: 'last_payment_date', headerName: 'Last Payment', width: 130 },
+    { field: 'last_payment_date', headerName: 'Last Payment', width: 130, valueFormatter: p => formatDateDMY(p.value) },
   ], [multiPlan])
 
   function handleExport() {
@@ -575,7 +576,7 @@ function CollectionGrid({ corpus, isLoading, multiPlan }: { corpus: CorpusEntry[
       Flat: r.flat_code, Plan: r.plan_name,
       Target: r.effective_target, Collected: r.collected,
       Balance: Math.max(0, r.balance), '% Paid': r.pct_paid?.toFixed(1),
-      Status: r.status, 'Last Payment': r.last_payment_date,
+      Status: r.status, 'Last Payment': formatDateDMY(r.last_payment_date),
     })))
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Corpus Collection')
@@ -858,7 +859,7 @@ function FlatCorpusPanel({ flat, onClose }: { flat: CorpusEntry; onClose: () => 
               <div key={p.id} className="flex justify-between items-center text-sm">
                 <div>
                   <p className="font-medium">{p.fiscal_label}</p>
-                  <p className="text-xs" style={{ color: 'var(--ink-400)' }}>{p.value_date}</p>
+                  <p className="text-xs" style={{ color: 'var(--ink-400)' }}>{formatDateDMY(p.value_date)}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <p className="font-semibold text-green-700">{formatINR(p.amount)}</p>
@@ -997,7 +998,7 @@ function ExpenditureView({ expenditures, plan }: { expenditures: any[]; plan: Co
                     {e.voucher_no && <span className="ml-2 text-xs font-normal" style={{ color: 'var(--ink-400)' }}>{e.voucher_no}</span>}
                   </p>
                   <p className="text-xs mt-0.5" style={{ color: 'var(--ink-400)' }}>
-                    {e.expense_date} · {e.payee_name_raw ?? ''}{e.description ? ' · ' + e.description.slice(0, 50) : ''}
+                    {formatDateDMY(e.expense_date)} · {e.payee_name_raw ?? ''}{e.description ? ' · ' + e.description.slice(0, 50) : ''}
                   </p>
                 </div>
                 <p className="font-semibold text-red-600 shrink-0 ml-3">{formatINR(e.amount)}</p>

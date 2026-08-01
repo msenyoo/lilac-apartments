@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
+import { formatDateDMY } from '@/lib/date'
 import { IndianRupee, Building2, CheckCircle2, AlertCircle, Clock, Receipt, FileText, Loader2 } from 'lucide-react'
 import { useRoleCtx } from '@/contexts/RoleContext'
 import { ReceiptButton } from '@/components/ReceiptButton'
@@ -752,7 +753,7 @@ export default function OwnerPortalPage() {
                 {payments.map(p => (
                   <tr key={p.id}>
                     <td className="mono text-[12px] whitespace-nowrap" style={{ color: 'var(--ink-500)' }}>
-                      {new Date(p.value_date).toLocaleDateString('en-IN', { dateStyle: 'short' })}
+                      {formatDateDMY(p.value_date)}
                     </td>
                     <td className="text-[12.5px]" style={{ color: 'var(--ink-700)' }}>
                       <p className="truncate max-w-[220px]">{p.description}</p>

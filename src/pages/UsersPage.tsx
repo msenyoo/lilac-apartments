@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { formatDateDMY } from '@/lib/date'
 import { Plus, Pencil, Trash2, Shield, Eye, Users, UserCircle, Lock, RefreshCw, Copy, MessageCircle, KeyRound, Home } from 'lucide-react'
 import {
   Dialog, DialogContent, DialogTitle, DialogFooter,
@@ -218,7 +219,7 @@ export default function UsersPage() {
                       </td>
                       <td className="text-[12px] mono" style={{ color: 'var(--ink-500)' }}>
                         {u.last_sign_in_at
-                          ? new Date(u.last_sign_in_at).toLocaleDateString('en-IN', { dateStyle: 'short' })
+                          ? formatDateDMY(u.last_sign_in_at)
                           : 'never'}
                       </td>
                       <td>

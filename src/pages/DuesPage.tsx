@@ -6,6 +6,7 @@ import { TrendingDown, Download, MessageCircle, Check, Pencil, Trash2, Search, S
 import * as XLSX from 'xlsx'
 import { supabase, DuesEntry, Transaction } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
+import { formatDateDMY } from '@/lib/date'
 import { fetchFlatContactsByCode } from '@/lib/contacts'
 import { WhatsAppSendButtons } from '@/components/WhatsAppSendButtons'
 import { ReceiptButton } from '@/components/ReceiptButton'
@@ -254,7 +255,8 @@ export default function DuesPage() {
               const flat = (data ?? []).find(d => d.flat_code === code)
               if (flat) setSelectedFlat(flat)
             }}
-            className="ds-field pl-8 text-[13px] w-full appearance-none"
+            className="ds-field text-[13px] w-full appearance-none"
+            style={{ paddingLeft: '2rem' }}
           >
             <option value="" disabled>Open any flat…</option>
             {(data ?? []).slice().sort((a, b) => a.flat_code.localeCompare(b.flat_code)).map(d => (
@@ -467,7 +469,7 @@ function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat
               <div key={p.id} className="flex justify-between items-center text-[13px]">
                 <div>
                   <p className="font-medium">{p.fiscal_label}</p>
-                  <p className="text-[11.5px] mono" style={{ color: 'var(--ink-400)' }}>{p.value_date}</p>
+                  <p className="text-[11.5px] mono" style={{ color: 'var(--ink-400)' }}>{formatDateDMY(p.value_date)}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <p className="font-bold" style={{ color: 'var(--ok)' }}>{formatINR(p.amount)}</p>

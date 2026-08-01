@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
+import { formatDateDMY } from '@/lib/date'
 import { Save, RefreshCw, Plus, Pencil, Zap, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -923,7 +924,7 @@ function UploadHistorySection() {
               <div>
                 <p className="text-[13.5px] font-medium">{u.month_label || '—'}</p>
                 <p className="text-[11.5px] mt-0.5 truncate max-w-xs" style={{ color: 'var(--ink-400)' }}>{u.original_name}</p>
-                <p className="text-[11px] mono mt-0.5" style={{ color: 'var(--ink-300)' }}>{new Date(u.created_at).toLocaleString('en-IN')}</p>
+                <p className="text-[11px] mono mt-0.5" style={{ color: 'var(--ink-300)' }}>{formatDateDMY(u.created_at)} {new Date(u.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</p>
               </div>
               <div className="text-right shrink-0 flex flex-col gap-1 items-end">
                 <p className="text-[13px]" style={{ color: 'var(--ink-600)' }}>{u.new_txns} added</p>

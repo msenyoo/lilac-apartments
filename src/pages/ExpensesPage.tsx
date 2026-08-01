@@ -10,6 +10,7 @@ import { useDropzone } from 'react-dropzone'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
+import { formatDateDMY } from '@/lib/date'
 import { BulkAddPendingDialog } from '@/components/expenses/BulkAddPendingDialog'
 import { DirectContributionsSection, directTotalOf, type StagedContribution } from '@/components/expenses/DirectContributions'
 import { normalizeImageFile, isHeicName, heicBlobToObjectUrl } from '@/lib/heic'
@@ -627,7 +628,7 @@ function ExpenseDetailPanel({
         )}
 
         <div className="flex flex-col gap-1.5 text-sm">
-          <Row label="Date"     value={e.expense_date} />
+          <Row label="Date"     value={formatDateDMY(e.expense_date)} />
           <Row label="Amount"   value={<span className="font-bold" style={{ color: 'var(--ink-800)' }}>{formatINR(e.amount)}</span>} />
           <Row label="Payee"    value={payeeName} />
           <Row label="Mode"     value={e.payment_mode} />
@@ -638,7 +639,7 @@ function ExpenseDetailPanel({
           {e.transaction    && (
             <Row label="Bank debit" value={
               <span className="text-right">
-                <span className="block">{e.transaction.value_date} · {formatINR(e.transaction.amount)}</span>
+                <span className="block">{formatDateDMY(e.transaction.value_date)} · {formatINR(e.transaction.amount)}</span>
                 <span className="block truncate text-[11px]" style={{ color: 'var(--ink-400)' }}>{e.transaction.description}</span>
               </span>
             } />
@@ -651,7 +652,7 @@ function ExpenseDetailPanel({
           )}
           {isVoided && e.void_reason && <Row label="Void reason" value={e.void_reason} />}
           {isVoided && e.voided_at && (
-            <Row label="Voided on" value={new Date(e.voided_at).toLocaleDateString('en-IN')} />
+            <Row label="Voided on" value={formatDateDMY(e.voided_at)} />
           )}
         </div>
 
@@ -744,7 +745,7 @@ function ExpenseDetailPanel({
                   {li.utility_units != null && li.utility_rate != null && (
                     <span>· {li.utility_units} units × ₹{li.utility_rate}</span>
                   )}
-                  {li.period_from && <span>· {li.period_from} – {li.period_to}</span>}
+                  {li.period_from && <span>· {formatDateDMY(li.period_from)} – {formatDateDMY(li.period_to)}</span>}
                 </div>
               </div>
             ))}
@@ -1825,7 +1826,7 @@ function ReconcileTab() {
                         </div>
                       </div>
                       <div className="flex gap-2 mt-0.5">
-                        <span className="text-xs" style={{ color: 'var(--ink-400)' }}>{e.expense_date}</span>
+                        <span className="text-xs" style={{ color: 'var(--ink-400)' }}>{formatDateDMY(e.expense_date)}</span>
                         {e.voucher_no && <span className="text-xs" style={{ color: 'var(--ink-400)' }}>{e.voucher_no}</span>}
                         <span className="text-xs" style={{ color: 'var(--ink-400)' }}>{e.payment_mode}</span>
                         {e.reference_no && <span className="text-xs truncate" style={{ color: 'var(--ink-400)' }}>{e.reference_no}</span>}
@@ -1879,7 +1880,7 @@ function ReconcileTab() {
                         <p className="text-sm font-bold text-red-600 shrink-0">{formatINR(t.amount)}</p>
                       </div>
                       <div className="flex gap-2 mt-0.5">
-                        <span className="text-xs" style={{ color: 'var(--ink-400)' }}>{t.value_date}</span>
+                        <span className="text-xs" style={{ color: 'var(--ink-400)' }}>{formatDateDMY(t.value_date)}</span>
                         {t.txn_id && <span className="text-xs" style={{ color: 'var(--ink-400)' }}>{t.txn_id}</span>}
                         {t.category && <span className="text-xs" style={{ color: 'var(--ink-400)' }}>{t.category}</span>}
                       </div>

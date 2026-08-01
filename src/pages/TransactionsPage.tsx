@@ -14,6 +14,7 @@ import {
   parseStatement, tagTransaction, getFiscalLabel,
   getFiscalYear, getFiscalMonth, bankDateToISO, bankTimeTo24h, formatINR, FLAT_CODES, INCOME_CATS,
 } from '@/lib/tagger'
+import { formatDateDMY } from '@/lib/date'
 import { useRoleCtx } from '@/contexts/RoleContext'
 import { toast } from 'sonner'
 import { Label } from '@/components/ui/label'
@@ -321,7 +322,7 @@ function ImportPreview({ preview, fileName, onConfirm, onCancel, onRowEdited }: 
   const flatIdByCode = useMemo(() => new Map(flats.map(f => [f.code, f.id])), [flats])
 
   const colDefs = useMemo((): ColDef<any>[] => [
-    { field: 'value_date',   headerName: 'Date',       width: 110 },
+    { field: 'value_date',   headerName: 'Date',       width: 110, valueFormatter: p => formatDateDMY(p.value) },
     { field: 'fiscal_label', headerName: 'Month',      width: 90  },
     { field: 'cr_dr',        headerName: 'CR/DR',      width: 75,
       cellRenderer: (p: any) => (
@@ -778,7 +779,7 @@ function ReviewItem({ item, flats, onSaved }: { item: ReviewEntry; flats: any[];
                 {item.cr_dr}
               </span>
               <span className="font-semibold">{formatINR(item.amount)}</span>
-              <span className="text-xs text-slate-400">{item.value_date}</span>
+              <span className="text-xs text-slate-400">{formatDateDMY(item.value_date)}</span>
             </div>
             <p className="text-xs text-slate-500 mt-1 line-clamp-2">{item.description}</p>
           </div>
@@ -993,7 +994,7 @@ function EditModal({ txn, flats, onClose, onSaved, onSplit, onVoided }: {
         <div className="flex items-center justify-between p-5 border-b hairline shrink-0">
           <div>
             <h3 className="font-semibold">Edit transaction</h3>
-            <p className="text-sm text-slate-500 mt-0.5">{txn.value_date} · {formatINR(txn.amount)}</p>
+            <p className="text-sm text-slate-500 mt-0.5">{formatDateDMY(txn.value_date)} · {formatINR(txn.amount)}</p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[var(--ink-100)]"><X size={18} /></button>
         </div>
@@ -1366,7 +1367,7 @@ function AllTransactionsTab() {
   }
 
   const colDefs = useMemo((): ColDef<any>[] => [
-    { field: 'value_date',   headerName: 'Date',        width: 110, sort: 'desc' as const },
+    { field: 'value_date',   headerName: 'Date',        width: 110, sort: 'desc' as const, valueFormatter: p => formatDateDMY(p.value) },
     { field: 'fiscal_label', headerName: 'Month',       width: 90  },
     { field: 'flat_code',    headerName: 'Flat',        width: 90, filter: true },
     { field: 'cr_dr',        headerName: 'CR/DR',       width: 80, filter: true,
@@ -1474,7 +1475,7 @@ function AllTransactionsTab() {
             <span className="mx-1.5 text-slate-400">·</span>
             <span className={selectedTxn.cr_dr === 'CR' ? 'text-green-700 font-semibold' : 'text-red-600 font-semibold'}>{formatINR(selectedTxn.amount)}</span>
             <span className="mx-1.5 text-slate-400">·</span>
-            <span className="text-slate-600">{selectedTxn.value_date}</span>
+            <span className="text-slate-600">{formatDateDMY(selectedTxn.value_date)}</span>
             <span className="mx-1.5 text-slate-400">·</span>
             <span className="text-slate-500">{selectedTxn.category}</span>
             {selectedTxn.corpus === 'YES' && (

@@ -9,6 +9,7 @@ import type { DuesEntry } from '@/lib/supabase'
 import { fetchFlatContactsByCode } from '@/lib/contacts'
 import { WhatsAppSendButtons } from '@/components/WhatsAppSendButtons'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { formatDateDMY } from '@/lib/date'
 
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
@@ -1122,7 +1123,7 @@ function FlatStatementTab() {
                           {t.cr_dr}
                         </span>
                         <span className="font-semibold">{formatINR(t.amount)}</span>
-                        <span className="text-xs" style={{ color: 'var(--ink-400)' }}>{t.value_date}</span>
+                        <span className="text-xs" style={{ color: 'var(--ink-400)' }}>{formatDateDMY(t.value_date)}</span>
                         <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
                           t.category === 'Corpus' ? 'bg-purple-100 text-purple-700' :
                           t.category === 'Maintenance' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
@@ -1546,7 +1547,7 @@ function ExpenditureReportsTab() {
                   const wb = XLSX.utils.book_new()
                   const rows: any[][] = [
                     [`TDS Compliance Register — ${selectedFy.label}`],
-                    [`The Lilac Apartment Association · Generated ${new Date().toLocaleDateString('en-IN')}`],
+                    [`The Lilac Apartment Association · Generated ${formatDateDMY(new Date().toISOString())}`],
                     [],
                     ['Vendor / Payee', 'PAN', 'Total Paid (₹)', 'TDS Threshold (₹)', 'Amount Over Threshold (₹)', 'TDS @ 10% Due (₹)', 'Status'],
                     ...(tdsRows ?? []).map(r => [
@@ -1763,8 +1764,8 @@ function UtilityReport({ catId, catName, unitLabel: unitLabelProp, fyYear }: {
         : ['Period', 'Block', 'Amount', 'Notes'],
       ...(items ?? []).map((i: any) =>
         hasUnits
-          ? [i.period_from, i.cost_center, i.utility_units ?? '', i.utility_rate ?? '', i.amount, i.description ?? '']
-          : [i.period_from, i.cost_center, i.amount, i.description ?? '']
+          ? [formatDateDMY(i.period_from ?? i.expense_date), i.cost_center, i.utility_units ?? '', i.utility_rate ?? '', i.amount, i.description ?? '']
+          : [formatDateDMY(i.period_from ?? i.expense_date), i.cost_center, i.amount, i.description ?? '']
       ),
       [], hasUnits
         ? ['TOTAL', '', totalUnits, '', totalAmt, '']
@@ -1858,7 +1859,7 @@ function UtilityReport({ catId, catName, unitLabel: unitLabelProp, fyYear }: {
             <tbody className="divide-rows">
               {(items ?? []).map((item: any, i: number) => (
                 <tr key={item.id} className={i % 2 === 1 ? 'bg-slate-50/50' : ''}>
-                  <td className="px-4 py-2.5" style={{ color: 'var(--ink-600)' }}>{item.period_from ?? '—'}</td>
+                  <td className="px-4 py-2.5" style={{ color: 'var(--ink-600)' }}>{formatDateDMY(item.period_from ?? item.expense_date)}</td>
                   <td className="px-4 py-2.5 font-medium">{item.cost_center ?? '—'}</td>
                   {hasUnits && <>
                     <td className="px-4 py-2.5 text-right">{item.utility_units != null ? Number(item.utility_units).toLocaleString('en-IN') : '—'}</td>
