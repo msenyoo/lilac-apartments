@@ -264,7 +264,7 @@ function DayBook() {
   })
 
   const { data: dayBookCategories = [] } = useQuery({
-    queryKey: ['expense-categories'],
+    queryKey: ['expense-categories-daybook'],
     queryFn: async () => {
       const { data } = await supabase.from('expense_categories').select('id, name').order('sort_order')
       return (data ?? []) as { id: string; name: string }[]
@@ -457,15 +457,18 @@ function DayBook() {
           <Label className="text-xs" style={{ color: 'var(--ink-500)' }}>To</Label>
           <Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className="text-[13px] h-8 w-[150px]" />
         </div>
-        <select
-          value={categoryFilter}
-          onChange={e => setCategoryFilter(e.target.value)}
-          className="h-8 px-2 border rounded text-[13px]"
-          style={{ borderColor: 'var(--ink-200, #e2e8f0)' }}
-        >
-          <option value="">All categories</option>
-          {dayBookCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        <div className="flex items-center gap-1.5">
+          <Label className="text-xs" style={{ color: 'var(--ink-500)' }}>Category</Label>
+          <select
+            value={categoryFilter}
+            onChange={e => setCategoryFilter(e.target.value)}
+            className="h-8 px-2 border rounded text-[13px]"
+            style={{ borderColor: 'var(--ink-200, #e2e8f0)' }}
+          >
+            <option value="">All categories</option>
+            {dayBookCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
         {(dateFrom || dateTo || categoryFilter) && (
           <button
             onClick={() => { setDateFrom(''); setDateTo(''); setCategoryFilter('') }}
