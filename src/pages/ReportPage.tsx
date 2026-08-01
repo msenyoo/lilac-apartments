@@ -1953,34 +1953,27 @@ function CashbookTab() {
           const cat = header.category?.name ?? 'Uncategorised'
           const payee = resolvePayeeCandidate(header)
           addItem(cat, payee
-            ? { date: null, label: payee, amount: header.amount ?? 0 }
+            ? { date: header.expense_date, label: payee, amount: header.amount ?? 0 }
             : { date: header.expense_date, label: header.description, amount: header.amount ?? 0 })
           continue
         }
 
         // A voucher whose line items all resolve to the SAME payee is a pass-through
-        // reimbursement covering many purchases — itemize with date + description. A voucher
-        // whose lines resolve to DIFFERENT payees (or has only one line) means each line is a
-        // genuinely distinct payment — keep showing the payee name, no date.
+        // reimbursement covering many purchases — itemize by description. A voucher whose
+        // lines resolve to DIFFERENT payees (or has only one line) means each line is a
+        // genuinely distinct payment — itemize by payee name instead. Every line always
+        // carries its real payment date, for audit/verification against the bank statement.
         const linePayees = lines.map(l => resolvePayeeCandidate(l) ?? resolvePayeeCandidate(header))
         const distinctPayees = new Set(linePayees.filter((p): p is string => p != null))
         const isPassThrough = lines.length > 1 && distinctPayees.size === 1
 
         lines.forEach((line, i) => {
           const cat = line.category?.name ?? 'Uncategorised'
-          if (isPassThrough) {
-            addItem(cat, {
-              date: line.paid_date ?? header.expense_date,
-              label: line.description,
-              amount: line.amount ?? 0,
-            })
-          } else {
-            addItem(cat, {
-              date: null,
-              label: linePayees[i] ?? 'Cash / Misc',
-              amount: line.amount ?? 0,
-            })
-          }
+          addItem(cat, {
+            date: line.paid_date ?? header.expense_date,
+            label: isPassThrough ? line.description : (linePayees[i] ?? 'Cash / Misc'),
+            amount: line.amount ?? 0,
+          })
         })
       }
 
