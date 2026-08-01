@@ -5,7 +5,7 @@ import { useRoleCtx } from '@/contexts/RoleContext'
 import { useForm, useFieldArray, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Plus, Trash2, Download, Receipt, Users, Building, X, GitMerge, CheckCircle2, Paperclip, RefreshCcw, Coins, Upload, Loader2, Trash, Pencil, Ban, Unlink, AlertTriangle, PiggyBank, ListChecks, ListPlus, Eye, Share2, Search } from 'lucide-react'
+import { Plus, Trash2, Download, Receipt, Users, Building, X, GitMerge, CheckCircle2, Paperclip, RefreshCcw, Coins, Upload, Loader2, Trash, Pencil, Ban, Unlink, AlertTriangle, PiggyBank, ListChecks, ListPlus, Eye, Share2, Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
@@ -298,6 +298,17 @@ function DayBook() {
     })
   }, [expenses, search, dateFrom, dateTo, categoryFilter])
 
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(25)
+
+  useEffect(() => {
+    setPage(1)
+  }, [search, dateFrom, dateTo, categoryFilter])
+
+  const totalPages = Math.max(1, Math.ceil(filteredExpenses.length / pageSize))
+  const pageSafe = Math.min(page, totalPages)
+  const pagedExpenses = filteredExpenses.slice((pageSafe - 1) * pageSize, pageSafe * pageSize)
+
   function handleExport() {
     const ws = XLSX.utils.json_to_sheet(filteredExpenses.map(e => ({
       Date:        e.expense_date,
@@ -506,7 +517,7 @@ function DayBook() {
         <div className="flex gap-4">
           {/* List */}
           <div className="flex-1 min-w-0 surface !p-0 divide-rows">
-            {filteredExpenses.map(e => {
+            {pagedExpenses.map(e => {
               const status = expenseStatus(e)
               const payeeName = e.payee_name_raw ?? e.vendor?.name ?? e.staff_member?.name ?? ''
               const isVoided = !!e.voided_at
@@ -567,6 +578,38 @@ function DayBook() {
                 </div>
               )
             })}
+            {filteredExpenses.length > pageSize && (
+              <div className="flex items-center justify-between px-4 py-3 text-xs" style={{ color: 'var(--ink-500)' }}>
+                <span>
+                  Showing {(pageSafe - 1) * pageSize + 1}–{Math.min(pageSafe * pageSize, filteredExpenses.length)} of {filteredExpenses.length}
+                </span>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={pageSize}
+                    onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}
+                    className="h-7 px-1.5 border rounded text-xs"
+                    style={{ borderColor: 'var(--ink-200, #e2e8f0)' }}
+                  >
+                    {[25, 50, 100].map(n => <option key={n} value={n}>{n}/page</option>)}
+                  </select>
+                  <button
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                    disabled={pageSafe <= 1}
+                    className="p-1 rounded hover:bg-[var(--ink-100)] disabled:opacity-30"
+                  >
+                    <ChevronLeft size={14} />
+                  </button>
+                  <span>{pageSafe} / {totalPages}</span>
+                  <button
+                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                    disabled={pageSafe >= totalPages}
+                    className="p-1 rounded hover:bg-[var(--ink-100)] disabled:opacity-30"
+                  >
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Detail panel */}
