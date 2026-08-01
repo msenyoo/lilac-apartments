@@ -105,6 +105,7 @@ export interface Transaction {
   txn_id: string | null
   value_date: string
   posted_date: string | null
+  posted_time: string | null
   description: string
   cr_dr: 'CR' | 'DR'
   amount: number

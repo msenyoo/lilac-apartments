@@ -138,6 +138,18 @@ export function bankDateToISO(dateStr: string): string {
   return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
 }
 
+// Convert "HH:MM:SS AM/PM" → 24-hour "HH:MM:SS"
+export function bankTimeTo24h(timeStr: string | null): string | null {
+  if (!timeStr) return null
+  const m = timeStr.match(/^(\d{1,2}):(\d{2}):(\d{2})\s*(AM|PM)$/i)
+  if (!m) return null
+  let hh = parseInt(m[1], 10)
+  const ampm = m[4].toUpperCase()
+  if (ampm === 'PM' && hh !== 12) hh += 12
+  if (ampm === 'AM' && hh === 12) hh = 0
+  return `${String(hh).padStart(2, '0')}:${m[2]}:${m[3]}`
+}
+
 export function getFiscalLabel(dateStr: string): string {
   const d = parseBankDate(dateStr)
   return `${MONTHS[d.getMonth()]}-${String(d.getFullYear()).slice(-2)}`
@@ -158,6 +170,7 @@ export interface ParsedTransaction {
   txnId:       string
   valueDate:   string   // DD/MM/YYYY
   postedDate:  string   // DD/MM/YYYY
+  postedTime:  string | null   // HH:MM:SS AM/PM, when the source column includes it
   description: string
   crDr:        'CR' | 'DR'
   amount:      number
@@ -239,10 +252,12 @@ export function parsePipeStatement(rawText: string): ParsedTransaction[] {
     if (!/^\d+$/.test(cols[0].trim())) continue
     const crDr = cols[6].trim().toUpperCase()
     if (crDr !== 'CR' && crDr !== 'DR') continue
+    const [postedDate, ...postedTimeParts] = cols[3].trim().split(' ')
     results.push({
       txnId:       cols[1].trim(),
       valueDate:   cols[2].trim(),
-      postedDate:  cols[3].trim(),
+      postedDate,
+      postedTime:  postedTimeParts.length > 0 ? postedTimeParts.join(' ') : null,
       description: cols[5].trim(),
       crDr:        crDr as 'CR' | 'DR',
       amount:      parseFloat(cols[7].trim().replace(/,/g, '')) || 0,
@@ -291,6 +306,7 @@ export function parseCsvStatement(rawText: string): ParsedTransaction[] {
       txnId:       m.txnId >= 0 ? (cols[m.txnId] ?? '') : '',
       valueDate:   dmy,
       postedDate:  dmy,
+      postedTime:  null,
       description: desc,
       crDr,
       amount:      creditAmt > 0 ? creditAmt : debitAmt,

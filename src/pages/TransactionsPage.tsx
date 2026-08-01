@@ -12,7 +12,7 @@ import * as XLSX from 'xlsx'
 import { supabase, Transaction, ReviewEntry } from '@/lib/supabase'
 import {
   parseStatement, tagTransaction, getFiscalLabel,
-  getFiscalYear, getFiscalMonth, bankDateToISO, formatINR, FLAT_CODES, INCOME_CATS,
+  getFiscalYear, getFiscalMonth, bankDateToISO, bankTimeTo24h, formatINR, FLAT_CODES, INCOME_CATS,
 } from '@/lib/tagger'
 import { useRoleCtx } from '@/contexts/RoleContext'
 import { toast } from 'sonner'
@@ -85,6 +85,7 @@ interface PreviewRow {
   txn_id: string | null
   value_date: string
   posted_date: string | null
+  posted_time: string | null
   description: string
   cr_dr: 'CR' | 'DR'
   amount: number
@@ -139,6 +140,7 @@ function UploadTab({ onImported }: { onImported: () => void }) {
           txn_id: txn.txnId || null,
           value_date: bankDateToISO(txn.valueDate),
           posted_date: bankDateToISO(txn.postedDate),
+          posted_time: bankTimeTo24h(txn.postedTime),
           description: txn.description, cr_dr: txn.crDr, amount: txn.amount,
           flat_id: flatMap.get(tag.flatCode) ?? null,
           flat_code: tag.flatCode, category: tag.category, corpus: tag.corpus,
@@ -1159,7 +1161,7 @@ function SplitModal({ txn, onClose, onSaved, flats }: {
     // Insert split rows
     const flatMap = new Map(flats.map(f => [f.code, f.id]))
     const splitRows = rows.map(r => ({
-      txn_id: null, value_date: txn.value_date, posted_date: txn.posted_date,
+      txn_id: null, value_date: txn.value_date, posted_date: txn.posted_date, posted_time: txn.posted_time,
       description: `${txn.description} [${refCode}]`,
       cr_dr: txn.cr_dr, amount: parseFloat(r.amount),
       flat_id: flatMap.get(r.flatCode) ?? null, flat_code: r.flatCode,
