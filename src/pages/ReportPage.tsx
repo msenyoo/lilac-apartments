@@ -9,6 +9,7 @@ import type { DuesEntry } from '@/lib/supabase'
 import { fetchFlatContactsByCode } from '@/lib/contacts'
 import { WhatsAppSendButtons } from '@/components/WhatsAppSendButtons'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { formatDateDMY } from '@/lib/date'
 
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
@@ -1154,6 +1155,7 @@ function ExpenditureReportsTab() {
   const [selectedFyYear, setSelectedFyYear] = useState(fy.year)
   const [subTab, setSubTab] = useState<ExpSubTab>('category')
   const [fund, setFund] = useState<ExpFund>('all')
+  const [drillCategory, setDrillCategory] = useState<{ id: string | null; name: string } | null>(null)
   const selectedFy = getFyRange(selectedFyYear)
   const fundLabel = fund === 'all' ? '' : fund === 'corpus' ? ' (Corpus)' : ' (Maintenance)'
 
@@ -1163,28 +1165,49 @@ function ExpenditureReportsTab() {
     return q
   }
 
-  // Category-wise expenses
+  // Category-wise expenses — broken down by line-item category, not header category.
+  // A voucher covering several categories (e.g. a reimbursement split across Plumbing,
+  // Sump water, Motor Pumps) has category_id = null on the header itself; the real
+  // categorisation lives on each expense_line_items row. Headers with no line items fall
+  // back to their own category_id/amount.
   const { data: catExpenses, isLoading: loadingCat } = useQuery({
     queryKey: ['exp-by-category', selectedFyYear, fund],
     queryFn: async () => {
-      const [{ data: exps }, { data: cats }] = await Promise.all([
-        applyFund(
-          supabase.from('expenses').select('amount, category_id')
-            .gte('expense_date', selectedFy.start)
-            .lte('expense_date', selectedFy.end)
-            .is('voided_at', null)
-        ),
+      const { data: headers } = await applyFund(
+        supabase.from('expenses').select('id, amount, category_id')
+          .gte('expense_date', selectedFy.start)
+          .lte('expense_date', selectedFy.end)
+          .is('voided_at', null)
+      )
+      const headerIds = (headers ?? []).map((h: any) => h.id)
+      const [{ data: lineItems }, { data: cats }] = await Promise.all([
+        headerIds.length
+          ? supabase.from('expense_line_items').select('expense_id, amount, category_id').in('expense_id', headerIds)
+          : Promise.resolve({ data: [] as any[] }),
         supabase.from('expense_categories').select('id, name, budget_type'),
       ])
+      const linesByHeader = new Map<string, any[]>()
+      for (const li of lineItems ?? []) {
+        if (!linesByHeader.has((li as any).expense_id)) linesByHeader.set((li as any).expense_id, [])
+        linesByHeader.get((li as any).expense_id)!.push(li)
+      }
       const catMap = new Map((cats ?? []).map((c: any) => [c.id, { name: c.name as string, budget_type: c.budget_type as string }]))
-      const grouped = new Map<string, { amount: number; budget_type: string }>()
-      for (const e of exps ?? []) {
-        const cat = catMap.get((e as any).category_id) ?? { name: 'Uncategorised', budget_type: 'Maintenance' }
-        const prev = grouped.get(cat.name) ?? { amount: 0, budget_type: cat.budget_type }
-        grouped.set(cat.name, { amount: prev.amount + ((e as any).amount ?? 0), budget_type: cat.budget_type })
+      const grouped = new Map<string, { amount: number; budget_type: string; categoryId: string | null }>()
+      function addAmt(catId: string | null, amount: number) {
+        const cat = (catId !== null ? catMap.get(catId) : undefined) ?? { name: 'Uncategorised', budget_type: 'Maintenance' }
+        const prev = grouped.get(cat.name) ?? { amount: 0, budget_type: cat.budget_type, categoryId: cat.name === 'Uncategorised' ? null : catId }
+        grouped.set(cat.name, { amount: prev.amount + amount, budget_type: cat.budget_type, categoryId: prev.categoryId })
+      }
+      for (const h of headers ?? []) {
+        const lines = linesByHeader.get((h as any).id) ?? []
+        if (lines.length === 0) {
+          addAmt((h as any).category_id ?? null, (h as any).amount ?? 0)
+        } else {
+          for (const li of lines) addAmt((li as any).category_id ?? (h as any).category_id ?? null, (li as any).amount ?? 0)
+        }
       }
       return Array.from(grouped.entries())
-        .map(([category, v]) => ({ category, amount: v.amount, budget_type: v.budget_type }))
+        .map(([category, v]) => ({ category, amount: v.amount, budget_type: v.budget_type, categoryId: v.categoryId }))
         .sort((a, b) => b.amount - a.amount)
     },
   })
@@ -1422,7 +1445,9 @@ function ExpenditureReportsTab() {
                 </thead>
                 <tbody className="divide-rows">
                   {catExpenses.map((r, i) => (
-                    <tr key={r.category} className={i % 2 === 1 ? 'bg-slate-50/50' : ''}>
+                    <tr key={r.category}
+                      onClick={() => setDrillCategory({ id: r.categoryId, name: r.category })}
+                      className={`cursor-pointer hover:bg-[var(--brand-50)] transition-colors ${i % 2 === 1 ? 'bg-slate-50/50' : ''}`}>
                       <td className="px-4 py-2.5 font-medium">{r.category}</td>
                       <td className="px-4 py-2.5">
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
@@ -1614,7 +1639,150 @@ function ExpenditureReportsTab() {
           </div>
         )
       )}
+
+      {drillCategory && (
+        <CategoryDrillDownDialog
+          category={drillCategory}
+          fy={selectedFy}
+          fund={fund}
+          onClose={() => setDrillCategory(null)}
+        />
+      )}
     </div>
+  )
+}
+
+function CategoryDrillDownDialog({ category, fy, fund, onClose }: {
+  category: { id: string | null; name: string }
+  fy: { start: string; end: string; label: string }
+  fund: ExpFund
+  onClose: () => void
+}) {
+  const { data: rows, isLoading } = useQuery({
+    queryKey: ['category-drilldown', category.id, category.name, fy.start, fy.end, fund],
+    queryFn: async () => {
+      // Match the exp-by-category grouping: a header with line items is broken down by
+      // each line's own category (falling back to the header's), not the header's category.
+      let q = supabase
+        .from('expenses')
+        .select(`
+          id, expense_date, amount, description, payee_type, payee_name_raw, voucher_no, category_id, corpus_plan_id,
+          vendor:vendor_id(name),
+          staff_member:staff_id(name)
+        `)
+        .gte('expense_date', fy.start)
+        .lte('expense_date', fy.end)
+        .is('voided_at', null)
+      if (fund === 'corpus') q = q.not('corpus_plan_id', 'is', null)
+      if (fund === 'maintenance') q = q.is('corpus_plan_id', null)
+      const { data: headers } = await q.order('expense_date', { ascending: false })
+
+      const headerIds = (headers ?? []).map((h: any) => h.id)
+      const { data: lineItems } = headerIds.length
+        ? await supabase
+            .from('expense_line_items')
+            .select('id, expense_id, amount, description, category_id, payee_type, payee_name_raw, vendor:vendor_id(name), staff_member:staff_id(name)')
+            .in('expense_id', headerIds)
+        : { data: [] as any[] }
+      const linesByHeader = new Map<string, any[]>()
+      for (const li of lineItems ?? []) {
+        if (!linesByHeader.has(li.expense_id)) linesByHeader.set(li.expense_id, [])
+        linesByHeader.get(li.expense_id)!.push(li)
+      }
+
+      const matches = (catId: string | null) => category.id ? catId === category.id : catId === null
+
+      const out: { id: string; date: string; payee: string; description: string; amount: number }[] = []
+      for (const h of headers ?? []) {
+        const lines = linesByHeader.get((h as any).id) ?? []
+        if (lines.length === 0) {
+          if (matches((h as any).category_id ?? null)) {
+            out.push({
+              id: (h as any).id,
+              date: (h as any).expense_date,
+              payee: resolvePayeeCandidate(h as any) ?? 'Cash / Misc',
+              description: (h as any).description ?? '',
+              amount: (h as any).amount ?? 0,
+            })
+          }
+        } else {
+          for (const li of lines) {
+            if (matches(li.category_id ?? (h as any).category_id ?? null)) {
+              out.push({
+                id: li.id,
+                date: (h as any).expense_date,
+                payee: resolvePayeeCandidate(li) ?? resolvePayeeCandidate(h as any) ?? 'Cash / Misc',
+                description: li.description ?? '',
+                amount: li.amount ?? 0,
+              })
+            }
+          }
+        }
+      }
+      return out
+    },
+  })
+
+  const total = (rows ?? []).reduce((s, r) => s + (r.amount ?? 0), 0)
+
+  function handleExcel() {
+    if (!rows?.length) return
+    const wb = XLSX.utils.book_new()
+    const sheetRows: any[][] = [
+      [`${category.name} — ${fy.label}`], [],
+      ['Date', 'Payee', 'Description', 'Amount'],
+      ...rows.map(r => [formatDateDMY(r.date), r.payee, r.description, r.amount]),
+      [], ['TOTAL', '', '', total],
+    ]
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sheetRows), category.name.slice(0, 31))
+    XLSX.writeFile(wb, `${category.name.replace(/[^a-zA-Z0-9]/g, '_')}_${fy.label.replace(/\s/g, '_')}.xlsx`)
+  }
+
+  return (
+    <Dialog open onOpenChange={v => { if (!v) onClose() }}>
+      <DialogContent className="max-w-[520px] lg:max-w-[720px] max-h-[85vh] rounded-2xl p-0 overflow-hidden flex flex-col">
+        <DialogHeader className="px-5 pt-5 pb-3 border-b hairline">
+          <DialogTitle>{category.name} — {fy.label}</DialogTitle>
+        </DialogHeader>
+        <div className="px-5 py-3 flex items-center justify-between border-b hairline" style={{ background: 'var(--ink-50)' }}>
+          <span className="text-sm" style={{ color: 'var(--ink-500)' }}>
+            {rows?.length ?? 0} expense{rows?.length === 1 ? '' : 's'} · {formatINR(total)}
+          </span>
+          <button onClick={handleExcel} disabled={!rows?.length}
+            className="flex items-center gap-1.5 text-sm hover:opacity-80 disabled:opacity-40" style={{ color: 'var(--brand-700)' }}>
+            <Download size={14} /> Export Excel
+          </button>
+        </div>
+        <div className="overflow-y-auto flex-1">
+          {isLoading ? (
+            <div className="p-5"><div className="h-32 animate-pulse rounded-[var(--ds-radius)]" style={{ background: 'var(--ink-100)' }} /></div>
+          ) : !rows?.length ? (
+            <div className="px-5 py-10 text-center text-sm" style={{ color: 'var(--ink-400)' }}>No expenses recorded</div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="border-b hairline" style={{ background: 'var(--ink-50)' }}>
+                <tr>
+                  <th className="text-left px-4 py-2 font-semibold" style={{ color: 'var(--ink-600)' }}>Date</th>
+                  <th className="text-left px-4 py-2 font-semibold" style={{ color: 'var(--ink-600)' }}>Payee</th>
+                  <th className="text-left px-4 py-2 font-semibold" style={{ color: 'var(--ink-600)' }}>Description</th>
+                  <th className="text-right px-4 py-2 font-semibold" style={{ color: 'var(--ink-600)' }}>Amount</th>
+                </tr>
+              </thead>
+              <tbody className="divide-rows">
+                {rows.map((r, i) => (
+                  <tr key={r.id} className={i % 2 === 1 ? 'bg-slate-50/50' : ''}>
+                    <td className="px-4 py-2.5" style={{ color: 'var(--ink-600)' }}>{formatDateDMY(r.date)}</td>
+                    <td className="px-4 py-2.5 font-medium">{r.payee}</td>
+                    <td className="px-4 py-2.5 text-xs max-w-[220px] truncate" style={{ color: 'var(--ink-500)' }}>{r.description}</td>
+                    <td className="px-4 py-2.5 text-right font-semibold">{formatINR(r.amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 
