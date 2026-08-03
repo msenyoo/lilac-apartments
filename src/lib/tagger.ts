@@ -145,8 +145,23 @@ export function getLegacyMappings(existingUpiIds: string[]): LegacyMapping[] {
 // Best-effort guess at the sender identifier inside a raw bank description. Used only to
 // prefill an editable field during transaction review — never saved without human confirmation.
 export function guessSenderToken(description: string): string {
-  const upiMatch = description.match(/UPI\/([^/]+)/i)
-  if (upiMatch) return upiMatch[1].trim()
+  // This bank writes UPI narrations as UPI/<txn reference>/<sender handle>/<bank>/<remark>,
+  // so the segment straight after "UPI/" is a per-transaction number, not the sender (see
+  // scripts/audit-split-sweep.js, which matches that segment as /UPI\/(\d{6,})/). Prefer a
+  // VPA- or handle-shaped segment, and only fall back to a numeric one when nothing better
+  // exists — some residents' handle genuinely IS their 10-digit phone number.
+  const upiMatch = description.match(/UPI\/(.+)/i)
+  if (upiMatch) {
+    const segments = upiMatch[1].split('/').map(s => s.trim()).filter(Boolean)
+    if (segments.length > 0) {
+      const vpa = segments.find(s => s.includes('@'))
+      if (vpa) return vpa
+      const handle = segments.find(s => !/^\d+$/.test(s))
+      if (handle) return handle
+      // All numeric — skip anything long enough to be a bank reference number.
+      return segments.find(s => !/^\d{11,}$/.test(s)) ?? segments[0]
+    }
+  }
 
   const cleaned = description
     .replace(/^(NEFT|IMPS|RTGS)\b[\s-]*/i, '')
