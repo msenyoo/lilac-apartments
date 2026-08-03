@@ -822,6 +822,7 @@ function ReviewItem({ item, flats, residents, onSaved }: {
                 .select('id')
                 .eq('flat_code', 'UNKNOWN')
                 .eq('row_type', 'Normal')
+                .eq('cr_dr', item.cr_dr)
                 .ilike('description', `%${escapeLike(t)}%`)
                 .neq('id', item.id)
               if (err) { matchError = err; break }
