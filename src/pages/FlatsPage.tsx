@@ -928,8 +928,25 @@ function SenderMappingsTab({ onManageResident }: { onManageResident: () => void 
     },
   })
 
+  // Legacy entries a human has deliberately dismissed as not applicable — stored as a JSON
+  // array under one app_settings key rather than a new table, since this table already exists
+  // as a general key-value store and a dismissal list doesn't need its own schema.
+  const { data: dismissedRaw } = useQuery({
+    queryKey: ['dismissed-legacy-mappings'],
+    queryFn: async () => {
+      const { data } = await supabase.from('app_settings').select('value').eq('key', 'dismissed_legacy_mappings').maybeSingle()
+      return data?.value ?? '[]'
+    },
+  })
+  const dismissedTokens = useMemo(() => {
+    try { return new Set<string>(JSON.parse(dismissedRaw ?? '[]')) } catch { return new Set<string>() }
+  }, [dismissedRaw])
+
   const allUpiIds = useMemo(() => (residents ?? []).flatMap(r => r.upi_ids ?? []), [residents])
-  const legacyMappings = useMemo(() => getLegacyMappings(allUpiIds), [allUpiIds])
+  const legacyMappings = useMemo(
+    () => getLegacyMappings(allUpiIds).filter(m => !dismissedTokens.has(m.token.toLowerCase())),
+    [allUpiIds, dismissedTokens],
+  )
 
   const filteredLegacyMappings = useMemo(() => {
     if (!search.trim()) return legacyMappings
@@ -977,6 +994,7 @@ function SenderMappingsTab({ onManageResident }: { onManageResident: () => void 
         residents={residents ?? []}
         flats={flatsList ?? []}
         onConfirmed={() => qc.invalidateQueries({ queryKey: ['residents-for-mappings'] })}
+        onDismissed={() => qc.invalidateQueries({ queryKey: ['dismissed-legacy-mappings'] })}
         onTokenClick={setDrilldownToken}
       />
       <AllFlatsMappings
@@ -992,7 +1010,7 @@ function SenderMappingsTab({ onManageResident }: { onManageResident: () => void 
   )
 }
 
-function LegacyBacklog({ mappings, totalCount, residents, flats, onConfirmed, onTokenClick }: {
+function LegacyBacklog({ mappings, totalCount, residents, flats, onConfirmed, onDismissed, onTokenClick }: {
   mappings: LegacyMapping[]
   // Backlog size before the tab's search filter — an empty *filtered* list means "no matches",
   // not "all done", and saying "all done" would misstate how much work is left.
@@ -1000,6 +1018,7 @@ function LegacyBacklog({ mappings, totalCount, residents, flats, onConfirmed, on
   residents: (Resident & { flat: { code: string } | null })[]
   flats: { id: string; code: string }[]
   onConfirmed: () => void
+  onDismissed: () => void
   onTokenClick: (token: string) => void
 }) {
   if (mappings.length === 0) {
@@ -1024,24 +1043,45 @@ function LegacyBacklog({ mappings, totalCount, residents, flats, onConfirmed, on
       </p>
       <div className="flex flex-col gap-2">
         {mappings.map(m => (
-          <LegacyMappingRow key={`${m.type}-${m.token}`} mapping={m} residents={residents} flats={flats} onConfirmed={onConfirmed} onTokenClick={onTokenClick} />
+          <LegacyMappingRow key={`${m.type}-${m.token}`} mapping={m} residents={residents} flats={flats} onConfirmed={onConfirmed} onDismissed={onDismissed} onTokenClick={onTokenClick} />
         ))}
       </div>
     </div>
   )
 }
 
-function LegacyMappingRow({ mapping, residents, flats, onConfirmed, onTokenClick }: {
+function LegacyMappingRow({ mapping, residents, flats, onConfirmed, onDismissed, onTokenClick }: {
   mapping: LegacyMapping
   residents: (Resident & { flat: { code: string } | null })[]
   flats: { id: string; code: string }[]
   onConfirmed: () => void
+  onDismissed: () => void
   onTokenClick: (token: string) => void
 }) {
   const [flatCode, setFlatCode] = useState(mapping.flatCode)
   const flatResidents = residents.filter(r => r.flat?.code === flatCode)
   const [residentId, setResidentId] = useState('')
   const [saving, setSaving] = useState(false)
+  const [confirmingDismiss, setConfirmingDismiss] = useState(false)
+  const [dismissing, setDismissing] = useState(false)
+
+  async function handleDismiss() {
+    setDismissing(true)
+    const { data: existing, error: readError } = await supabase
+      .from('app_settings').select('value').eq('key', 'dismissed_legacy_mappings').maybeSingle()
+    if (readError) { setDismissing(false); toast.error(readError.message); return }
+    let list: string[] = []
+    try { list = JSON.parse(existing?.value ?? '[]') } catch { list = [] }
+    const token = mapping.token.toLowerCase()
+    if (!list.includes(token)) list.push(token)
+    const { error } = await supabase.from('app_settings')
+      .upsert({ key: 'dismissed_legacy_mappings', value: JSON.stringify(list) })
+    setDismissing(false)
+    setConfirmingDismiss(false)
+    if (error) { toast.error(error.message); return }
+    toast.success(`${mapping.token} dismissed — won't show in this backlog again`)
+    onDismissed()
+  }
 
   const { data: conflicts } = useQuery({
     queryKey: ['legacy-conflict', mapping.token, flatCode],
@@ -1114,14 +1154,42 @@ function LegacyMappingRow({ mapping, residents, flats, onConfirmed, onTokenClick
             </option>
           ))}
         </select>
-        <button onClick={handleConfirm} disabled={!residentId || saving} className="btn-primary text-xs px-3 py-1.5">
-          {saving ? 'Saving…' : 'Confirm'}
-        </button>
+        <div className="flex items-center gap-1">
+          <button onClick={handleConfirm} disabled={!residentId || saving} className="btn-primary text-xs px-3 py-1.5">
+            {saving ? 'Saving…' : 'Confirm'}
+          </button>
+          <button onClick={() => setConfirmingDismiss(true)}
+            className="p-1.5 rounded hover:bg-red-50 text-slate-400 hover:text-red-600"
+            aria-label={`Dismiss ${mapping.token}`}>
+            <Trash2 size={14} />
+          </button>
+        </div>
       </div>
       {conflictSummary && (
         <p className="text-xs text-amber-600 mt-1">
           ⚠ Also appears on transactions tagged to a different flat — {conflictSummary}. Double-check before confirming.
         </p>
+      )}
+
+      {confirmingDismiss && (
+        <AlertDialog open onOpenChange={v => { if (!v) setConfirmingDismiss(false) }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Dismiss this legacy mapping?</AlertDialogTitle>
+              <AlertDialogDescription>
+                <strong>{mapping.token}</strong> ({mapping.flatCode}) won't be shown in this backlog again.
+                Nothing is saved to any resident — it's simply hidden from this list going forward. There's
+                no undo for this from here.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setConfirmingDismiss(false)} disabled={dismissing}>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDismiss} disabled={dismissing} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                {dismissing ? 'Dismissing…' : 'Dismiss'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       )}
     </div>
   )
