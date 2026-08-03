@@ -782,6 +782,21 @@ function ReviewItem({ item, flats, residents, onSaved }: {
         const resident = residents.find(r => r.id === senderResidentId)
         const merged = Array.from(new Set([...(resident?.upi_ids ?? []), token]))
         await supabase.from('residents').update({ upi_ids: merged }).eq('id', senderResidentId)
+
+        const { data: matches } = await supabase
+          .from('transactions')
+          .select('id')
+          .eq('flat_code', 'UNKNOWN')
+          .ilike('description', `%${token}%`)
+          .neq('id', item.id)
+        if (matches && matches.length > 0) {
+          await supabase.from('transactions').update({
+            flat_code: flatCode, flat_id: flatId,
+            category: isFlat ? category : flatCode,
+            corpus: effectiveCorpus, plan_id: resolvedPlanId, row_type: 'Normal',
+          }).in('id', matches.map(m => m.id))
+          toast.success(`Tagged as ${flatCode} — also applied to ${matches.length} other matching transaction${matches.length > 1 ? 's' : ''}`)
+        }
       }
     }
     setSaving(false)
