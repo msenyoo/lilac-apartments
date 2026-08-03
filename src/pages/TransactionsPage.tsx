@@ -781,8 +781,10 @@ function ReviewItem({ item, flats, residents, onSaved }: {
       row_type: 'Normal',
     }).eq('id', item.id)
     if (!error && saveSender && senderResidentId && senderToken.trim()) {
-      const rawToken = senderToken.trim()
-      const token = rawToken.toLowerCase()
+      const tokens = Array.from(new Set(
+        senderToken.split(',').map(t => t.trim().toLowerCase()).filter(Boolean)
+      ))
+      const label = tokens.length > 1 ? `${tokens.length} sender IDs` : tokens[0]
 
       // Check duplicates against a fresh, unfiltered read rather than the `residents` prop —
       // that prop is active-only and up to 5min stale, so it can miss a token already held by
@@ -792,43 +794,52 @@ function ReviewItem({ item, flats, residents, onSaved }: {
         .select('id, name, upi_ids')
         .neq('id', senderResidentId)
       const conflictOwner = (conflictRows ?? []).find(
-        r => ((r.upi_ids ?? []) as string[]).some(id => id.toLowerCase() === token))
+        r => ((r.upi_ids ?? []) as string[]).some(id => tokens.includes(id.toLowerCase())))
 
       if (conflictError) {
-        toast.error(`${rawToken} not saved — could not check for duplicates: ${conflictError.message}`)
+        toast.error(`${label} not saved — could not check for duplicates: ${conflictError.message}`)
       } else if (conflictOwner) {
-        toast.error(`${rawToken} is already saved for ${conflictOwner.name} — not saved again`)
+        toast.error(`One of these sender IDs is already saved for ${conflictOwner.name} — not saved`)
       } else {
         const resident = residents.find(r => r.id === senderResidentId)
-        const merged = Array.from(new Set([...(resident?.upi_ids ?? []), token]))
+        const merged = Array.from(new Set([...(resident?.upi_ids ?? []), ...tokens]))
         const { error: residentError } = await supabase
           .from('residents').update({ upi_ids: merged }).eq('id', senderResidentId)
 
         if (residentError) {
-          toast.error(`${rawToken} not saved: ${residentError.message}`)
-        } else if (token.length >= MIN_BULK_APPLY_TOKEN_LEN) {
-          // Only rows still in the review queue (v_review_queue = UNKNOWN + Normal). Without
-          // the row_type filter a VOIDED row that kept flat_code='UNKNOWN' would be matched
-          // and silently un-voided, double-counting it in every financial view.
-          const { data: matches, error: matchError } = await supabase
-            .from('transactions')
-            .select('id')
-            .eq('flat_code', 'UNKNOWN')
-            .eq('row_type', 'Normal')
-            .ilike('description', `%${escapeLike(token)}%`)
-            .neq('id', item.id)
+          toast.error(`${label} not saved: ${residentError.message}`)
+        } else {
+          const bulkTokens = tokens.filter(t => t.length >= MIN_BULK_APPLY_TOKEN_LEN)
+          if (bulkTokens.length > 0) {
+            // Only rows still in the review queue (v_review_queue = UNKNOWN + Normal). Without
+            // the row_type filter a VOIDED row that kept flat_code='UNKNOWN' would be matched
+            // and silently un-voided, double-counting it in every financial view.
+            const matchIds = new Set<string>()
+            let matchError: { message: string } | null = null
+            for (const t of bulkTokens) {
+              const { data, error: err } = await supabase
+                .from('transactions')
+                .select('id')
+                .eq('flat_code', 'UNKNOWN')
+                .eq('row_type', 'Normal')
+                .ilike('description', `%${escapeLike(t)}%`)
+                .neq('id', item.id)
+              if (err) { matchError = err; break }
+              for (const m of data ?? []) matchIds.add(m.id)
+            }
 
-          if (matchError) {
-            toast.error(`Sender ID saved, but the search for other matching transactions failed: ${matchError.message}`)
-          } else if (matches && matches.length > 0) {
-            const plural = matches.length > 1 ? 's' : ''
-            const { error: bulkError } = await supabase.from('transactions').update({
-              flat_code: flatCode, flat_id: flatId,
-              category: isFlat ? category : flatCode,
-              corpus: effectiveCorpus, plan_id: resolvedPlanId,
-            }).in('id', matches.map(m => m.id))
-            if (bulkError) toast.error(`Could not apply to ${matches.length} other matching transaction${plural}: ${bulkError.message}`)
-            else toast.success(`Tagged as ${flatCode} — also applied to ${matches.length} other matching transaction${plural}`)
+            if (matchError) {
+              toast.error(`Sender ID(s) saved, but the search for other matching transactions failed: ${matchError.message}`)
+            } else if (matchIds.size > 0) {
+              const plural = matchIds.size > 1 ? 's' : ''
+              const { error: bulkError } = await supabase.from('transactions').update({
+                flat_code: flatCode, flat_id: flatId,
+                category: isFlat ? category : flatCode,
+                corpus: effectiveCorpus, plan_id: resolvedPlanId,
+              }).in('id', Array.from(matchIds))
+              if (bulkError) toast.error(`Could not apply to ${matchIds.size} other matching transaction${plural}: ${bulkError.message}`)
+              else toast.success(`Tagged as ${flatCode} — also applied to ${matchIds.size} other matching transaction${plural}`)
+            }
           }
         }
       }
@@ -946,7 +957,7 @@ function ReviewItem({ item, flats, residents, onSaved }: {
             {saveSender && (
               <div className="grid grid-cols-2 gap-2">
                 <input type="text" value={senderToken} onChange={e => setSenderToken(e.target.value)}
-                  className="ds-field text-xs" placeholder="sender ID" />
+                  className="ds-field text-xs" placeholder="sender ID (comma separated for multiple)" />
                 <select value={senderResidentId} onChange={e => setSenderResidentId(e.target.value)} className="ds-field text-xs">
                   <option value="">— select resident —</option>
                   {residents.filter(r => r.flat_id === selectedFlat?.id).map(r => (
