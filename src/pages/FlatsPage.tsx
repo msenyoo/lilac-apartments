@@ -908,6 +908,14 @@ function SenderMappingsTab({ onManageResident }: { onManageResident: () => void 
     },
   })
 
+  const { data: flatsList } = useQuery({
+    queryKey: ['flats-lite'],
+    queryFn: async () => {
+      const { data } = await supabase.from('flats').select('id,code').order('code')
+      return (data ?? []) as { id: string; code: string }[]
+    },
+  })
+
   const allUpiIds = useMemo(() => (residents ?? []).flatMap(r => r.upi_ids ?? []), [residents])
   const legacyMappings = useMemo(() => getLegacyMappings(allUpiIds), [allUpiIds])
 
@@ -918,6 +926,7 @@ function SenderMappingsTab({ onManageResident }: { onManageResident: () => void 
       <LegacyBacklog
         mappings={legacyMappings}
         residents={residents ?? []}
+        flats={flatsList ?? []}
         onConfirmed={() => qc.invalidateQueries({ queryKey: ['residents-for-mappings'] })}
         onTokenClick={setDrilldownToken}
       />
@@ -929,9 +938,10 @@ function SenderMappingsTab({ onManageResident }: { onManageResident: () => void 
   )
 }
 
-function LegacyBacklog({ mappings, residents, onConfirmed, onTokenClick }: {
+function LegacyBacklog({ mappings, residents, flats, onConfirmed, onTokenClick }: {
   mappings: LegacyMapping[]
   residents: (Resident & { flat: { code: string } | null })[]
+  flats: { id: string; code: string }[]
   onConfirmed: () => void
   onTokenClick: (token: string) => void
 }) {
@@ -953,32 +963,34 @@ function LegacyBacklog({ mappings, residents, onConfirmed, onTokenClick }: {
       </p>
       <div className="flex flex-col gap-2">
         {mappings.map(m => (
-          <LegacyMappingRow key={`${m.type}-${m.token}`} mapping={m} residents={residents} onConfirmed={onConfirmed} onTokenClick={onTokenClick} />
+          <LegacyMappingRow key={`${m.type}-${m.token}`} mapping={m} residents={residents} flats={flats} onConfirmed={onConfirmed} onTokenClick={onTokenClick} />
         ))}
       </div>
     </div>
   )
 }
 
-function LegacyMappingRow({ mapping, residents, onConfirmed, onTokenClick }: {
+function LegacyMappingRow({ mapping, residents, flats, onConfirmed, onTokenClick }: {
   mapping: LegacyMapping
   residents: (Resident & { flat: { code: string } | null })[]
+  flats: { id: string; code: string }[]
   onConfirmed: () => void
   onTokenClick: (token: string) => void
 }) {
-  const flatResidents = residents.filter(r => r.flat?.code === mapping.flatCode)
+  const [flatCode, setFlatCode] = useState(mapping.flatCode)
+  const flatResidents = residents.filter(r => r.flat?.code === flatCode)
   const [residentId, setResidentId] = useState('')
   const [saving, setSaving] = useState(false)
 
   const { data: conflicts } = useQuery({
-    queryKey: ['legacy-conflict', mapping.token, mapping.flatCode],
+    queryKey: ['legacy-conflict', mapping.token, flatCode],
     queryFn: async () => {
       const { data } = await supabase
         .from('transactions')
         .select('flat_code')
         .ilike('description', `%${mapping.token}%`)
         .not('flat_code', 'is', null)
-        .neq('flat_code', mapping.flatCode)
+        .neq('flat_code', flatCode)
         .neq('flat_code', 'UNKNOWN')
       return data ?? []
     },
@@ -1030,7 +1042,9 @@ function LegacyMappingRow({ mapping, residents, onConfirmed, onTokenClick }: {
         <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded text-xs font-bold ${mapping.type === 'UPI' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
           {mapping.type}
         </span>
-        <span className="font-semibold">{mapping.flatCode}</span>
+        <select value={flatCode} onChange={e => { setFlatCode(e.target.value); setResidentId('') }} className="ds-field w-full">
+          {flats.map(f => <option key={f.id} value={f.code}>{f.code}</option>)}
+        </select>
         <select value={residentId} onChange={e => setResidentId(e.target.value)} className="ds-field w-full">
           <option value="">— select resident —</option>
           {flatResidents.map(r => (
