@@ -961,6 +961,27 @@ function LegacyMappingRow({ mapping, residents, onConfirmed }: {
   const [residentId, setResidentId] = useState('')
   const [saving, setSaving] = useState(false)
 
+  const { data: conflicts } = useQuery({
+    queryKey: ['legacy-conflict', mapping.token, mapping.flatCode],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('transactions')
+        .select('flat_code')
+        .ilike('description', `%${mapping.token}%`)
+        .not('flat_code', 'is', null)
+        .neq('flat_code', mapping.flatCode)
+        .neq('flat_code', 'UNKNOWN')
+      return data ?? []
+    },
+  })
+
+  const conflictSummary = useMemo(() => {
+    if (!conflicts || conflicts.length === 0) return null
+    const counts = new Map<string, number>()
+    for (const c of conflicts) counts.set(c.flat_code!, (counts.get(c.flat_code!) ?? 0) + 1)
+    return Array.from(counts.entries()).map(([flat, count]) => `${count} for ${flat}`).join(', ')
+  }, [conflicts])
+
   async function handleConfirm() {
     if (!residentId) return
     setSaving(true)
@@ -1011,6 +1032,11 @@ function LegacyMappingRow({ mapping, residents, onConfirmed }: {
           {saving ? 'Saving…' : 'Confirm'}
         </button>
       </div>
+      {conflictSummary && (
+        <p className="text-xs text-amber-600 mt-1">
+          ⚠ Also appears on transactions tagged to a different flat — {conflictSummary}. Double-check before confirming.
+        </p>
+      )}
     </div>
   )
 }
