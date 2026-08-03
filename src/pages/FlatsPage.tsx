@@ -4,14 +4,14 @@ import { AgGridReact } from 'ag-grid-react'
 import type { ColDef } from 'ag-grid-community'
 import { Edit2, Ruler, UserMinus, UserPlus, Pencil, Trash2, Contact } from 'lucide-react'
 import { supabase, Flat, Resident } from '@/lib/supabase'
-import { formatINR } from '@/lib/tagger'
+import { formatINR, getLegacyMappings, LegacyMapping } from '@/lib/tagger'
 import { useRoleCtx } from '@/contexts/RoleContext'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog'
 import { toast } from 'sonner'
 
 
-type Tab = 'flats' | 'residents'
+type Tab = 'flats' | 'residents' | 'mappings'
 
 const RELATIONS = ['Self', 'Co-owner', 'Spouse', 'Parent', 'Child', 'Guardian', 'Other'] as const
 
@@ -23,7 +23,14 @@ function normalizePickedPhone(raw: string): string {
 }
 
 export default function FlatsPage() {
+  const { isAdmin } = useRoleCtx()
   const [tab, setTab] = useState<Tab>('flats')
+
+  const tabs: { key: Tab; label: string }[] = [
+    { key: 'flats', label: 'Flats' },
+    { key: 'residents', label: 'Residents' },
+    ...(isAdmin ? [{ key: 'mappings' as Tab, label: 'Sender Mappings' }] : []),
+  ]
 
   return (
     <div className="flex flex-col gap-5 fade-in">
@@ -34,7 +41,7 @@ export default function FlatsPage() {
 
 
       <div className="flex gap-1 rounded-xl p-1 w-fit" style={{ background: 'var(--ink-100)' }}>
-        {([{ key: 'flats', label: 'Flats' }, { key: 'residents', label: 'Residents' }] as { key: Tab; label: string }[]).map(({ key, label }) => (
+        {tabs.map(({ key, label }) => (
           <button key={key} onClick={() => setTab(key)}
             className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${tab === key ? 'bg-white shadow-sm' : ''}`}
             style={{ color: tab === key ? 'var(--ink-900)' : 'var(--ink-500)' }}>
@@ -45,6 +52,7 @@ export default function FlatsPage() {
 
       {tab === 'flats'     && <FlatsTab />}
       {tab === 'residents' && <ResidentsTab />}
+      {tab === 'mappings' && isAdmin && <SenderMappingsTab onManageResident={() => setTab('residents')} />}
     </div>
   )
 }
@@ -879,6 +887,118 @@ function Field({ label, value, onChange, placeholder, type = 'text' }: {
       <input type={type} value={value} onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
         className="ds-field w-full" />
+    </div>
+  )
+}
+
+// ── SENDER MAPPINGS TAB ──────────────────────────────────────
+function SenderMappingsTab({ onManageResident: _onManageResident }: { onManageResident: () => void }) {
+  const qc = useQueryClient()
+
+  const { data: residents, isLoading } = useQuery({
+    queryKey: ['residents-for-mappings'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('residents')
+        .select('id, name, type, relation, flat_id, is_active, upi_ids, flat:flat_id(code)')
+        .order('name')
+      return (data ?? []) as unknown as (Resident & { flat: { code: string } | null })[]
+    },
+  })
+
+  const allUpiIds = useMemo(() => (residents ?? []).flatMap(r => r.upi_ids ?? []), [residents])
+  const legacyMappings = useMemo(() => getLegacyMappings(allUpiIds), [allUpiIds])
+
+  if (isLoading) return <div className="h-64 animate-pulse rounded-[var(--ds-radius)]" style={{ background: 'var(--ink-100)' }} />
+
+  return (
+    <div className="flex flex-col gap-5">
+      <LegacyBacklog
+        mappings={legacyMappings}
+        residents={residents ?? []}
+        onConfirmed={() => qc.invalidateQueries({ queryKey: ['residents-for-mappings'] })}
+      />
+    </div>
+  )
+}
+
+function LegacyBacklog({ mappings, residents, onConfirmed }: {
+  mappings: LegacyMapping[]
+  residents: (Resident & { flat: { code: string } | null })[]
+  onConfirmed: () => void
+}) {
+  if (mappings.length === 0) {
+    return (
+      <div className="surface !p-6 text-sm" style={{ color: 'var(--ink-500)' }}>
+        No legacy mappings left to review.
+      </div>
+    )
+  }
+  return (
+    <div className="surface !p-4 flex flex-col gap-3">
+      <div className="flex items-center gap-2">
+        <h3 className="font-semibold">Legacy mappings to review</h3>
+        <span className="ds-badge-warn">{mappings.length} pending</span>
+      </div>
+      <p className="text-sm" style={{ color: 'var(--ink-500)' }}>
+        From the old hardcoded list — pick which resident each one belongs to.
+      </p>
+      <div className="flex flex-col gap-2">
+        {mappings.map(m => (
+          <LegacyMappingRow key={`${m.type}-${m.token}`} mapping={m} residents={residents} onConfirmed={onConfirmed} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function LegacyMappingRow({ mapping, residents, onConfirmed }: {
+  mapping: LegacyMapping
+  residents: (Resident & { flat: { code: string } | null })[]
+  onConfirmed: () => void
+}) {
+  const flatResidents = residents.filter(r => r.flat?.code === mapping.flatCode)
+  const [residentId, setResidentId] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  async function handleConfirm() {
+    if (!residentId) return
+    const token = mapping.token.toLowerCase()
+    const conflictOwner = residents.find(r => r.id !== residentId && (r.upi_ids ?? []).some(id => id.toLowerCase() === token))
+    if (conflictOwner) {
+      toast.error(`${mapping.token} is already saved for ${conflictOwner.name} (${conflictOwner.flat?.code ?? '—'}) — resolve that first`)
+      return
+    }
+    setSaving(true)
+    const resident = residents.find(r => r.id === residentId)
+    const merged = Array.from(new Set([...(resident?.upi_ids ?? []), token]))
+    const { error } = await supabase.from('residents').update({ upi_ids: merged }).eq('id', residentId)
+    setSaving(false)
+    if (error) { toast.error(error.message); return }
+    toast.success(`${mapping.token} saved for ${resident?.name}`)
+    onConfirmed()
+  }
+
+  return (
+    <div className="border-t hairline pt-2">
+      <div className="grid grid-cols-[1fr_60px_80px_1fr_auto] gap-2 items-center text-sm">
+        <span className="font-mono truncate">{mapping.token}</span>
+        <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded text-xs font-bold ${mapping.type === 'UPI' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
+          {mapping.type}
+        </span>
+        <span className="font-semibold">{mapping.flatCode}</span>
+        <select value={residentId} onChange={e => setResidentId(e.target.value)} className="ds-field w-full">
+          <option value="">— select resident —</option>
+          {flatResidents.map(r => (
+            <option key={r.id} value={r.id}>
+              {r.name} ({r.type}){!r.is_active ? ' — moved out' : ''} — {(r.upi_ids ?? []).length} ID(s)
+            </option>
+          ))}
+        </select>
+        <button onClick={handleConfirm} disabled={!residentId || saving} className="btn-primary text-xs px-3 py-1.5">
+          {saving ? 'Saving…' : 'Confirm'}
+        </button>
+      </div>
     </div>
   )
 }
