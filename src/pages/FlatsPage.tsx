@@ -896,13 +896,14 @@ function Field({ label, value, onChange, placeholder, type = 'text' }: {
 function SenderMappingsTab({ onManageResident }: { onManageResident: () => void }) {
   const qc = useQueryClient()
   const [drilldownToken, setDrilldownToken] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
 
   const { data: residents, isLoading } = useQuery({
     queryKey: ['residents-for-mappings'],
     queryFn: async () => {
       const { data } = await supabase
         .from('residents')
-        .select('id, name, type, relation, flat_id, is_active, upi_ids, flat:flat_id(code)')
+        .select('id, name, type, relation, phone, flat_id, is_active, upi_ids, flat:flat_id(code)')
         .order('name')
       return (data ?? []) as unknown as (Resident & { flat: { code: string } | null })[]
     },
@@ -919,18 +920,41 @@ function SenderMappingsTab({ onManageResident }: { onManageResident: () => void 
   const allUpiIds = useMemo(() => (residents ?? []).flatMap(r => r.upi_ids ?? []), [residents])
   const legacyMappings = useMemo(() => getLegacyMappings(allUpiIds), [allUpiIds])
 
+  const filteredLegacyMappings = useMemo(() => {
+    if (!search.trim()) return legacyMappings
+    const q = search.trim().toLowerCase()
+    return legacyMappings.filter(m => m.token.toLowerCase().includes(q) || m.flatCode.toLowerCase().includes(q))
+  }, [legacyMappings, search])
+
+  const filteredResidentsForTable = useMemo(() => {
+    if (!search.trim()) return residents ?? []
+    const q = search.trim().toLowerCase()
+    return (residents ?? []).filter(r =>
+      (r.flat?.code ?? '').toLowerCase().includes(q) ||
+      (r.phone ?? '').toLowerCase().includes(q) ||
+      (r.upi_ids ?? []).some(id => id.toLowerCase().includes(q))
+    )
+  }, [residents, search])
+
   if (isLoading) return <div className="h-64 animate-pulse rounded-[var(--ds-radius)]" style={{ background: 'var(--ink-100)' }} />
 
   return (
     <div className="flex flex-col gap-5">
+      <input
+        type="text"
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        placeholder="Search by flat, phone, or sender ID…"
+        className="ds-field w-full max-w-sm"
+      />
       <LegacyBacklog
-        mappings={legacyMappings}
+        mappings={filteredLegacyMappings}
         residents={residents ?? []}
         flats={flatsList ?? []}
         onConfirmed={() => qc.invalidateQueries({ queryKey: ['residents-for-mappings'] })}
         onTokenClick={setDrilldownToken}
       />
-      <AllFlatsMappings residents={residents ?? []} onManage={onManageResident} onTokenClick={setDrilldownToken} />
+      <AllFlatsMappings residents={filteredResidentsForTable} onManage={onManageResident} onTokenClick={setDrilldownToken} />
       {drilldownToken && (
         <SenderDrilldownDialog token={drilldownToken} onClose={() => setDrilldownToken(null)} />
       )}
