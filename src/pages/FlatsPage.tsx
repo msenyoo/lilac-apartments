@@ -5,7 +5,7 @@ import type { ColDef } from 'ag-grid-community'
 import { Edit2, Ruler, UserMinus, UserPlus, Pencil, Trash2, Contact } from 'lucide-react'
 import { supabase, Flat, Resident, Transaction } from '@/lib/supabase'
 import { formatDateDMY } from '@/lib/date'
-import { formatINR, getLegacyMappings, LegacyMapping } from '@/lib/tagger'
+import { formatINR, getLegacyMappings, LegacyMapping, guessSenderIdType } from '@/lib/tagger'
 import { useRoleCtx } from '@/contexts/RoleContext'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog'
@@ -333,29 +333,40 @@ function PersonRow({ p, canSeePhone, isAdmin, onEdit, onDelete, dateRange }: {
   dateRange?: string
 }) {
   return (
-    <div className="flex items-center justify-between text-sm gap-2">
-      <div className="flex items-center gap-1.5 min-w-0">
-        <span className="font-medium truncate" style={dateRange ? { color: 'var(--ink-500)' } : undefined}>{p.name}</span>
-        <span className="text-[10px] px-1.5 py-0.5 rounded-full shrink-0"
-          style={{ background: 'var(--ink-100)', color: 'var(--ink-500)' }}>{p.relation}</span>
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center justify-between text-sm gap-2">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="font-medium truncate" style={dateRange ? { color: 'var(--ink-500)' } : undefined}>{p.name}</span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded-full shrink-0"
+            style={{ background: 'var(--ink-100)', color: 'var(--ink-500)' }}>{p.relation}</span>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {dateRange
+            ? <span className="text-[11px]" style={{ color: 'var(--ink-400)' }}>{dateRange}</span>
+            : (canSeePhone && p.phone && (
+                <a href={`tel:${p.phone}`} className="text-[12px] font-medium" style={{ color: 'var(--ink-700)' }}>{p.phone}</a>
+              ))}
+          {isAdmin && (
+            <>
+              <button onClick={() => onEdit(p)} className="text-slate-400 hover:text-slate-700" aria-label={`Edit ${p.name}`}>
+                <Pencil size={12} />
+              </button>
+              <button onClick={() => onDelete(p)} className="text-slate-400 hover:text-red-600" aria-label={`Delete ${p.name}`}>
+                <Trash2 size={12} />
+              </button>
+            </>
+          )}
+        </div>
       </div>
-      <div className="flex items-center gap-2 shrink-0">
-        {dateRange
-          ? <span className="text-[11px]" style={{ color: 'var(--ink-400)' }}>{dateRange}</span>
-          : (canSeePhone && p.phone && (
-              <a href={`tel:${p.phone}`} className="text-[12px] font-medium" style={{ color: 'var(--ink-700)' }}>{p.phone}</a>
-            ))}
-        {isAdmin && (
-          <>
-            <button onClick={() => onEdit(p)} className="text-slate-400 hover:text-slate-700" aria-label={`Edit ${p.name}`}>
-              <Pencil size={12} />
-            </button>
-            <button onClick={() => onDelete(p)} className="text-slate-400 hover:text-red-600" aria-label={`Delete ${p.name}`}>
-              <Trash2 size={12} />
-            </button>
-          </>
-        )}
-      </div>
+      {isAdmin && (p.upi_ids ?? []).length > 0 && (
+        <div className="flex flex-wrap gap-1 pl-0.5">
+          {(p.upi_ids ?? []).map(id => (
+            <span key={id} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700">
+              <span className="font-bold">{guessSenderIdType(id)}</span> {id}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

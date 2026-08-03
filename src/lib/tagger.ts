@@ -156,6 +156,13 @@ export function guessSenderToken(description: string): string {
   return parts.length > 0 ? parts[0] : description.trim()
 }
 
+// Best-effort type label for an already-saved sender ID, for display only. Bank-transfer
+// sender names always contain a space when saved (e.g. "senthilkumar m"); UPI handles and
+// phone-numbers-as-UPI-handles never do. Not stored — inferred fresh each render.
+export function guessSenderIdType(id: string): 'UPI' | 'NEFT' {
+  return id.trim().includes(' ') ? 'NEFT' : 'UPI'
+}
+
 // ── FISCAL HELPERS ────────────────────────────────────────────
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
