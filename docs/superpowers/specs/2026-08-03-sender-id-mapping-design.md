@@ -131,7 +131,7 @@ matching the existing precedent that UPI/sender-identity data is admin-only
 - **Duplicate token across two residents**: if a token being saved already exists on a
   *different* resident, block the write and show an inline error naming the conflicting
   resident/flat — this is a data-quality signal (or a genuine two-flat-sender case, see
-  Non-goals) that needs a human decision, not a silent overwrite.
+  Out of scope) that needs a human decision, not a silent overwrite.
 - **Bulk-apply scope**: limited to rows currently in the review queue at the moment of save; a
   row that gets imported later with the same sender resolves via the now-updated
   `dynamicUpiMap` on its own, not via this bulk-apply path.
