@@ -963,13 +963,25 @@ function LegacyMappingRow({ mapping, residents, onConfirmed }: {
 
   async function handleConfirm() {
     if (!residentId) return
+    setSaving(true)
     const token = mapping.token.toLowerCase()
-    const conflictOwner = residents.find(r => r.id !== residentId && (r.upi_ids ?? []).some(id => id.toLowerCase() === token))
+
+    // Check for conflicts against a fresh read, not the `residents` prop — that's a
+    // snapshot from whenever this tab last mounted (up to 5min stale, per the app's
+    // default queryClient staleTime) and can miss tokens saved elsewhere since.
+    const { data: conflictRows, error: conflictError } = await supabase
+      .from('residents')
+      .select('id, name, upi_ids, flat:flat_id(code)')
+      .neq('id', residentId)
+    if (conflictError) { setSaving(false); toast.error(conflictError.message); return }
+    const conflicts = (conflictRows ?? []) as unknown as { id: string; name: string; upi_ids: string[]; flat: { code: string } | null }[]
+    const conflictOwner = conflicts.find(r => (r.upi_ids ?? []).some(id => id.toLowerCase() === token))
     if (conflictOwner) {
+      setSaving(false)
       toast.error(`${mapping.token} is already saved for ${conflictOwner.name} (${conflictOwner.flat?.code ?? '—'}) — resolve that first`)
       return
     }
-    setSaving(true)
+
     const resident = residents.find(r => r.id === residentId)
     const merged = Array.from(new Set([...(resident?.upi_ids ?? []), token]))
     const { error } = await supabase.from('residents').update({ upi_ids: merged }).eq('id', residentId)
