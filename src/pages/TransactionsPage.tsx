@@ -13,6 +13,7 @@ import { supabase, Transaction, ReviewEntry } from '@/lib/supabase'
 import {
   parseStatement, tagTransaction, getFiscalLabel,
   getFiscalYear, getFiscalMonth, bankDateToISO, bankTimeTo24h, formatINR, FLAT_CODES, INCOME_CATS,
+  guessSenderToken,
 } from '@/lib/tagger'
 import { formatDateDMY } from '@/lib/date'
 import { useRoleCtx } from '@/contexts/RoleContext'
@@ -491,6 +492,13 @@ function ReviewTab() {
       return data ?? []
     },
   })
+  const { data: residents } = useQuery({
+    queryKey: ['residents-active-lite'],
+    queryFn: async () => {
+      const { data } = await supabase.from('residents').select('id,name,type,flat_id,upi_ids').eq('is_active', true)
+      return (data ?? []) as { id: string; name: string; type: string; flat_id: string; upi_ids: string[] }[]
+    },
+  })
 
   if (isLoading) return <div className="flex flex-col gap-2">{[...Array(5)].map((_, i) => <div key={i} className="h-16 animate-pulse rounded-[var(--ds-radius)]" style={{ background: 'var(--ink-100)' }} />)}</div>
   if (!items?.length) return (
@@ -519,7 +527,7 @@ function ReviewTab() {
       </p>
       <div className="grid gap-2 lg:grid-cols-2">
         {items.map(item => (
-          <ReviewItem key={item.id} item={item} flats={flats ?? []} onSaved={() => qc.invalidateQueries()} />
+          <ReviewItem key={item.id} item={item} flats={flats ?? []} residents={residents ?? []} onSaved={() => qc.invalidateQueries()} />
         ))}
       </div>
       {bulkOpen && <BulkRecordDialog open={bulkOpen} onClose={() => setBulkOpen(false)} />}
@@ -696,8 +704,13 @@ function BulkRecordDialog({ open, onClose }: { open: boolean; onClose: () => voi
   )
 }
 
-function ReviewItem({ item, flats, onSaved }: { item: ReviewEntry; flats: any[]; onSaved: () => void }) {
-  const { canWrite } = useRoleCtx()
+function ReviewItem({ item, flats, residents, onSaved }: {
+  item: ReviewEntry
+  flats: any[]
+  residents: { id: string; name: string; type: string; flat_id: string; upi_ids: string[] }[]
+  onSaved: () => void
+}) {
+  const { canWrite, isAdmin } = useRoleCtx()
   const [flatCode, setFlatCode]   = useState('')
   const [category, setCategory]   = useState('Maintenance')
   const [corpus, setCorpus]       = useState<'YES' | 'NO'>('NO')
@@ -705,6 +718,9 @@ function ReviewItem({ item, flats, onSaved }: { item: ReviewEntry; flats: any[];
   const [saving, setSaving]       = useState(false)
   const [saved, setSaved]         = useState(false)
   const [showSplit, setShowSplit] = useState(false)
+  const [saveSender, setSaveSender]         = useState(false)
+  const [senderToken, setSenderToken]       = useState(() => guessSenderToken(item.description))
+  const [senderResidentId, setSenderResidentId] = useState('')
 
   const { data: activePlans = [] } = useQuery({
     queryKey: ['active-corpus-plans'],
@@ -757,6 +773,17 @@ function ReviewItem({ item, flats, onSaved }: { item: ReviewEntry; flats: any[];
       plan_id: resolvedPlanId,
       row_type: 'Normal',
     }).eq('id', item.id)
+    if (!error && saveSender && senderResidentId && senderToken.trim()) {
+      const token = senderToken.trim().toLowerCase()
+      const conflictOwner = residents.find(r => r.id !== senderResidentId && (r.upi_ids ?? []).some(id => id.toLowerCase() === token))
+      if (conflictOwner) {
+        toast.error(`${senderToken.trim()} is already saved for ${conflictOwner.name} — not saved again`)
+      } else {
+        const resident = residents.find(r => r.id === senderResidentId)
+        const merged = Array.from(new Set([...(resident?.upi_ids ?? []), token]))
+        await supabase.from('residents').update({ upi_ids: merged }).eq('id', senderResidentId)
+      }
+    }
     setSaving(false)
     if (!error) { setSaved(true); setTimeout(onSaved, 400) }
   }
@@ -858,6 +885,27 @@ function ReviewItem({ item, flats, onSaved }: { item: ReviewEntry; flats: any[];
           <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700">
             This looks like <strong>{suggestedMonths} months</strong> of maintenance (
             {suggestedMonths} × {formatINR(selectedFlat.maintenance_amt)})
+          </div>
+        )}
+
+        {isAdmin && isFlat && (
+          <div className="flex flex-col gap-2 border-t hairline pt-2">
+            <label className="flex items-center gap-2 text-xs">
+              <input type="checkbox" checked={saveSender} onChange={e => setSaveSender(e.target.checked)} />
+              Also save this sender ID for a resident of {flatCode}
+            </label>
+            {saveSender && (
+              <div className="grid grid-cols-2 gap-2">
+                <input type="text" value={senderToken} onChange={e => setSenderToken(e.target.value)}
+                  className="ds-field text-xs" placeholder="sender ID" />
+                <select value={senderResidentId} onChange={e => setSenderResidentId(e.target.value)} className="ds-field text-xs">
+                  <option value="">— select resident —</option>
+                  {residents.filter(r => r.flat_id === selectedFlat?.id).map(r => (
+                    <option key={r.id} value={r.id}>{r.name} ({r.type})</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         )}
 
