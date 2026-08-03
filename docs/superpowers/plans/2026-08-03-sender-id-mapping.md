@@ -6,7 +6,9 @@
 with a reviewable, DB-backed system: a new "Sender Mappings" tab on the Flats page to migrate
 the ~50 legacy entries and browse current mappings with drill-down into matching transaction
 history, plus an opt-in capture control in the existing Review-tab flow for new mappings going
-forward.
+forward. Tasks 8–10 were added mid-execution (2026-08-03, user request) to let a legacy entry's
+flat be overridden before confirming, add a search box to the Sender Mappings page, and surface
+sender IDs (with a best-effort type label) in the existing Flats-tab People card.
 
 **Architecture:** No new tables/columns — everything rides on the existing `residents.upi_ids`
 array, `residents.is_active`, `flats`, and `transactions.description`. Follows this repo's
@@ -1282,6 +1284,329 @@ same flat/category — not just the one you directly edited. Confirm a transacti
 git add src/pages/TransactionsPage.tsx
 git commit -m "$(cat <<'EOF'
 feat(transactions): bulk-apply sender ID resolution to matching review rows
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01AU3snjDyBkM6LRmBYcUwrc
+EOF
+)"
+```
+
+---
+
+### Task 8: Flat override in legacy backlog rows
+
+**Files:**
+- Modify: `src/pages/FlatsPage.tsx` — `SenderMappingsTab`, `LegacyBacklog`, `LegacyMappingRow`
+  (all built in Tasks 2/3/5)
+
+**Interfaces:**
+- Consumes: the `flats` table (`id, code`), already queried elsewhere in this file.
+- Produces: no new exports; `LegacyMappingRow` gains an editable flat selection instead of
+  being locked to `mapping.flatCode`.
+
+**Why:** the hardcoded legacy map's flat assignment for a token isn't always right (that's the
+whole reason for the conflict warning in Task 3) — this lets an admin correct it at confirm
+time instead of only being able to pick among the (possibly wrong) flat's residents.
+
+- [ ] **Step 1: Fetch flats in `SenderMappingsTab` and pass down**
+
+In `SenderMappingsTab`, add a flats query alongside the existing `residents` query:
+
+```tsx
+  const { data: flatsList } = useQuery({
+    queryKey: ['flats-lite'],
+    queryFn: async () => {
+      const { data } = await supabase.from('flats').select('id,code').order('code')
+      return (data ?? []) as { id: string; code: string }[]
+    },
+  })
+```
+
+Pass it to `LegacyBacklog` by adding a `flats={flatsList ?? []}` prop to the existing
+`<LegacyBacklog ... />` call.
+
+- [ ] **Step 2: Thread `flats` through `LegacyBacklog` to `LegacyMappingRow`**
+
+Add a `flats: { id: string; code: string }[]` field to `LegacyBacklog`'s props type, and pass
+`flats={flats}` on its `<LegacyMappingRow ... />` call. Add the same field to
+`LegacyMappingRow`'s props type.
+
+- [ ] **Step 3: Make the flat selectable in `LegacyMappingRow`**
+
+Add local state for the (possibly overridden) flat, seeded from the map's original suggestion:
+
+```tsx
+  const [flatCode, setFlatCode] = useState(mapping.flatCode)
+```
+
+Change the `flatResidents` derivation from filtering on `mapping.flatCode` to filtering on the
+new `flatCode` state variable instead (same filter, different source):
+
+```tsx
+  const flatResidents = residents.filter(r => r.flat?.code === flatCode)
+```
+
+Change the conflict-check query (added in Task 3) to key off and filter against the current
+`flatCode` state instead of `mapping.flatCode`:
+
+```tsx
+  const { data: conflicts } = useQuery({
+    queryKey: ['legacy-conflict', mapping.token, flatCode],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('transactions')
+        .select('flat_code')
+        .ilike('description', `%${mapping.token}%`)
+        .not('flat_code', 'is', null)
+        .neq('flat_code', flatCode)
+        .neq('flat_code', 'UNKNOWN')
+      return data ?? []
+    },
+  })
+```
+
+Replace the static flat display (`<span className="font-semibold">{mapping.flatCode}</span>`)
+with an editable select that resets the chosen resident whenever the flat changes (since the
+old resident selection likely doesn't belong to the newly chosen flat):
+
+```tsx
+        <select value={flatCode} onChange={e => { setFlatCode(e.target.value); setResidentId('') }} className="ds-field w-full">
+          {flats.map(f => <option key={f.id} value={f.code}>{f.code}</option>)}
+        </select>
+```
+
+The grid column count is unchanged (still 5 columns: token, type badge, flat select, resident
+select, confirm button) — you're replacing the static flat `<span>` with a `<select>` in the
+same grid cell, not adding a new one.
+
+- [ ] **Step 4: Type-check**
+
+Run: `npx tsc --noEmit`
+Expected: no errors.
+
+- [ ] **Step 5: Manual verification**
+
+In the running app, open a legacy backlog row. Confirm the flat column is now a dropdown
+pre-selected to the map's original flat. Change it to a different flat: confirm the resident
+dropdown repopulates with that flat's residents (and clears the previous selection), and the
+conflict warning (if any) re-evaluates against the newly selected flat. Confirm with the
+overridden flat + a resident of that flat: confirm the saved token lands on the chosen
+resident regardless of what the original hardcoded map said.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/pages/FlatsPage.tsx
+git commit -m "$(cat <<'EOF'
+feat(flats): allow overriding the flat on a legacy sender mapping
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01AU3snjDyBkM6LRmBYcUwrc
+EOF
+)"
+```
+
+---
+
+### Task 9: Search on the Sender Mappings page
+
+**Files:**
+- Modify: `src/pages/FlatsPage.tsx` — `SenderMappingsTab` (residents query, filtering),
+  `LegacyBacklog`/`AllFlatsMappings` call sites (Tasks 2/4)
+
+**Interfaces:**
+- Consumes: nothing new.
+- Produces: no new exports; `SenderMappingsTab` now filters both the legacy backlog and the
+  all-flats table it renders, by one shared search box.
+
+- [ ] **Step 1: Add `phone` to the residents query**
+
+`SenderMappingsTab`'s existing residents query selects `id, name, type, relation, flat_id,
+is_active, upi_ids, flat:flat_id(code)` — add `phone` to that select list, since search-by-phone
+needs it:
+
+```tsx
+        .select('id, name, type, relation, phone, flat_id, is_active, upi_ids, flat:flat_id(code)')
+```
+
+- [ ] **Step 2: Add search state and filtering**
+
+In `SenderMappingsTab`, add:
+
+```tsx
+  const [search, setSearch] = useState('')
+
+  const filteredLegacyMappings = useMemo(() => {
+    if (!search.trim()) return legacyMappings
+    const q = search.trim().toLowerCase()
+    return legacyMappings.filter(m => m.token.toLowerCase().includes(q) || m.flatCode.toLowerCase().includes(q))
+  }, [legacyMappings, search])
+
+  const filteredResidentsForTable = useMemo(() => {
+    if (!search.trim()) return residents ?? []
+    const q = search.trim().toLowerCase()
+    return (residents ?? []).filter(r =>
+      (r.flat?.code ?? '').toLowerCase().includes(q) ||
+      (r.phone ?? '').toLowerCase().includes(q) ||
+      (r.upi_ids ?? []).some(id => id.toLowerCase().includes(q))
+    )
+  }, [residents, search])
+```
+
+Note: `LegacyBacklog` still receives the full, unfiltered `residents` prop (it needs every
+resident of a flat to populate its own picker correctly) — only the `mappings` prop passed to
+it gets filtered. `AllFlatsMappings` receives the filtered residents list, since it's a pure
+display table.
+
+- [ ] **Step 3: Wire the filtered data in and add the input**
+
+Change the `<LegacyBacklog ... />` call's `mappings` prop from `legacyMappings` to
+`filteredLegacyMappings`. Change the `<AllFlatsMappings ... />` call's `residents` prop from
+`residents ?? []` to `filteredResidentsForTable`.
+
+Add the search input near the top of `SenderMappingsTab`'s returned JSX, before
+`<LegacyBacklog ... />`:
+
+```tsx
+      <input
+        type="text"
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        placeholder="Search by flat, phone, or sender ID…"
+        className="ds-field w-full max-w-sm"
+      />
+```
+
+- [ ] **Step 4: Type-check**
+
+Run: `npx tsc --noEmit`
+Expected: no errors.
+
+- [ ] **Step 5: Manual verification**
+
+In the running app, on the Sender Mappings tab, type a flat code (e.g. `AF1`) into the search
+box: confirm both the legacy backlog and the all-flats table narrow to matching rows only.
+Clear it, then search a resident's phone number: confirm only that resident's row remains in
+the all-flats table (legacy backlog is unaffected, since it has no phone data yet). Search a
+sender ID substring: confirm both sections filter correctly. Clear the box: confirm both
+sections return to showing everything.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/pages/FlatsPage.tsx
+git commit -m "$(cat <<'EOF'
+feat(flats): search by flat, phone, or sender ID on the Sender Mappings page
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01AU3snjDyBkM6LRmBYcUwrc
+EOF
+)"
+```
+
+---
+
+### Task 10: Sender IDs (with best-effort type) in the Flats-tab People card
+
+**Files:**
+- Modify: `src/lib/tagger.ts` (add `guessSenderIdType`), `src/pages/FlatsPage.tsx` (import,
+  `PersonRow`)
+
+**Interfaces:**
+- Consumes: nothing new from other tasks.
+- Produces: `export function guessSenderIdType(id: string): 'UPI' | 'NEFT'` in `tagger.ts`.
+
+**Why:** the Flats tab's flat-detail dialog already has a People card (`PeopleCard`/
+`PersonRow`) showing each resident's name/relation/phone — this surfaces their saved sender
+IDs there too, so an admin doesn't have to go to the Sender Mappings tab or the Residents grid
+to see what's on file for a specific flat. The DB has no per-ID type column (a deliberate
+non-goal of this plan — see Global Constraints), so type is inferred at display time only.
+
+- [ ] **Step 1: Add `guessSenderIdType` to `tagger.ts`**
+
+In `src/lib/tagger.ts`, after `guessSenderToken` (added in Task 1), add:
+
+```ts
+// Best-effort type label for an already-saved sender ID, for display only. Bank-transfer
+// sender names always contain a space when saved (e.g. "senthilkumar m"); UPI handles and
+// phone-numbers-as-UPI-handles never do. Not stored — inferred fresh each render.
+export function guessSenderIdType(id: string): 'UPI' | 'NEFT' {
+  return id.trim().includes(' ') ? 'NEFT' : 'UPI'
+}
+```
+
+- [ ] **Step 2: Import it in `FlatsPage.tsx`**
+
+Extend the existing `@/lib/tagger` import (already importing `formatINR, getLegacyMappings,
+LegacyMapping, guessSenderToken` by this point in the plan) to also include
+`guessSenderIdType`.
+
+- [ ] **Step 3: Show sender ID chips in `PersonRow`**
+
+`PersonRow` currently returns a single-level flex row. Wrap the existing row content in an
+outer `flex flex-col gap-1` container, and add a chips row below it, gated on `isAdmin` (this
+component already receives `isAdmin` as a prop) and only when the resident has at least one
+saved ID:
+
+```tsx
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center justify-between text-sm gap-2">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="font-medium truncate" style={dateRange ? { color: 'var(--ink-500)' } : undefined}>{p.name}</span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded-full shrink-0"
+            style={{ background: 'var(--ink-100)', color: 'var(--ink-500)' }}>{p.relation}</span>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {dateRange
+            ? <span className="text-[11px]" style={{ color: 'var(--ink-400)' }}>{dateRange}</span>
+            : (canSeePhone && p.phone && (
+                <a href={`tel:${p.phone}`} className="text-[12px] font-medium" style={{ color: 'var(--ink-700)' }}>{p.phone}</a>
+              ))}
+          {isAdmin && (
+            <>
+```
+
+(keep the rest of the existing admin edit/delete buttons exactly as they are — this is only
+showing where the wrapping `<div>` opens; the brief is not asking you to touch the
+edit/delete buttons themselves)
+
+After the existing row's closing `</div>` (the one that currently closes the whole
+`PersonRow` return), add the new chips block and the new wrapping `</div>`:
+
+```tsx
+      {isAdmin && (p.upi_ids ?? []).length > 0 && (
+        <div className="flex flex-wrap gap-1 pl-0.5">
+          {(p.upi_ids ?? []).map(id => (
+            <span key={id} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700">
+              <span className="font-bold">{guessSenderIdType(id)}</span> {id}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+```
+
+- [ ] **Step 4: Type-check**
+
+Run: `npx tsc --noEmit`
+Expected: no errors.
+
+- [ ] **Step 5: Manual verification**
+
+In the running app, open a flat's detail dialog (Flats tab → click a row) for a flat whose
+resident has at least one saved sender ID. Confirm chips appear under that resident's name
+with a `UPI` or `NEFT` label matching the ID's shape (a name with a space → `NEFT`, a handle
+or number with no space → `UPI`). Confirm the chips are absent for a non-admin login, and
+absent for a resident with no saved IDs.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/lib/tagger.ts src/pages/FlatsPage.tsx
+git commit -m "$(cat <<'EOF'
+feat(flats): show sender IDs with a best-effort type label in the People card
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01AU3snjDyBkM6LRmBYcUwrc
