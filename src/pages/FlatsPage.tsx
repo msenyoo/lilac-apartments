@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AgGridReact } from 'ag-grid-react'
 import type { ColDef } from 'ag-grid-community'
-import { Edit2, Ruler, UserMinus, UserPlus, Pencil, Trash2, Contact } from 'lucide-react'
+import { Edit2, Ruler, UserMinus, UserPlus, Pencil, Trash2, Contact, X } from 'lucide-react'
 import { supabase, Flat, Resident, Transaction } from '@/lib/supabase'
 import { formatDateDMY } from '@/lib/date'
 import { formatINR, getLegacyMappings, LegacyMapping, guessSenderIdType } from '@/lib/tagger'
@@ -951,13 +951,26 @@ function SenderMappingsTab({ onManageResident }: { onManageResident: () => void 
 
   return (
     <div className="flex flex-col gap-5">
-      <input
-        type="text"
-        value={search}
-        onChange={e => setSearch(e.target.value)}
-        placeholder="Search by flat, phone, or sender ID…"
-        className="ds-field w-full max-w-sm"
-      />
+      <div className="relative w-full max-w-sm">
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search by flat, phone, or sender ID…"
+          className="ds-field w-full"
+          style={{ paddingRight: search ? '2rem' : undefined }}
+        />
+        {search && (
+          <button
+            onClick={() => setSearch('')}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 hover:opacity-70"
+            style={{ color: 'var(--ink-400)' }}
+            aria-label="Clear search"
+          >
+            <X size={14} />
+          </button>
+        )}
+      </div>
       <LegacyBacklog
         mappings={filteredLegacyMappings}
         totalCount={legacyMappings.length}
@@ -966,7 +979,12 @@ function SenderMappingsTab({ onManageResident }: { onManageResident: () => void 
         onConfirmed={() => qc.invalidateQueries({ queryKey: ['residents-for-mappings'] })}
         onTokenClick={setDrilldownToken}
       />
-      <AllFlatsMappings residents={filteredResidentsForTable} onManage={onManageResident} onTokenClick={setDrilldownToken} />
+      <AllFlatsMappings
+        residents={filteredResidentsForTable}
+        onManage={onManageResident}
+        onTokenClick={setDrilldownToken}
+        onRemoved={() => qc.invalidateQueries({ queryKey: ['residents-for-mappings'] })}
+      />
       {drilldownToken && (
         <SenderDrilldownDialog token={drilldownToken} onClose={() => setDrilldownToken(null)} />
       )}
@@ -1109,11 +1127,28 @@ function LegacyMappingRow({ mapping, residents, flats, onConfirmed, onTokenClick
   )
 }
 
-function AllFlatsMappings({ residents, onManage, onTokenClick }: {
+function AllFlatsMappings({ residents, onManage, onTokenClick, onRemoved }: {
   residents: (Resident & { flat: { code: string } | null })[]
   onManage: () => void
   onTokenClick: (token: string) => void
+  onRemoved: () => void
 }) {
+  const [removing, setRemoving] = useState<{ residentId: string; residentName: string; token: string } | null>(null)
+  const [removeSaving, setRemoveSaving] = useState(false)
+
+  async function handleRemove() {
+    if (!removing) return
+    setRemoveSaving(true)
+    const resident = residents.find(r => r.id === removing.residentId)
+    const next = (resident?.upi_ids ?? []).filter(id => id !== removing.token)
+    const { error } = await supabase.from('residents').update({ upi_ids: next }).eq('id', removing.residentId)
+    setRemoveSaving(false)
+    if (error) { toast.error(error.message); return }
+    toast.success(`${removing.token} removed from ${removing.residentName}`)
+    setRemoving(null)
+    onRemoved()
+  }
+
   const grouped = useMemo(() => {
     const withIds = residents.filter(r => (r.upi_ids ?? []).length > 0)
     const byFlat = new Map<string, typeof withIds>()
@@ -1151,10 +1186,17 @@ function AllFlatsMappings({ residents, onManage, onTokenClick }: {
                 {flatResidents.map(r => (
                   <div key={r.id} className="flex flex-wrap items-center gap-1">
                     {(r.upi_ids ?? []).map(id => (
-                      <button key={id} onClick={() => onTokenClick(id)}
-                        className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium hover:underline ${r.is_active ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>
-                        {id}
-                      </button>
+                      <span key={id}
+                        className={`inline-flex items-center rounded text-xs font-medium overflow-hidden ${r.is_active ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>
+                        <button onClick={() => onTokenClick(id)} className="pl-2 pr-1 py-0.5 hover:underline">
+                          {id}
+                        </button>
+                        <button onClick={() => setRemoving({ residentId: r.id, residentName: r.name, token: id })}
+                          className="pl-0.5 pr-1.5 py-0.5 hover:bg-red-100 hover:text-red-700"
+                          aria-label={`Remove ${id} from ${r.name}`}>
+                          <Trash2 size={10} />
+                        </button>
+                      </span>
                     ))}
                     <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${r.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
                       {r.is_active ? 'Active' : 'Archived'}
@@ -1165,6 +1207,26 @@ function AllFlatsMappings({ residents, onManage, onTokenClick }: {
             </div>
           ))}
         </div>
+      )}
+
+      {removing && (
+        <AlertDialog open onOpenChange={v => { if (!v) setRemoving(null) }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Remove sender ID?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Remove <strong>{removing.token}</strong> from {removing.residentName}? Future imports from
+                this sender will land in Review again until it's re-saved.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setRemoving(null)} disabled={removeSaving}>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleRemove} disabled={removeSaving} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                {removeSaving ? 'Removing…' : 'Remove'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       )}
     </div>
   )
