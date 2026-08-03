@@ -29,6 +29,13 @@ type Tab = 'upload' | 'review' | 'all'
 
 const EXPENSE_CATS = ['SALARY','EB','CIVIL','SEWAGE','LIFT SERVICE','LIFT','INTERNET','EXPENSES','FD','CCTV/MOTOR']
 
+// A sender ID shorter than this is a fragment, not an identifier — bulk-applying on it would
+// sweep in unrelated review rows, so the capture flow saves the ID but skips the bulk step.
+const MIN_BULK_APPLY_TOKEN_LEN = 4
+
+// `%` and `_` are LIKE wildcards; a sender ID containing one must match literally.
+const escapeLike = (s: string) => s.replace(/[\\%_]/g, m => '\\' + m)
+
 // ── MAIN PAGE ─────────────────────────────────────────────────
 export default function TransactionsPage() {
   const [params] = useSearchParams()
@@ -774,28 +781,55 @@ function ReviewItem({ item, flats, residents, onSaved }: {
       row_type: 'Normal',
     }).eq('id', item.id)
     if (!error && saveSender && senderResidentId && senderToken.trim()) {
-      const token = senderToken.trim().toLowerCase()
-      const conflictOwner = residents.find(r => r.id !== senderResidentId && (r.upi_ids ?? []).some(id => id.toLowerCase() === token))
-      if (conflictOwner) {
-        toast.error(`${senderToken.trim()} is already saved for ${conflictOwner.name} — not saved again`)
+      const rawToken = senderToken.trim()
+      const token = rawToken.toLowerCase()
+
+      // Check duplicates against a fresh, unfiltered read rather than the `residents` prop —
+      // that prop is active-only and up to 5min stale, so it can miss a token already held by
+      // an archived resident. Mirrors LegacyMappingRow.handleConfirm in FlatsPage.
+      const { data: conflictRows, error: conflictError } = await supabase
+        .from('residents')
+        .select('id, name, upi_ids')
+        .neq('id', senderResidentId)
+      const conflictOwner = (conflictRows ?? []).find(
+        r => ((r.upi_ids ?? []) as string[]).some(id => id.toLowerCase() === token))
+
+      if (conflictError) {
+        toast.error(`${rawToken} not saved — could not check for duplicates: ${conflictError.message}`)
+      } else if (conflictOwner) {
+        toast.error(`${rawToken} is already saved for ${conflictOwner.name} — not saved again`)
       } else {
         const resident = residents.find(r => r.id === senderResidentId)
         const merged = Array.from(new Set([...(resident?.upi_ids ?? []), token]))
-        await supabase.from('residents').update({ upi_ids: merged }).eq('id', senderResidentId)
+        const { error: residentError } = await supabase
+          .from('residents').update({ upi_ids: merged }).eq('id', senderResidentId)
 
-        const { data: matches } = await supabase
-          .from('transactions')
-          .select('id')
-          .eq('flat_code', 'UNKNOWN')
-          .ilike('description', `%${token}%`)
-          .neq('id', item.id)
-        if (matches && matches.length > 0) {
-          await supabase.from('transactions').update({
-            flat_code: flatCode, flat_id: flatId,
-            category: isFlat ? category : flatCode,
-            corpus: effectiveCorpus, plan_id: resolvedPlanId, row_type: 'Normal',
-          }).in('id', matches.map(m => m.id))
-          toast.success(`Tagged as ${flatCode} — also applied to ${matches.length} other matching transaction${matches.length > 1 ? 's' : ''}`)
+        if (residentError) {
+          toast.error(`${rawToken} not saved: ${residentError.message}`)
+        } else if (token.length >= MIN_BULK_APPLY_TOKEN_LEN) {
+          // Only rows still in the review queue (v_review_queue = UNKNOWN + Normal). Without
+          // the row_type filter a VOIDED row that kept flat_code='UNKNOWN' would be matched
+          // and silently un-voided, double-counting it in every financial view.
+          const { data: matches, error: matchError } = await supabase
+            .from('transactions')
+            .select('id')
+            .eq('flat_code', 'UNKNOWN')
+            .eq('row_type', 'Normal')
+            .ilike('description', `%${escapeLike(token)}%`)
+            .neq('id', item.id)
+
+          if (matchError) {
+            toast.error(`Sender ID saved, but the search for other matching transactions failed: ${matchError.message}`)
+          } else if (matches && matches.length > 0) {
+            const plural = matches.length > 1 ? 's' : ''
+            const { error: bulkError } = await supabase.from('transactions').update({
+              flat_code: flatCode, flat_id: flatId,
+              category: isFlat ? category : flatCode,
+              corpus: effectiveCorpus, plan_id: resolvedPlanId,
+            }).in('id', matches.map(m => m.id))
+            if (bulkError) toast.error(`Could not apply to ${matches.length} other matching transaction${plural}: ${bulkError.message}`)
+            else toast.success(`Tagged as ${flatCode} — also applied to ${matches.length} other matching transaction${plural}`)
+          }
         }
       }
     }
