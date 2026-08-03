@@ -960,6 +960,7 @@ function SenderMappingsTab({ onManageResident }: { onManageResident: () => void 
       />
       <LegacyBacklog
         mappings={filteredLegacyMappings}
+        totalCount={legacyMappings.length}
         residents={residents ?? []}
         flats={flatsList ?? []}
         onConfirmed={() => qc.invalidateQueries({ queryKey: ['residents-for-mappings'] })}
@@ -973,8 +974,11 @@ function SenderMappingsTab({ onManageResident }: { onManageResident: () => void 
   )
 }
 
-function LegacyBacklog({ mappings, residents, flats, onConfirmed, onTokenClick }: {
+function LegacyBacklog({ mappings, totalCount, residents, flats, onConfirmed, onTokenClick }: {
   mappings: LegacyMapping[]
+  // Backlog size before the tab's search filter — an empty *filtered* list means "no matches",
+  // not "all done", and saying "all done" would misstate how much work is left.
+  totalCount: number
   residents: (Resident & { flat: { code: string } | null })[]
   flats: { id: string; code: string }[]
   onConfirmed: () => void
@@ -983,7 +987,9 @@ function LegacyBacklog({ mappings, residents, flats, onConfirmed, onTokenClick }
   if (mappings.length === 0) {
     return (
       <div className="surface !p-6 text-sm" style={{ color: 'var(--ink-500)' }}>
-        No legacy mappings left to review.
+        {totalCount > 0
+          ? `No legacy mappings match this search — ${totalCount} still pending.`
+          : 'No legacy mappings left to review.'}
       </div>
     )
   }
@@ -991,7 +997,9 @@ function LegacyBacklog({ mappings, residents, flats, onConfirmed, onTokenClick }
     <div className="surface !p-4 flex flex-col gap-3">
       <div className="flex items-center gap-2">
         <h3 className="font-semibold">Legacy mappings to review</h3>
-        <span className="ds-badge-warn">{mappings.length} pending</span>
+        <span className="ds-badge-warn">
+          {mappings.length < totalCount ? `${mappings.length} of ${totalCount} pending` : `${mappings.length} pending`}
+        </span>
       </div>
       <p className="text-sm" style={{ color: 'var(--ink-500)' }}>
         From the old hardcoded list — pick which resident each one belongs to.
