@@ -316,7 +316,9 @@ function ImportPreview({ preview, fileName, onConfirm, onCancel, onRowEdited }: 
   onCancel: () => void
   onRowEdited: (rowIndex: number, patch: Partial<PreviewRow>) => void
 }) {
+  const { isAdmin } = useRoleCtx()
   const reviewCount = preview.rows.filter(r => r._confidence === 'REVIEW').length
+  const [captureRow, setCaptureRow] = useState<{ flatCode: string; flatId: string; description: string } | null>(null)
 
   const { data: flats = [] } = useQuery({
     queryKey: ['flats-for-preview-edit'],
@@ -348,6 +350,7 @@ function ImportPreview({ preview, fileName, onConfirm, onCancel, onRowEdited }: 
       cellEditor: 'agSelectCellEditor',
       cellEditorParams: { values: flatCodeOptions },
       onCellValueChanged: (e: any) => {
+        const wasReview = e.data._confidence === 'REVIEW'
         const newCode = e.newValue ?? ''
         const newFlatId = newCode ? (flatIdByCode.get(newCode) ?? null) : null
         const patch: Partial<PreviewRow> = { flat_code: newCode, flat_id: newFlatId }
@@ -355,6 +358,12 @@ function ImportPreview({ preview, fileName, onConfirm, onCancel, onRowEdited }: 
         if (newCode && e.data.cr_dr === 'CR' && !e.data.category) patch.category = 'Maintenance'
         patch._confidence = 'Auto'
         onRowEdited(e.rowIndex, patch)
+        // Resolving a previously-unrecognized row here skips the Review tab entirely (it's
+        // already 'Auto' on import), so this is the only chance to capture the sender's ID —
+        // otherwise the same sender shows up as unrecognized again on every future statement.
+        if (isAdmin && wasReview && newCode && newFlatId) {
+          setCaptureRow({ flatCode: newCode, flatId: newFlatId, description: e.data.description })
+        }
       },
     },
     {
@@ -430,7 +439,90 @@ function ImportPreview({ preview, fileName, onConfirm, onCancel, onRowEdited }: 
           </p>
         )}
       </div>
+
+      {captureRow && (
+        <SenderCaptureDialog row={captureRow} onClose={() => setCaptureRow(null)} />
+      )}
     </div>
+  )
+}
+
+function SenderCaptureDialog({ row, onClose }: {
+  row: { flatCode: string; flatId: string; description: string }
+  onClose: () => void
+}) {
+  const [token, setToken] = useState(() => guessSenderToken(row.description))
+  const [residentId, setResidentId] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const { data: residents = [] } = useQuery({
+    queryKey: ['residents-active-lite'],
+    queryFn: async () => {
+      const { data } = await supabase.from('residents')
+        .select('id, name, type, flat_id, upi_ids').eq('is_active', true)
+      return (data ?? []) as { id: string; name: string; type: string; flat_id: string; upi_ids: string[] }[]
+    },
+  })
+  const flatResidents = residents.filter(r => r.flat_id === row.flatId)
+
+  async function handleSave() {
+    if (!residentId || !token.trim()) { onClose(); return }
+    setSaving(true)
+    const tokens = Array.from(new Set(token.split(',').map(t => t.trim().toLowerCase()).filter(Boolean)))
+
+    // Fresh, unfiltered-by-active-status check — mirrors ReviewItem's capture guard and
+    // LegacyMappingRow.handleConfirm in FlatsPage.
+    const { data: conflictRows, error: conflictError } = await supabase
+      .from('residents').select('id, name, upi_ids').neq('id', residentId)
+    const conflictOwner = (conflictRows ?? []).find(
+      r => ((r.upi_ids ?? []) as string[]).some(id => tokens.includes(id.toLowerCase())))
+
+    if (conflictError) {
+      toast.error(`Not saved — could not check for duplicates: ${conflictError.message}`)
+    } else if (conflictOwner) {
+      toast.error(`One of these sender IDs is already saved for ${conflictOwner.name} — not saved`)
+    } else {
+      const resident = residents.find(r => r.id === residentId)
+      const merged = Array.from(new Set([...(resident?.upi_ids ?? []), ...tokens]))
+      const { error } = await supabase.from('residents').update({ upi_ids: merged }).eq('id', residentId)
+      if (error) toast.error(error.message)
+      else toast.success(`Saved for ${resident?.name} — future imports from this sender will auto-tag ${row.flatCode}`)
+    }
+    setSaving(false)
+    onClose()
+  }
+
+  return (
+    <Dialog open onOpenChange={v => { if (!v) onClose() }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Save sender ID for {row.flatCode}?</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-3 py-2">
+          <p className="text-xs" style={{ color: 'var(--ink-500)' }}>
+            You just assigned an unrecognized transaction to {row.flatCode}. Save this sender so
+            future imports auto-tag it instead of landing in Review.
+          </p>
+          <div>
+            <label className="ds-lbl">Sender ID (comma separated for multiple)</label>
+            <input type="text" value={token} onChange={e => setToken(e.target.value)} className="ds-field w-full" />
+          </div>
+          <div>
+            <label className="ds-lbl">Resident</label>
+            <select value={residentId} onChange={e => setResidentId(e.target.value)} className="ds-field w-full">
+              <option value="">— select resident —</option>
+              {flatResidents.map(r => <option key={r.id} value={r.id}>{r.name} ({r.type})</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={onClose} className="btn-secondary flex-1 text-sm">Skip</button>
+          <button onClick={handleSave} disabled={!residentId || saving} className="btn-primary flex-1 text-sm">
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 
