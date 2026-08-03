@@ -3,7 +3,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AgGridReact } from 'ag-grid-react'
 import type { ColDef } from 'ag-grid-community'
 import { Edit2, Ruler, UserMinus, UserPlus, Pencil, Trash2, Contact } from 'lucide-react'
-import { supabase, Flat, Resident } from '@/lib/supabase'
+import { supabase, Flat, Resident, Transaction } from '@/lib/supabase'
+import { formatDateDMY } from '@/lib/date'
 import { formatINR, getLegacyMappings, LegacyMapping } from '@/lib/tagger'
 import { useRoleCtx } from '@/contexts/RoleContext'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
@@ -894,6 +895,7 @@ function Field({ label, value, onChange, placeholder, type = 'text' }: {
 // ── SENDER MAPPINGS TAB ──────────────────────────────────────
 function SenderMappingsTab({ onManageResident }: { onManageResident: () => void }) {
   const qc = useQueryClient()
+  const [drilldownToken, setDrilldownToken] = useState<string | null>(null)
 
   const { data: residents, isLoading } = useQuery({
     queryKey: ['residents-for-mappings'],
@@ -917,16 +919,21 @@ function SenderMappingsTab({ onManageResident }: { onManageResident: () => void 
         mappings={legacyMappings}
         residents={residents ?? []}
         onConfirmed={() => qc.invalidateQueries({ queryKey: ['residents-for-mappings'] })}
+        onTokenClick={setDrilldownToken}
       />
-      <AllFlatsMappings residents={residents ?? []} onManage={onManageResident} />
+      <AllFlatsMappings residents={residents ?? []} onManage={onManageResident} onTokenClick={setDrilldownToken} />
+      {drilldownToken && (
+        <SenderDrilldownDialog token={drilldownToken} onClose={() => setDrilldownToken(null)} />
+      )}
     </div>
   )
 }
 
-function LegacyBacklog({ mappings, residents, onConfirmed }: {
+function LegacyBacklog({ mappings, residents, onConfirmed, onTokenClick }: {
   mappings: LegacyMapping[]
   residents: (Resident & { flat: { code: string } | null })[]
   onConfirmed: () => void
+  onTokenClick: (token: string) => void
 }) {
   if (mappings.length === 0) {
     return (
@@ -946,17 +953,18 @@ function LegacyBacklog({ mappings, residents, onConfirmed }: {
       </p>
       <div className="flex flex-col gap-2">
         {mappings.map(m => (
-          <LegacyMappingRow key={`${m.type}-${m.token}`} mapping={m} residents={residents} onConfirmed={onConfirmed} />
+          <LegacyMappingRow key={`${m.type}-${m.token}`} mapping={m} residents={residents} onConfirmed={onConfirmed} onTokenClick={onTokenClick} />
         ))}
       </div>
     </div>
   )
 }
 
-function LegacyMappingRow({ mapping, residents, onConfirmed }: {
+function LegacyMappingRow({ mapping, residents, onConfirmed, onTokenClick }: {
   mapping: LegacyMapping
   residents: (Resident & { flat: { code: string } | null })[]
   onConfirmed: () => void
+  onTokenClick: (token: string) => void
 }) {
   const flatResidents = residents.filter(r => r.flat?.code === mapping.flatCode)
   const [residentId, setResidentId] = useState('')
@@ -1016,7 +1024,9 @@ function LegacyMappingRow({ mapping, residents, onConfirmed }: {
   return (
     <div className="border-t hairline pt-2">
       <div className="grid grid-cols-[1fr_60px_80px_1fr_auto] gap-2 items-center text-sm">
-        <span className="font-mono truncate">{mapping.token}</span>
+        <button onClick={() => onTokenClick(mapping.token)} className="font-mono truncate text-left hover:underline">
+          {mapping.token}
+        </button>
         <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded text-xs font-bold ${mapping.type === 'UPI' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
           {mapping.type}
         </span>
@@ -1042,9 +1052,10 @@ function LegacyMappingRow({ mapping, residents, onConfirmed }: {
   )
 }
 
-function AllFlatsMappings({ residents, onManage }: {
+function AllFlatsMappings({ residents, onManage, onTokenClick }: {
   residents: (Resident & { flat: { code: string } | null })[]
   onManage: () => void
+  onTokenClick: (token: string) => void
 }) {
   const grouped = useMemo(() => {
     const withIds = residents.filter(r => (r.upi_ids ?? []).length > 0)
@@ -1083,10 +1094,10 @@ function AllFlatsMappings({ residents, onManage }: {
                 {flatResidents.map(r => (
                   <div key={r.id} className="flex flex-wrap items-center gap-1">
                     {(r.upi_ids ?? []).map(id => (
-                      <span key={id}
-                        className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${r.is_active ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>
+                      <button key={id} onClick={() => onTokenClick(id)}
+                        className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium hover:underline ${r.is_active ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>
                         {id}
-                      </span>
+                      </button>
                     ))}
                     <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${r.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
                       {r.is_active ? 'Active' : 'Archived'}
@@ -1099,5 +1110,55 @@ function AllFlatsMappings({ residents, onManage }: {
         </div>
       )}
     </div>
+  )
+}
+
+function SenderDrilldownDialog({ token, onClose }: { token: string; onClose: () => void }) {
+  const { data: txns, isLoading } = useQuery({
+    queryKey: ['sender-drilldown', token],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('transactions')
+        .select('id, value_date, amount, cr_dr, flat_code, description')
+        .ilike('description', `%${token}%`)
+        .order('value_date', { ascending: false })
+      return (data ?? []) as Pick<Transaction, 'id' | 'value_date' | 'amount' | 'cr_dr' | 'flat_code' | 'description'>[]
+    },
+  })
+
+  return (
+    <Dialog open onOpenChange={v => { if (!v) onClose() }}>
+      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Transactions matching "{token}"</DialogTitle>
+        </DialogHeader>
+        {isLoading ? (
+          <div className="h-40 animate-pulse rounded-[var(--ds-radius)]" style={{ background: 'var(--ink-100)' }} />
+        ) : !txns || txns.length === 0 ? (
+          <p className="text-sm" style={{ color: 'var(--ink-500)' }}>No matching transactions found.</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left border-b hairline">
+                <th className="py-1.5 pr-2">Date</th>
+                <th className="py-1.5 pr-2">Amount</th>
+                <th className="py-1.5 pr-2">CR/DR</th>
+                <th className="py-1.5 pr-2">Tagged flat</th>
+              </tr>
+            </thead>
+            <tbody>
+              {txns.map(t => (
+                <tr key={t.id} className="border-b hairline">
+                  <td className="py-1.5 pr-2">{formatDateDMY(t.value_date)}</td>
+                  <td className="py-1.5 pr-2">{formatINR(t.amount)}</td>
+                  <td className="py-1.5 pr-2">{t.cr_dr}</td>
+                  <td className="py-1.5 pr-2 font-semibold">{t.flat_code}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </DialogContent>
+    </Dialog>
   )
 }
