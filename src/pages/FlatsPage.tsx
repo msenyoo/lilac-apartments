@@ -892,7 +892,7 @@ function Field({ label, value, onChange, placeholder, type = 'text' }: {
 }
 
 // ── SENDER MAPPINGS TAB ──────────────────────────────────────
-function SenderMappingsTab({ onManageResident: _onManageResident }: { onManageResident: () => void }) {
+function SenderMappingsTab({ onManageResident }: { onManageResident: () => void }) {
   const qc = useQueryClient()
 
   const { data: residents, isLoading } = useQuery({
@@ -918,6 +918,7 @@ function SenderMappingsTab({ onManageResident: _onManageResident }: { onManageRe
         residents={residents ?? []}
         onConfirmed={() => qc.invalidateQueries({ queryKey: ['residents-for-mappings'] })}
       />
+      <AllFlatsMappings residents={residents ?? []} onManage={onManageResident} />
     </div>
   )
 }
@@ -1036,6 +1037,66 @@ function LegacyMappingRow({ mapping, residents, onConfirmed }: {
         <p className="text-xs text-amber-600 mt-1">
           ⚠ Also appears on transactions tagged to a different flat — {conflictSummary}. Double-check before confirming.
         </p>
+      )}
+    </div>
+  )
+}
+
+function AllFlatsMappings({ residents, onManage }: {
+  residents: (Resident & { flat: { code: string } | null })[]
+  onManage: () => void
+}) {
+  const grouped = useMemo(() => {
+    const withIds = residents.filter(r => (r.upi_ids ?? []).length > 0)
+    const byFlat = new Map<string, typeof withIds>()
+    for (const r of withIds) {
+      const code = r.flat?.code ?? '—'
+      if (!byFlat.has(code)) byFlat.set(code, [])
+      byFlat.get(code)!.push(r)
+    }
+    return Array.from(byFlat.entries()).sort(([a], [b]) => a.localeCompare(b))
+  }, [residents])
+
+  return (
+    <div className="surface !p-4 flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold">All flats</h3>
+        <button onClick={onManage} className="text-xs" style={{ color: 'var(--brand-600)' }}>
+          Manage on Flats page →
+        </button>
+      </div>
+      {grouped.length === 0 ? (
+        <p className="text-sm" style={{ color: 'var(--ink-500)' }}>No sender IDs saved yet.</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {grouped.map(([flatCode, flatResidents]) => (
+            <div key={flatCode} className="grid grid-cols-[70px_1fr_2fr] gap-2 items-start text-sm border-t hairline pt-2">
+              <span className="font-semibold">{flatCode}</span>
+              <div className="flex flex-col gap-1">
+                {flatResidents.map(r => (
+                  <span key={r.id} className={r.is_active ? '' : 'text-slate-400'}>
+                    {r.name} ({r.type})
+                  </span>
+                ))}
+              </div>
+              <div className="flex flex-col gap-1">
+                {flatResidents.map(r => (
+                  <div key={r.id} className="flex flex-wrap items-center gap-1">
+                    {(r.upi_ids ?? []).map(id => (
+                      <span key={id}
+                        className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${r.is_active ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'}`}>
+                        {id}
+                      </span>
+                    ))}
+                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ${r.is_active ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+                      {r.is_active ? 'Active' : 'Archived'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   )
