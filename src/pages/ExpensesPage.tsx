@@ -414,8 +414,8 @@ function DayBook() {
       </div>
 
       {/* Toolbar */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-4 flex-wrap">
           <label className="flex items-center gap-2 text-sm cursor-pointer select-none" style={{ color: 'var(--ink-500)' }}>
             <input
               type="checkbox"
@@ -439,7 +439,7 @@ function DayBook() {
               </span>
             )}
           </label>
-          <div className="relative" style={{ width: 260 }}>
+          <div className="relative w-full sm:w-[260px]">
             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--ink-400)' }} />
             <Input
               value={search}
