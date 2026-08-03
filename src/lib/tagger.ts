@@ -6,7 +6,7 @@ export const FLAT_CODES = [
   'EF1','EF2','EF3','EF4','EG1','EG2','EP1','EP2',
 ]
 
-const UPI_SENDER_MAP: Record<string, string> = {
+export const UPI_SENDER_MAP: Record<string, string> = {
   '8826794317':'EF2','9382999928':'EF4','8754599878':'DF1',
   'haranhari332':'CS2','balajiiravi':'EP2','chinnarasachin':'BF5',
   'chinnarasa':'BF5','selvarajmuhil':'BG2','nandakishore7':'AP1',
@@ -28,7 +28,7 @@ const UPI_SENDER_MAP: Record<string, string> = {
   'muruganand':'EG1','saravanan.av81':'EF1',
 }
 
-const NEFT_SENDER_MAP: Record<string, string> = {
+export const NEFT_SENDER_MAP: Record<string, string> = {
   'C I DHINESH KUMAR':'BF4','SELVAPANDIAN VI':'BF3',
   'KARTHIKEYAN MAN':'CF3','SENTHILKUMAR M':'DP1',
   'MATHIVANAN A M':'CP2','MATHIVANANAM MA':'CP2',
@@ -120,6 +120,40 @@ export function tagTransaction(
   }
 
   return { flatCode: 'UNKNOWN', category: 'UNKNOWN', corpus: 'NO', confidence: 'REVIEW' }
+}
+
+export interface LegacyMapping {
+  token:    string
+  type:     'UPI' | 'NEFT'
+  flatCode: string
+}
+
+// Diffs the hardcoded maps above against sender IDs already saved on residents, so the
+// Sender Mappings tab only lists entries that haven't been migrated into the DB yet.
+export function getLegacyMappings(existingUpiIds: string[]): LegacyMapping[] {
+  const existing = new Set(existingUpiIds.map(id => id.toLowerCase()))
+  const pending: LegacyMapping[] = []
+  for (const [token, flatCode] of Object.entries(UPI_SENDER_MAP)) {
+    if (!existing.has(token.toLowerCase())) pending.push({ token, type: 'UPI', flatCode })
+  }
+  for (const [token, flatCode] of Object.entries(NEFT_SENDER_MAP)) {
+    if (!existing.has(token.toLowerCase())) pending.push({ token, type: 'NEFT', flatCode })
+  }
+  return pending
+}
+
+// Best-effort guess at the sender identifier inside a raw bank description. Used only to
+// prefill an editable field during transaction review — never saved without human confirmation.
+export function guessSenderToken(description: string): string {
+  const upiMatch = description.match(/UPI\/([^/]+)/i)
+  if (upiMatch) return upiMatch[1].trim()
+
+  const cleaned = description
+    .replace(/^(NEFT|IMPS|RTGS)\b[\s-]*/i, '')
+    .replace(/^(CR|DR)-/i, '')
+    .replace(/^[A-Z]{2,}\d*-/i, '')
+  const parts = cleaned.split('-').map(p => p.trim()).filter(Boolean)
+  return parts.length > 0 ? parts[0] : description.trim()
 }
 
 // ── FISCAL HELPERS ────────────────────────────────────────────
