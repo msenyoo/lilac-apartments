@@ -814,6 +814,8 @@ function ReviewItem({ item, flats, residents, onSaved }: {
   const [category, setCategory]   = useState('Maintenance')
   const [corpus, setCorpus]       = useState<'YES' | 'NO'>('NO')
   const [planId, setPlanId]       = useState<string | null>(null)
+  const [driveId, setDriveId] = useState<string | null>(null)
+  const [contributorResidentId, setContributorResidentId] = useState<string | null>(null)
   const [saving, setSaving]       = useState(false)
   const [saved, setSaved]         = useState(false)
   const [showSplit, setShowSplit] = useState(false)
@@ -845,6 +847,19 @@ function ReviewItem({ item, flats, residents, onSaved }: {
     },
   })
 
+  const { data: openDrives = [] } = useQuery({
+    queryKey: ['open-contribution-drives'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('contribution_drives')
+        .select('id, name')
+        .eq('status', 'open')
+        .order('name')
+      return (data ?? []) as { id: string; name: string }[]
+    },
+  })
+  const driveIdByName = useMemo(() => new Map(openDrives.map(d => [d.name, d.id])), [openDrives])
+
   const isFlat = FLAT_CODES.includes(flatCode)
   const selectedFlat = flats.find(f => f.code === flatCode)
 
@@ -858,18 +873,26 @@ function ReviewItem({ item, flats, residents, onSaved }: {
 
   async function handleSave() {
     if (!flatCode) return
+    const isContribution = category === 'Contribution'
     let resolvedPlanId = effectiveCorpus === 'YES' ? planId : null
     if (effectiveCorpus === 'YES' && !resolvedPlanId) {
       if (activePlans.length === 1) resolvedPlanId = activePlans[0].id
       else if (activePlans.length > 1) { toast.error('Select a corpus plan for this payment'); return }
     }
+    let resolvedDriveId = isContribution ? driveId : null
+    if (isContribution && !resolvedDriveId) {
+      if (openDrives.length === 1) resolvedDriveId = openDrives[0].id
+      else { toast.error('Select a contribution drive for this transaction'); return }
+    }
     setSaving(true)
     const flatId = flats.find(f => f.code === flatCode)?.id ?? null
     const { error } = await supabase.from('transactions').update({
       flat_code: flatCode, flat_id: flatId,
-      category: isFlat ? category : flatCode,
+      category: isContribution ? 'Contribution' : (isFlat ? category : flatCode),
       corpus: effectiveCorpus,
       plan_id: resolvedPlanId,
+      drive_id: resolvedDriveId,
+      resident_id: isContribution ? contributorResidentId : null,
       row_type: 'Normal',
     }).eq('id', item.id)
     if (!error && saveSender && senderResidentId && senderToken.trim()) {
@@ -927,8 +950,9 @@ function ReviewItem({ item, flats, residents, onSaved }: {
               const plural = matchIds.size > 1 ? 's' : ''
               const { error: bulkError } = await supabase.from('transactions').update({
                 flat_code: flatCode, flat_id: flatId,
-                category: isFlat ? category : flatCode,
+                category: isContribution ? 'Contribution' : (isFlat ? category : flatCode),
                 corpus: effectiveCorpus, plan_id: resolvedPlanId,
+                drive_id: resolvedDriveId, resident_id: isContribution ? contributorResidentId : null,
               }).in('id', Array.from(matchIds))
               if (bulkError) toast.error(`Could not apply to ${matchIds.size} other matching transaction${plural}: ${bulkError.message}`)
               else toast.success(`Tagged as ${flatCode} — also applied to ${matchIds.size} other matching transaction${plural}`)
@@ -975,11 +999,14 @@ function ReviewItem({ item, flats, residents, onSaved }: {
                 const val = e.target.value
                 setFlatCode(val)
                 if (!FLAT_CODES.includes(val)) {
-                  setCategory(val)
+                  const driveIdForVal = driveIdByName.get(val) ?? null
+                  setCategory(driveIdForVal ? 'Contribution' : val)
                   const isCorpusCat = corpusCats.includes(val)
                   setCorpus(isCorpusCat ? 'YES' : 'NO')
                   if (isCorpusCat && activePlans.length === 1) setPlanId(activePlans[0].id)
                   if (!isCorpusCat) setPlanId(null)
+                  setDriveId(driveIdForVal)
+                  setContributorResidentId(null)
                 }
               }}
               className="w-full ds-field bg-white"
@@ -989,6 +1016,7 @@ function ReviewItem({ item, flats, residents, onSaved }: {
               <optgroup label="Income">{INCOME_CATS.map(c => <option key={c} value={c}>{c}</option>)}</optgroup>
               <optgroup label="Expenses">{EXPENSE_CATS.map(c => <option key={c} value={c}>{c}</option>)}</optgroup>
               <optgroup label="Corpus works">{corpusCats.map(c => <option key={c} value={c}>{c}</option>)}</optgroup>
+              <optgroup label="Contributions">{openDrives.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}</optgroup>
             </select>
           </div>
           {isFlat && (
@@ -997,19 +1025,28 @@ function ReviewItem({ item, flats, residents, onSaved }: {
               <select
                 value={category}
                 onChange={e => {
-                  setCategory(e.target.value)
-                  if (e.target.value === 'Corpus') {
+                  const val = e.target.value
+                  setCategory(val)
+                  if (val === 'Corpus') {
                     setCorpus('YES')
                     if (activePlans.length === 1) setPlanId(activePlans[0].id)
+                    setDriveId(null)
+                  } else if (val === 'Contribution') {
+                    setCorpus('NO')
+                    setPlanId(null)
+                    setDriveId(openDrives.length === 1 ? openDrives[0].id : null)
                   } else {
                     setCorpus('NO')
                     setPlanId(null)
+                    setDriveId(null)
+                    setContributorResidentId(null)
                   }
                 }}
                 className="w-full ds-field bg-white"
               >
                 <option value="Maintenance">Maintenance</option>
                 <option value="Corpus">Corpus</option>
+                <option value="Contribution">Contribution</option>
               </select>
             </div>
           )}
@@ -1031,6 +1068,38 @@ function ReviewItem({ item, flats, residents, onSaved }: {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+        )}
+
+        {category === 'Contribution' && openDrives.length > 1 && (
+          <div className="flex flex-col gap-1">
+            <Label>Contribution drive</Label>
+            <Select value={driveId ?? ''} onValueChange={v => setDriveId(v || null)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select drive…" />
+              </SelectTrigger>
+              <SelectContent>
+                {openDrives.map(d => (
+                  <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {category === 'Contribution' && isFlat && (
+          <div>
+            <label className="ds-lbl">Contributor (optional)</label>
+            <select
+              value={contributorResidentId ?? ''}
+              onChange={e => setContributorResidentId(e.target.value || null)}
+              className="w-full ds-field bg-white"
+            >
+              <option value="">— Not specified —</option>
+              {residents.filter(r => r.flat_id === selectedFlat?.id).map(r => (
+                <option key={r.id} value={r.id}>{r.name} ({r.type})</option>
+              ))}
+            </select>
           </div>
         )}
 
