@@ -1007,6 +1007,10 @@ function ReviewItem({ item, flats, residents, onSaved }: {
                   if (!isCorpusCat) setPlanId(null)
                   setDriveId(driveIdForVal)
                   setContributorResidentId(null)
+                } else if (val !== flatCode) {
+                  // Contributor is flat-scoped — a stale pick from the previous flat must not
+                  // silently ride along onto the newly selected flat's Contribution row.
+                  setContributorResidentId(null)
                 }
               }}
               className="w-full ds-field bg-white"
