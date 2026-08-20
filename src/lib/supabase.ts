@@ -100,6 +100,17 @@ export interface CorpusPlanFlatInstallment {
   amount: number
 }
 
+export interface ContributionDrive {
+  id: string
+  name: string
+  description: string | null
+  status: 'open' | 'closed'
+  created_at: string
+  created_by: string | null
+  closed_at: string | null
+  close_notes: string | null
+}
+
 export interface Transaction {
   id: string
   txn_id: string | null
@@ -114,6 +125,8 @@ export interface Transaction {
   category: string | null
   corpus: 'YES' | 'NO'
   plan_id: string | null
+  drive_id: string | null
+  resident_id: string | null
   fiscal_year: number | null
   fiscal_month: string | null
   fiscal_label: string | null
@@ -236,6 +249,19 @@ export interface CorpusEntry {
   pct_paid: number
   last_payment_date: string | null
   status: 'Done' | 'Partial' | 'Pending'
+}
+
+export interface ContributionTracker {
+  drive_id: string
+  name: string
+  description: string | null
+  status: 'open' | 'closed'
+  created_at: string
+  closed_at: string | null
+  collected: number
+  disbursed: number
+  balance: number
+  last_activity: string | null
 }
 
 export interface ExpenseEntry {
