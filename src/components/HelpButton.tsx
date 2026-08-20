@@ -51,6 +51,16 @@ const HELP: Record<string, HelpPage> = {
     ],
     howTo: 'Pick a corpus plan from the dropdown. Click any flat to expand its payment history and verify installment receipts.',
   },
+  '/contributions': {
+    title: 'Contributions',
+    bullets: [
+      'Tracks voluntary, one-off collections — festival funds, welfare support for staff or their families — kept fully separate from Maintenance and Corpus.',
+      'Each cause is its own "drive" with a running balance: money in (bank credits tagged to it) minus money out (the eventual cash withdrawal or handover).',
+      'Tag a bank transaction to a drive from the Transactions page — pick the drive directly, or pick a flat first and set its category to "Contribution".',
+      'Closing a drive does not require a zero balance — a small carry-forward is fine, just note why in the close notes.',
+    ],
+    howTo: 'Click "New drive", give it a name (and optional description), then go tag matching transactions to it from Transactions → Review or All Transactions.',
+  },
   '/expenses': {
     title: 'Expenses',
     bullets: [
