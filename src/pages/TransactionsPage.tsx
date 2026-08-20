@@ -925,7 +925,7 @@ function ReviewItem({ item, flats, residents, onSaved }: {
           toast.error(`${label} not saved: ${residentError.message}`)
         } else {
           const bulkTokens = tokens.filter(t => t.length >= MIN_BULK_APPLY_TOKEN_LEN)
-          if (bulkTokens.length > 0) {
+          if (bulkTokens.length > 0 && !isContribution) {
             // Only rows still in the review queue (v_review_queue = UNKNOWN + Normal). Without
             // the row_type filter a VOIDED row that kept flat_code='UNKNOWN' would be matched
             // and silently un-voided, double-counting it in every financial view.
@@ -1050,7 +1050,7 @@ function ReviewItem({ item, flats, residents, onSaved }: {
               >
                 <option value="Maintenance">Maintenance</option>
                 <option value="Corpus">Corpus</option>
-                <option value="Contribution">Contribution</option>
+                {openDrives.length > 0 && <option value="Contribution">Contribution</option>}
               </select>
             </div>
           )}
@@ -1340,7 +1340,7 @@ function EditModal({ txn, flats, residents, onClose, onSaved, onSplit, onVoided 
                 className="w-full ds-field">
                 <option value="Maintenance">Maintenance</option>
                 <option value="Corpus">Corpus</option>
-                <option value="Contribution">Contribution</option>
+                {openDrives.length > 0 && <option value="Contribution">Contribution</option>}
               </select>
             </div>
           )}
@@ -1421,7 +1421,13 @@ function EditModal({ txn, flats, residents, onClose, onSaved, onSplit, onVoided 
           {/* Secondary actions */}
           <div className="border-t hairline pt-3 flex gap-2">
             {txn.cr_dr === 'CR' && (
-              <button onClick={onSplit}
+              <button onClick={() => {
+                if (txn.drive_id) {
+                  toast.error('This transaction is tagged to a contribution drive — splitting would remove it from the drive. Not supported yet.')
+                  return
+                }
+                onSplit()
+              }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 text-sm text-slate-600 hover:bg-[var(--ink-100)] flex-1 justify-center">
                 <Scissors size={13} /> Split
               </button>

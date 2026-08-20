@@ -32,13 +32,13 @@ export default function ContributionsPage() {
   const [showCreate, setShowCreate] = useState(false)
   const [selectedDriveId, setSelectedDriveId] = useState<string | null>(null)
 
-  const { data: drives = [], isLoading } = useQuery({
+  const { data: drives = [], isLoading, isError } = useQuery({
     queryKey: ['contribution-drives'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('v_contribution_tracker')
         .select('*')
-        .order('status', { ascending: true })
+        .order('status', { ascending: false })
         .order('created_at', { ascending: false })
       if (error) throw error
       return (data ?? []) as ContributionTracker[]
@@ -61,7 +61,12 @@ export default function ContributionsPage() {
         )}
       </div>
 
-      {isLoading ? (
+      {isError ? (
+        <div className="surface !p-12 flex flex-col items-center gap-3">
+          <HandHeart size={40} style={{ color: 'var(--ink-300)' }} />
+          <p className="font-semibold text-lg">Couldn't load contribution drives — try refreshing.</p>
+        </div>
+      ) : isLoading ? (
         <div className="flex flex-col gap-2">
           {[...Array(3)].map((_, i) => <div key={i} className="h-20 animate-pulse rounded-[var(--ds-radius)]" style={{ background: 'var(--ink-100)' }} />)}
         </div>
@@ -126,7 +131,7 @@ function DriveDetail({ drive, isAdmin, onClosed }: {
 }) {
   const [showClose, setShowClose] = useState(false)
 
-  const { data: txns = [], isLoading } = useQuery({
+  const { data: txns = [], isLoading, isError } = useQuery({
     queryKey: ['contribution-drive-txns', drive.drive_id],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -144,7 +149,9 @@ function DriveDetail({ drive, isAdmin, onClosed }: {
     <div className="border-t hairline p-4 flex flex-col gap-3">
       {drive.description && <p className="text-sm" style={{ color: 'var(--ink-600)' }}>{drive.description}</p>}
 
-      {isLoading ? (
+      {isError ? (
+        <p className="text-sm text-red-600">Couldn't load transactions for this drive.</p>
+      ) : isLoading ? (
         <div className="h-24 animate-pulse rounded-[var(--ds-radius)]" style={{ background: 'var(--ink-100)' }} />
       ) : txns.length === 0 ? (
         <p className="text-sm" style={{ color: 'var(--ink-400)' }}>No transactions tagged to this drive yet.</p>

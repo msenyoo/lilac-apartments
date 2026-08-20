@@ -2,7 +2,7 @@
 -- collections, etc.) tracked separately from Maintenance and Corpus. See
 -- docs/superpowers/specs/2026-08-19-contribution-drives-design.md
 
-create table public.contribution_drives (
+create table if not exists public.contribution_drives (
   id           uuid primary key default gen_random_uuid(),
   name         text not null,
   description  text,
@@ -14,10 +14,10 @@ create table public.contribution_drives (
 );
 
 alter table public.transactions
-  add column drive_id    uuid references public.contribution_drives(id),
-  add column resident_id uuid references public.residents(id);
+  add column if not exists drive_id    uuid references public.contribution_drives(id),
+  add column if not exists resident_id uuid references public.residents(id);
 
-create index idx_txns_drive_id on public.transactions(drive_id);
+create index if not exists idx_txns_drive_id on public.transactions(drive_id);
 
 -- View: one row per drive, collected/disbursed/balance from transactions tagged to it.
 -- category='Contribution' is not filtered on here — drive_id is the sole discriminator —
@@ -35,7 +35,7 @@ select
   coalesce(sum(t.amount) filter (where t.cr_dr = 'DR' and t.row_type != 'VOIDED'), 0) as disbursed,
   coalesce(sum(t.amount) filter (where t.cr_dr = 'CR' and t.row_type != 'VOIDED'), 0)
     - coalesce(sum(t.amount) filter (where t.cr_dr = 'DR' and t.row_type != 'VOIDED'), 0) as balance,
-  max(t.value_date)                                                         as last_activity
+  max(t.value_date) filter (where t.row_type != 'VOIDED')                   as last_activity
 from public.contribution_drives cd
 left join public.transactions t on t.drive_id = cd.id
 group by cd.id, cd.name, cd.description, cd.status, cd.created_at, cd.closed_at;
