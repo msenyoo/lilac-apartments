@@ -1157,9 +1157,10 @@ function ReviewItem({ item, flats, residents, onSaved }: {
 }
 
 // ── EDIT MODAL ────────────────────────────────────────────────
-function EditModal({ txn, flats, onClose, onSaved, onSplit, onVoided }: {
+function EditModal({ txn, flats, residents, onClose, onSaved, onSplit, onVoided }: {
   txn: Transaction
   flats: any[]
+  residents: { id: string; name: string; type: string; flat_id: string }[]
   onClose: () => void
   onSaved: (updated: Transaction) => void
   onSplit: () => void
@@ -1172,6 +1173,8 @@ function EditModal({ txn, flats, onClose, onSaved, onSplit, onVoided }: {
   const [category,     setCategory]     = useState(txn.category ?? '')
   const [corpus,       setCorpus]       = useState<'YES' | 'NO'>(txn.corpus ?? 'NO')
   const [planId,       setPlanId]       = useState<string | null>(txn.plan_id ?? null)
+  const [driveId,      setDriveId]      = useState<string | null>(txn.drive_id ?? null)
+  const [residentId,   setResidentId]   = useState<string | null>(txn.resident_id ?? null)
   const [saving,       setSaving]       = useState(false)
   const [copied,       setCopied]       = useState(false)
   const [confirmVoid,  setConfirmVoid]  = useState(false)
@@ -1201,16 +1204,32 @@ function EditModal({ txn, flats, onClose, onSaved, onSplit, onVoided }: {
     },
   })
 
+  const { data: openDrives = [] } = useQuery({
+    queryKey: ['open-contribution-drives'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('contribution_drives')
+        .select('id, name')
+        .eq('status', 'open')
+        .order('name')
+      return (data ?? []) as { id: string; name: string }[]
+    },
+  })
+  const driveIdByName = useMemo(() => new Map(openDrives.map(d => [d.name, d.id])), [openDrives])
+
   function handleFlatChange(val: string) {
     setFlatCode(val)
     if (!isFlat(val)) {
-      setCategory(val)
+      const driveIdForVal = driveIdByName.get(val) ?? null
+      setCategory(driveIdForVal ? 'Contribution' : val)
       const isCorpusCat = corpusCats.includes(val)
       setCorpus(isCorpusCat ? 'YES' : 'NO')
       if (isCorpusCat && activePlans.length === 1) setPlanId(activePlans[0].id)
       if (!isCorpusCat) setPlanId(null)
+      setDriveId(driveIdForVal)
+      setResidentId(null)
     }
-    else { setCategory('Maintenance'); setCorpus('NO'); setPlanId(null) }
+    else { setCategory('Maintenance'); setCorpus('NO'); setPlanId(null); setDriveId(null); setResidentId(null) }
   }
 
   function handleCategoryChange(val: string) {
@@ -1218,9 +1237,16 @@ function EditModal({ txn, flats, onClose, onSaved, onSplit, onVoided }: {
     if (val === 'Corpus') {
       setCorpus('YES')
       if (activePlans.length === 1) setPlanId(activePlans[0].id)
+      setDriveId(null)
+    } else if (val === 'Contribution') {
+      setCorpus('NO')
+      setPlanId(null)
+      setDriveId(openDrives.length === 1 ? openDrives[0].id : null)
     } else {
       setCorpus('NO')
       setPlanId(null)
+      setDriveId(null)
+      setResidentId(null)
     }
   }
 
@@ -1231,22 +1257,29 @@ function EditModal({ txn, flats, onClose, onSaved, onSplit, onVoided }: {
   }
 
   async function handleSave() {
+    const isContribution = category === 'Contribution'
     let resolvedPlanId = corpus === 'YES' ? planId : null
     if (corpus === 'YES' && !resolvedPlanId) {
       if (activePlans.length === 1) resolvedPlanId = activePlans[0].id
       else if (activePlans.length > 1) { toast.error('Select a corpus plan for this transaction'); return }
     }
+    let resolvedDriveId = isContribution ? driveId : null
+    if (isContribution && !resolvedDriveId) {
+      if (openDrives.length === 1) resolvedDriveId = openDrives[0].id
+      else { toast.error('Select a contribution drive for this transaction'); return }
+    }
     setSaving(true)
     const flatId = flats.find(f => f.code === flatCode)?.id ?? null
-    const resolvedCategory = isFlat(flatCode) ? category : flatCode
+    const resolvedCategory = isContribution ? 'Contribution' : (isFlat(flatCode) ? category : flatCode)
+    const resolvedResidentId = isContribution ? residentId : null
     const { error } = await supabase.from('transactions').update({
       flat_code: flatCode, flat_id: flatId, category: resolvedCategory, corpus,
-      plan_id: resolvedPlanId,
+      plan_id: resolvedPlanId, drive_id: resolvedDriveId, resident_id: resolvedResidentId,
     }).eq('id', txn.id)
     setSaving(false)
     if (error) { toast.error(error.message); return }
     toast.success('Transaction updated')
-    onSaved({ ...txn, flat_code: flatCode, flat_id: flatId, category: resolvedCategory, corpus, plan_id: resolvedPlanId })
+    onSaved({ ...txn, flat_code: flatCode, flat_id: flatId, category: resolvedCategory, corpus, plan_id: resolvedPlanId, drive_id: resolvedDriveId, resident_id: resolvedResidentId })
   }
 
   async function handleVoid() {
@@ -1296,6 +1329,7 @@ function EditModal({ txn, flats, onClose, onSaved, onSplit, onVoided }: {
               <optgroup label="Income">{INCOME_CATS.map(c => <option key={c} value={c}>{c}</option>)}</optgroup>
               <optgroup label="Expenses">{EXPENSE_CATS.map(c => <option key={c} value={c}>{c}</option>)}</optgroup>
               <optgroup label="Corpus works">{corpusCats.map(c => <option key={c} value={c}>{c}</option>)}</optgroup>
+              <optgroup label="Contributions">{openDrives.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}</optgroup>
             </select>
           </div>
 
@@ -1306,11 +1340,12 @@ function EditModal({ txn, flats, onClose, onSaved, onSplit, onVoided }: {
                 className="w-full ds-field">
                 <option value="Maintenance">Maintenance</option>
                 <option value="Corpus">Corpus</option>
+                <option value="Contribution">Contribution</option>
               </select>
             </div>
           )}
 
-          {!isFlat(flatCode) && (
+          {!isFlat(flatCode) && category !== 'Contribution' && (
             <label className="flex items-center gap-2 text-sm cursor-pointer">
               <input type="checkbox" checked={corpus === 'YES'} onChange={e => {
                 const checked = e.target.checked
@@ -1340,6 +1375,38 @@ function EditModal({ txn, flats, onClose, onSaved, onSplit, onVoided }: {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          )}
+
+          {category === 'Contribution' && openDrives.length > 1 && (
+            <div className="flex flex-col gap-1">
+              <Label>Contribution drive</Label>
+              <Select value={driveId ?? ''} onValueChange={v => setDriveId(v || null)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select drive…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {openDrives.map(d => (
+                    <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {category === 'Contribution' && isFlat(flatCode) && (
+            <div>
+              <label className="ds-lbl">Contributor (optional)</label>
+              <select
+                value={residentId ?? ''}
+                onChange={e => setResidentId(e.target.value || null)}
+                className="w-full ds-field"
+              >
+                <option value="">— Not specified —</option>
+                {residents.filter(r => r.flat_id === flats.find(f => f.code === flatCode)?.id).map(r => (
+                  <option key={r.id} value={r.id}>{r.name} ({r.type})</option>
+                ))}
+              </select>
             </div>
           )}
 
@@ -1604,6 +1671,14 @@ function AllTransactionsTab() {
     },
   })
 
+  const { data: residents } = useQuery({
+    queryKey: ['residents-active-lite'],
+    queryFn: async () => {
+      const { data } = await supabase.from('residents').select('id,name,type,flat_id,upi_ids').eq('is_active', true)
+      return (data ?? []) as { id: string; name: string; type: string; flat_id: string; upi_ids: string[] }[]
+    },
+  })
+
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['all-transactions', effectiveStart, effectiveEnd],
     queryFn: async () => {
@@ -1784,6 +1859,7 @@ function AllTransactionsTab() {
         <EditModal
           txn={selectedTxn}
           flats={flats ?? []}
+          residents={residents ?? []}
           onClose={() => setShowEdit(false)}
           onSaved={(updated) => { setSelectedTxn(updated); setShowEdit(false); qc.invalidateQueries() }}
           onSplit={() => { setShowEdit(false); setShowSplit(true) }}
