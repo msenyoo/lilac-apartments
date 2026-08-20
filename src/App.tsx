@@ -8,6 +8,7 @@ import DashboardPage      from '@/pages/DashboardPage'
 import TransactionsPage   from '@/pages/TransactionsPage'
 import DuesPage           from '@/pages/DuesPage'
 import CorpusPage         from '@/pages/CorpusPage'
+import ContributionsPage  from '@/pages/ContributionsPage'
 import ReportPage         from '@/pages/ReportPage'
 import FlatsPage          from '@/pages/FlatsPage'
 import SettingsPage       from '@/pages/SettingsPage'
@@ -54,6 +55,7 @@ export default function App() {
           <Route path="transactions"  element={<TransactionsPage />} />
           <Route path="dues"          element={<DuesPage />} />
           <Route path="corpus"        element={<CorpusPage />} />
+          <Route path="contributions" element={<ContributionsPage />} />
           <Route path="finance"       element={<FinancePage />} />
           <Route path="finance-overview" element={<Navigate to="/dashboard" replace />} />
           <Route path="expenses"      element={<ExpensesPage />} />
