@@ -112,13 +112,15 @@ export async function buildPacketExpenses<T extends SourceExpense>(
       amount: e.amount,
       payment_mode: e.payment_mode,
       status: statusOf(e),
-      lineItems: e.line_items.map(li => ({
-        paid_date: li.paid_date,
-        description: li.description,
-        category: li.category?.name ?? '—',
-        cost_center: li.cost_center,
-        amount: li.amount,
-      })),
+      lineItems: [...e.line_items]
+        .sort((a, b) => (a.paid_date ?? '').localeCompare(b.paid_date ?? ''))
+        .map(li => ({
+          paid_date: li.paid_date,
+          description: li.description,
+          category: li.category?.name ?? '—',
+          cost_center: li.cost_center,
+          amount: li.amount,
+        })),
       images,
       pdfAttachments,
     })
