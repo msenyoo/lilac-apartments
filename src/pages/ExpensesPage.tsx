@@ -349,7 +349,9 @@ function DayBook() {
     })
   }
 
-  const selectedExpenses = expenses.filter(e => selectedIds.has(e.id) && !e.voided_at)
+  const selectedExpenses = expenses
+    .filter(e => selectedIds.has(e.id) && !e.voided_at)
+    .sort((a, b) => a.expense_date.localeCompare(b.expense_date))
   const selectedTotal = selectedExpenses.reduce((s, e) => s + e.amount, 0)
 
   async function handleSharePdf() {
