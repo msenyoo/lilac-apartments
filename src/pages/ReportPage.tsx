@@ -548,7 +548,9 @@ function AGMReportsTab() {
     },
   })
 
-  // Income: aggregate CR transactions by category for the FY
+  // Income: aggregate CR transactions by category for the FY. Excludes 'Contribution' —
+  // voluntary drive money is held/disbursed outside the expenses table, so it never gets an
+  // offsetting expenditure line here; counting it as income would overstate the I&E surplus.
   const { data: incomeTxns } = useQuery({
     queryKey: ['agm-income', selectedFyYear],
     queryFn: async () => {
@@ -557,6 +559,7 @@ function AGMReportsTab() {
         .select('category, amount')
         .eq('cr_dr', 'CR')
         .neq('row_type', 'VOIDED')
+        .neq('category', 'Contribution')
         .gte('value_date', selectedFy.start)
         .lte('value_date', selectedFy.end)
       return data ?? []
