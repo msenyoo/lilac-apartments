@@ -1138,7 +1138,7 @@ function ReviewItem({ item, flats, residents, onSaved }: {
           </div>
         )}
 
-        {category === 'Contribution' && openDrives.length > 1 && (
+        {category === 'Contribution' && openDrives.length > 0 && (
           <div className="flex flex-col gap-1">
             <Label>Contribution drive</Label>
             <Select value={driveId ?? ''} onValueChange={v => setDriveId(v || null)}>
@@ -1453,7 +1453,7 @@ function EditModal({ txn, flats, residents, onClose, onSaved, onSplit, onVoided 
             </div>
           )}
 
-          {category === 'Contribution' && openDrives.length > 1 && (
+          {category === 'Contribution' && openDrives.length > 0 && (
             <div className="flex flex-col gap-1">
               <Label>Contribution drive</Label>
               <Select value={driveId ?? ''} onValueChange={v => setDriveId(v || null)}>
@@ -1722,7 +1722,7 @@ function SplitModal({ txn, onClose, onSaved, flats, residents }: {
             </div>
             {row.category === 'Contribution' && (
               <div className="flex gap-2">
-                {openDrives.length > 1 && (
+                {openDrives.length > 0 && (
                   <div className="flex-1">
                     <label className="ds-lbl">Contribution drive</label>
                     <select
