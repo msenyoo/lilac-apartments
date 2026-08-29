@@ -84,10 +84,11 @@ function DashboardContent() {
       return (data ?? []) as { fund: string; receipts: number; payments: number; balance: number }[]
     },
   })
-  const maintenancePos = fundPositions.find(p => p.fund === 'Maintenance')
-  const corpusPos      = fundPositions.find(p => p.fund === 'Corpus')
-  const maintCollected = maintenancePos?.receipts ?? 0
-  const maintSpent     = maintenancePos?.payments ?? 0
+  const maintenancePos    = fundPositions.find(p => p.fund === 'Maintenance')
+  const corpusPos         = fundPositions.find(p => p.fund === 'Corpus')
+  const contributionPos   = fundPositions.find(p => p.fund === 'Contribution')
+  const maintCollected    = maintenancePos?.receipts ?? 0
+  const maintSpent        = maintenancePos?.payments ?? 0
 
   const { data: duesData = [] } = useQuery<DuesRow[]>({
     queryKey: ['fo-dues'],
@@ -211,8 +212,9 @@ function DashboardContent() {
   // Available = bank-ledger balance per fund (v_fund_position), so the net
   // always ties to the actual bank balance. corpusCollected/corpusSpent stay
   // for plan-progress displays only.
-  const corpusAvailable = Math.max(0, corpusPos?.balance ?? 0)
-  const maintAvailable  = Math.max(0, maintenancePos?.balance ?? 0)
+  const corpusAvailable       = Math.max(0, corpusPos?.balance ?? 0)
+  const maintAvailable        = Math.max(0, maintenancePos?.balance ?? 0)
+  const contributionAvailable = Math.max(0, contributionPos?.balance ?? 0)
 
   const fdTotal        = deposits.reduce((s, d) => s + d.principal, 0)
   const fdMaturingSoon = deposits.filter(d => { const days = daysUntil(d.maturity_date); return days >= 0 && days <= 30 })
@@ -221,7 +223,7 @@ function DashboardContent() {
     : null
 
   const pendingActionsCount = overdueFlatCount + unreconciledCount + fdMaturingSoon.length
-  const netAvailableCash    = maintAvailable + corpusAvailable
+  const netAvailableCash    = maintAvailable + corpusAvailable + contributionAvailable
 
   type MonthlyRow = { fiscal_label: string; maintenance_collected: number | null; corpus_collected: number | null; total_expenses: number | null }
   const chartData = (monthlyRaw as MonthlyRow[]).slice(-12).map(m => ({
@@ -259,7 +261,9 @@ function DashboardContent() {
             <p className="text-[12px] font-semibold uppercase tracking-wide" style={{ color: 'var(--brand-600)' }}>Net Available Cash</p>
           </div>
           <p className="text-[28px] font-extrabold tnum leading-tight" style={{ color: 'var(--brand-700)' }}>{formatINR(netAvailableCash)}</p>
-          <p className="text-[11.5px] mt-1" style={{ color: 'var(--brand-500)' }}>Maintenance + Corpus available</p>
+          <p className="text-[11.5px] mt-1" style={{ color: 'var(--brand-500)' }}>
+            Maintenance + Corpus{contributionAvailable > 0 ? ' + Contributions' : ''} available
+          </p>
         </button>
 
         <button
