@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   LayoutDashboard, TrendingUp, AlertTriangle, ArrowRight,
-  IndianRupee, Building2,
+  IndianRupee, Building2, HandHeart,
 } from 'lucide-react'
 import {
   Bar, Line, XAxis, YAxis, Tooltip,
@@ -110,6 +110,19 @@ function DashboardContent() {
         .select('plan_id, plan_name, plan_status, collected, effective_target, balance')
       if (error) throw error
       return (data ?? []) as CorpusPlanRow[]
+    },
+  })
+
+  const { data: openDrives = [] } = useQuery<{ drive_id: string; name: string; collected: number; disbursed: number; balance: number }[]>({
+    queryKey: ['fo-open-contribution-drives'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('v_contribution_tracker')
+        .select('drive_id, name, collected, disbursed, balance')
+        .eq('status', 'open')
+        .order('name')
+      if (error) throw error
+      return (data ?? []) as { drive_id: string; name: string; collected: number; disbursed: number; balance: number }[]
     },
   })
 
@@ -393,6 +406,39 @@ function DashboardContent() {
           </div>
         </div>
       </div>
+
+      {openDrives.length > 0 && (
+        <div className="surface !p-5 flex flex-col gap-3" style={{ background: '#fff1f2', borderColor: '#fecdd3' }}>
+          <div className="flex items-center gap-2">
+            <HandHeart size={18} style={{ color: '#e11d48' }} />
+            <p className="text-[14px] font-bold" style={{ color: '#9f1239' }}>Active Contributions</p>
+            <Badge variant="outline" className="ml-auto text-[11px]" style={{ background: '#ffe4e6', color: '#e11d48', borderColor: '#fecdd3' }}>
+              {openDrives.length} open drive{openDrives.length !== 1 ? 's' : ''}
+            </Badge>
+          </div>
+          <div className="flex flex-col gap-2">
+            {openDrives.map(d => (
+              <button key={d.drive_id} onClick={() => navigate('/contributions')}
+                className="flex items-center justify-between gap-3 rounded-xl px-4 py-3 text-left hover:opacity-90 transition-opacity"
+                style={{ background: 'white' }}>
+                <div className="min-w-0">
+                  <p className="text-[13px] font-semibold truncate" style={{ color: '#9f1239' }}>{d.name}</p>
+                  <p className="text-[11px] mt-0.5" style={{ color: 'var(--ink-400)' }}>
+                    Collected {formatINR(d.collected)}{d.disbursed > 0 && <> · Disbursed {formatINR(d.disbursed)}</>}
+                  </p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-[11px]" style={{ color: 'var(--ink-400)' }}>Balance in hand</p>
+                  <p className="text-[16px] font-bold tnum" style={{ color: '#e11d48' }}>{formatINR(d.balance)}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+          <Button size="sm" variant="outline" className="self-start text-[12px]" style={{ borderColor: '#fda4af', color: '#e11d48' }} onClick={() => navigate('/contributions')}>
+            View contributions <ArrowRight size={13} className="ml-1" />
+          </Button>
+        </div>
+      )}
 
       <div className="surface !p-5">
         <p className="text-[13.5px] font-semibold mb-4" style={{ color: 'var(--ink-700)' }}>
