@@ -361,8 +361,7 @@ function ImportPreview({ preview, fileName, onConfirm, onCancel, onRowEdited }: 
   }, [residents])
   const driveIdByLabel = useMemo(() => {
     const map = new Map<string, string>()
-    if (openDrives.length === 1) map.set('Contribution', openDrives[0].id)
-    else openDrives.forEach(d => map.set(`Contribution: ${d.name}`, d.id))
+    openDrives.forEach(d => map.set(`Contribution: ${d.name}`, d.id))
     return map
   }, [openDrives])
   const driveNameById = useMemo(() => new Map(openDrives.map(d => [d.id, d.name])), [openDrives])
