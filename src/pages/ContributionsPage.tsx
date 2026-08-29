@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, HandHeart, ChevronDown, ChevronUp } from 'lucide-react'
+import { Plus, HandHeart, ChevronDown, ChevronUp, Download, Loader2 } from 'lucide-react'
 import { supabase, ContributionTracker } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
 import { formatDateDMY } from '@/lib/date'
@@ -124,12 +124,15 @@ export default function ContributionsPage() {
   )
 }
 
+type SortKey = 'date' | 'flat' | 'contributor' | 'amount'
+
 function DriveDetail({ drive, isAdmin, onClosed }: {
   drive: ContributionTracker
   isAdmin: boolean
   onClosed: () => void
 }) {
   const [showClose, setShowClose] = useState(false)
+  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'flat', dir: 'asc' })
 
   const { data: txns = [], isLoading, isError } = useQuery({
     queryKey: ['contribution-drive-txns', drive.drive_id],
@@ -143,6 +146,56 @@ function DriveDetail({ drive, isAdmin, onClosed }: {
       if (error) throw error
       return (data ?? []) as unknown as DriveTxn[]
     },
+  })
+
+  function toggleSort(key: SortKey) {
+    setSort(s => s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' })
+  }
+
+  const [exporting, setExporting] = useState(false)
+  async function handleExportPdf() {
+    setExporting(true)
+    try {
+      const [{ pdf }, { ContributionDriveDoc }] = await Promise.all([
+        import('@react-pdf/renderer'),
+        import('@/components/reports/AgmPdfDocs'),
+      ])
+      const byFlat = [...txns].sort((a, b) => (a.flat_code ?? '').localeCompare(b.flat_code ?? ''))
+      const generated = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+      const blob = await pdf(
+        <ContributionDriveDoc
+          driveName={drive.name}
+          description={drive.description}
+          status={drive.status}
+          collected={drive.collected}
+          disbursed={drive.disbursed}
+          rows={byFlat.map(t => ({
+            value_date: t.value_date, flat_code: t.flat_code, contributor: t.resident?.name ?? null,
+            cr_dr: t.cr_dr, amount: t.amount,
+          }))}
+          generated={generated}
+        />
+      ).toBlob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `Lilac_Contribution_${drive.name.replace(/[^a-z0-9]+/gi, '_')}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const sortedTxns = [...txns].sort((a, b) => {
+    let cmp = 0
+    if (sort.key === 'date') cmp = a.value_date.localeCompare(b.value_date)
+    else if (sort.key === 'flat') cmp = (a.flat_code ?? '').localeCompare(b.flat_code ?? '')
+    else if (sort.key === 'contributor') cmp = (a.resident?.name ?? '').localeCompare(b.resident?.name ?? '')
+    else if (sort.key === 'amount') cmp = a.amount - b.amount
+    return sort.dir === 'asc' ? cmp : -cmp
   })
 
   return (
@@ -160,14 +213,27 @@ function DriveDetail({ drive, isAdmin, onClosed }: {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b hairline text-left">
-                <th className="py-2 pr-3 font-semibold text-xs" style={{ color: 'var(--ink-500)' }}>Date</th>
-                <th className="py-2 pr-3 font-semibold text-xs" style={{ color: 'var(--ink-500)' }}>Flat</th>
-                <th className="py-2 pr-3 font-semibold text-xs" style={{ color: 'var(--ink-500)' }}>Contributor</th>
-                <th className="py-2 pr-3 font-semibold text-xs text-right" style={{ color: 'var(--ink-500)' }}>Amount</th>
+                {([
+                  ['date', 'Date', ''],
+                  ['flat', 'Flat', ''],
+                  ['contributor', 'Contributor', ''],
+                  ['amount', 'Amount', 'text-right'],
+                ] as [SortKey, string, string][]).map(([key, label, align]) => (
+                  <th key={key}
+                    className={`py-2 pr-3 font-semibold text-xs cursor-pointer select-none hover:opacity-70 ${align}`}
+                    style={{ color: 'var(--ink-500)' }}
+                    onClick={() => toggleSort(key)}
+                  >
+                    <span className={`inline-flex items-center gap-1 ${align === 'text-right' ? 'flex-row-reverse' : ''}`}>
+                      {label}
+                      {sort.key === key && (sort.dir === 'asc' ? <ChevronUp size={11} /> : <ChevronDown size={11} />)}
+                    </span>
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody className="divide-y hairline">
-              {txns.map(t => (
+              {sortedTxns.map(t => (
                 <tr key={t.id}>
                   <td className="py-2 pr-3 font-mono text-xs whitespace-nowrap" style={{ color: 'var(--ink-600)' }}>{formatDateDMY(t.value_date)}</td>
                   <td className="py-2 pr-3 text-xs" style={{ color: 'var(--ink-700)' }}>{t.flat_code ?? '—'}</td>
@@ -182,9 +248,18 @@ function DriveDetail({ drive, isAdmin, onClosed }: {
         </div>
       )}
 
-      {isAdmin && drive.status === 'open' && (
-        <button onClick={() => setShowClose(true)} className="btn-secondary self-start text-sm">Close drive</button>
-      )}
+      <div className="flex gap-2">
+        {txns.length > 0 && (
+          <button onClick={handleExportPdf} disabled={exporting}
+            className="btn-secondary self-start text-sm flex items-center gap-1.5 disabled:opacity-50">
+            {exporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+            {exporting ? 'Generating…' : 'Export PDF'}
+          </button>
+        )}
+        {isAdmin && drive.status === 'open' && (
+          <button onClick={() => setShowClose(true)} className="btn-secondary self-start text-sm">Close drive</button>
+        )}
+      </div>
 
       {showClose && (
         <CloseDriveDialog

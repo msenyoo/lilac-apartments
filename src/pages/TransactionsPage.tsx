@@ -1214,7 +1214,7 @@ function ReviewItem({ item, flats, residents, onSaved }: {
       </div>
 
       {showSplit && (
-        <SplitModal txn={item as unknown as Transaction} onClose={() => setShowSplit(false)} onSaved={() => { setShowSplit(false); onSaved() }} flats={flats} />
+        <SplitModal txn={item as unknown as Transaction} onClose={() => setShowSplit(false)} onSaved={() => { setShowSplit(false); onSaved() }} flats={flats} residents={residents} />
       )}
     </>
   )
@@ -1534,10 +1534,14 @@ function EditModal({ txn, flats, residents, onClose, onSaved, onSplit, onVoided 
 }
 
 // ── SPLIT MODAL ───────────────────────────────────────────────
-interface SplitRow { flatCode: string; category: string; corpus: 'YES' | 'NO'; amount: string; planId?: string | null }
+interface SplitRow {
+  flatCode: string; category: string; corpus: 'YES' | 'NO'; amount: string
+  planId?: string | null; driveId?: string | null; residentId?: string | null
+}
 
-function SplitModal({ txn, onClose, onSaved, flats }: {
+function SplitModal({ txn, onClose, onSaved, flats, residents }: {
   txn: Transaction; onClose: () => void; onSaved: () => void; flats: any[]
+  residents: { id: string; name: string; type: string; flat_id: string }[]
 }) {
   const [rows, setRows] = useState<SplitRow[]>([
     { flatCode: '', category: 'Maintenance', corpus: 'NO', amount: '' },
@@ -1558,10 +1562,23 @@ function SplitModal({ txn, onClose, onSaved, flats }: {
     },
   })
 
+  const { data: openDrives = [] } = useQuery({
+    queryKey: ['open-contribution-drives'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('contribution_drives')
+        .select('id, name')
+        .eq('status', 'open')
+        .order('name')
+      return (data ?? []) as { id: string; name: string }[]
+    },
+  })
+  const driveIdByName = useMemo(() => new Map(openDrives.map(d => [d.name, d.id])), [openDrives])
+
   const total = rows.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0)
   const remaining = txn.amount - total
 
-  function updateRow(i: number, field: keyof SplitRow, val: string) {
+  function updateRow(i: number, field: keyof SplitRow, val: string | null) {
     setRows(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: val } : r))
   }
 
@@ -1570,6 +1587,9 @@ function SplitModal({ txn, onClose, onSaved, flats }: {
     if (rows.some(r => !r.flatCode || !r.amount)) { setError('All rows must have flat/category and amount'); return }
     if (activePlans.length > 1 && rows.some(r => r.corpus === 'YES' && !r.planId)) {
       setError('Select a corpus plan for each corpus row'); return
+    }
+    if (rows.some(r => r.category === 'Contribution' && !r.driveId)) {
+      setError('Select a contribution drive for each Contribution row'); return
     }
     setSaving(true); setError('')
 
@@ -1589,9 +1609,11 @@ function SplitModal({ txn, onClose, onSaved, flats }: {
       description: `${txn.description} [${refCode}]`,
       cr_dr: txn.cr_dr, amount: parseFloat(r.amount),
       flat_id: flatMap.get(r.flatCode) ?? null, flat_code: r.flatCode,
-      category: FLAT_CODES.includes(r.flatCode) ? r.category : r.flatCode,
+      category: r.category === 'Contribution' ? 'Contribution' : (FLAT_CODES.includes(r.flatCode) ? r.category : r.flatCode),
       corpus: r.corpus,
       plan_id: r.corpus === 'YES' ? (r.planId ?? (activePlans.length === 1 ? activePlans[0].id : null)) : null,
+      drive_id: r.category === 'Contribution' ? r.driveId : null,
+      resident_id: r.category === 'Contribution' ? (r.residentId ?? null) : null,
       fiscal_year: txn.fiscal_year, fiscal_month: txn.fiscal_month,
       fiscal_label: txn.fiscal_label, source: txn.source, upload_id: txn.upload_id,
       split_ref_id: splitRef?.id ?? null, split_ref_code: refCode, row_type: 'SPLIT' as const,
@@ -1613,8 +1635,13 @@ function SplitModal({ txn, onClose, onSaved, flats }: {
         </div>
 
         <div className="p-5 space-y-3 overflow-y-auto flex-1 min-h-0">
-          {rows.map((row, i) => (
-            <div key={i} className="flex gap-2 items-end">
+          {rows.map((row, i) => {
+            const rowIsFlat = FLAT_CODES.includes(row.flatCode)
+            const rowFlat = flats.find((f: any) => f.code === row.flatCode)
+            const flatResidents = residents.filter(r => r.flat_id === rowFlat?.id)
+            return (
+            <div key={i} className="flex flex-col gap-2 pb-2 border-b hairline last:border-b-0">
+            <div className="flex gap-2 items-end">
               <div className="flex-1">
                 <label className="ds-lbl">Flat / Category</label>
                 <select
@@ -1622,7 +1649,16 @@ function SplitModal({ txn, onClose, onSaved, flats }: {
                   onChange={e => {
                     const v = e.target.value
                     updateRow(i, 'flatCode', v)
-                    if (!FLAT_CODES.includes(v)) updateRow(i, 'category', v)
+                    if (!FLAT_CODES.includes(v)) {
+                      const driveIdForVal = driveIdByName.get(v) ?? null
+                      updateRow(i, 'category', driveIdForVal ? 'Contribution' : v)
+                      updateRow(i, 'corpus', 'NO')
+                      updateRow(i, 'driveId', driveIdForVal)
+                      updateRow(i, 'residentId', null)
+                    } else {
+                      updateRow(i, 'driveId', null)
+                      updateRow(i, 'residentId', null)
+                    }
                   }}
                   className="w-full ds-field"
                 >
@@ -1630,21 +1666,31 @@ function SplitModal({ txn, onClose, onSaved, flats }: {
                   <optgroup label="Flats">{FLAT_CODES.map(f => <option key={f} value={f}>{f}</option>)}</optgroup>
                   <optgroup label="Income">{INCOME_CATS.map(c => <option key={c} value={c}>{c}</option>)}</optgroup>
                   <optgroup label="Expenses">{EXPENSE_CATS.map(c => <option key={c} value={c}>{c}</option>)}</optgroup>
+                  <optgroup label="Contributions">{openDrives.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}</optgroup>
                 </select>
               </div>
-              {FLAT_CODES.includes(row.flatCode) && (
+              {rowIsFlat && (
                 <div className="w-28">
                   <label className="ds-lbl">Type</label>
                   <select
                     value={row.category}
                     onChange={e => {
-                      updateRow(i, 'category', e.target.value)
-                      updateRow(i, 'corpus', e.target.value === 'Corpus' ? 'YES' : 'NO')
+                      const val = e.target.value
+                      updateRow(i, 'category', val)
+                      updateRow(i, 'corpus', val === 'Corpus' ? 'YES' : 'NO')
+                      if (val === 'Contribution') {
+                        updateRow(i, 'driveId', openDrives.length === 1 ? openDrives[0].id : null)
+                        updateRow(i, 'residentId', flatResidents.length === 1 ? flatResidents[0].id : null)
+                      } else {
+                        updateRow(i, 'driveId', null)
+                        updateRow(i, 'residentId', null)
+                      }
                     }}
                     className="w-full ds-field"
                   >
                     <option value="Maintenance">Maintenance</option>
                     <option value="Corpus">Corpus</option>
+                    {openDrives.length > 0 && <option value="Contribution">Contribution</option>}
                   </select>
                 </div>
               )}
@@ -1675,7 +1721,39 @@ function SplitModal({ txn, onClose, onSaved, flats }: {
                 </button>
               )}
             </div>
-          ))}
+            {row.category === 'Contribution' && (
+              <div className="flex gap-2">
+                {openDrives.length > 1 && (
+                  <div className="flex-1">
+                    <label className="ds-lbl">Contribution drive</label>
+                    <select
+                      value={row.driveId ?? ''}
+                      onChange={e => updateRow(i, 'driveId', e.target.value || null)}
+                      className="w-full ds-field"
+                    >
+                      <option value="">Select drive…</option>
+                      {openDrives.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    </select>
+                  </div>
+                )}
+                {rowIsFlat && (
+                  <div className="flex-1">
+                    <label className="ds-lbl">Contributor (optional)</label>
+                    <select
+                      value={row.residentId ?? ''}
+                      onChange={e => updateRow(i, 'residentId', e.target.value || null)}
+                      className="w-full ds-field"
+                    >
+                      <option value="">— Not specified —</option>
+                      {flatResidents.map(r => <option key={r.id} value={r.id}>{r.name} ({r.type})</option>)}
+                    </select>
+                  </div>
+                )}
+              </div>
+            )}
+            </div>
+            )
+          })}
 
           <button onClick={() => setRows(r => [...r, { flatCode: '', category: 'Maintenance', corpus: 'NO', amount: '' }])}
             style={{ color: 'var(--brand-700)' }} className="flex items-center gap-1.5 text-sm hover:opacity-80">
@@ -1980,6 +2058,7 @@ function AllTransactionsTab() {
         <SplitModal
           txn={selectedTxn}
           flats={flats ?? []}
+          residents={residents ?? []}
           onClose={() => setShowSplit(false)}
           onSaved={() => {
             setShowSplit(false); setSelectedTxn(null)

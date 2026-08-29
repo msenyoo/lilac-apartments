@@ -735,3 +735,65 @@ export function CashbookDoc({
     </Document>
   )
 }
+
+// ── Contribution Drive Statement ────────────────────────────────
+
+interface ContributionDriveRow {
+  value_date: string; flat_code: string | null; contributor: string | null
+  cr_dr: 'CR' | 'DR'; amount: number
+}
+
+export function ContributionDriveDoc({ driveName, description, status, collected, disbursed, rows, generated }: {
+  driveName: string; description: string | null; status: string
+  collected: number; disbursed: number; rows: ContributionDriveRow[]; generated: string
+}) {
+  const balance = collected - disbursed
+  return (
+    <Document>
+      <Page size="A4" style={S.page}>
+        <LetterheadHeader style={S.header}>
+          <Text style={S.title}>Contribution Drive — {driveName}</Text>
+          <Text style={S.subtitle}>{status.toUpperCase()}{description ? ` · ${description}` : ''}</Text>
+        </LetterheadHeader>
+
+        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+          {[
+            { label: 'Collected', value: formatINR(collected) },
+            { label: 'Disbursed', value: formatINR(disbursed) },
+            { label: 'Balance in hand', value: formatINR(balance) },
+          ].map(({ label, value }) => (
+            <View key={label} style={{ flex: 1, backgroundColor: '#f8fafc', borderRadius: 4, padding: 6, border: '0.5pt solid #e2e8f0' }}>
+              <Text style={[S.small, { marginBottom: 2 }]}>{label}</Text>
+              <Text style={[S.bold, { fontSize: 10 }]}>{value}</Text>
+            </View>
+          ))}
+        </View>
+
+        <Text style={S.sectionHead}>TRANSACTIONS — SORTED BY FLAT</Text>
+        <View style={S.table}>
+          <TableHead cols={[
+            { label: 'Flat', flex: 0.7 }, { label: 'Contributor', flex: 1.3 },
+            { label: 'Date' }, { label: 'Amount', right: true },
+          ]} />
+          {rows.map((r, i) => (
+            <View key={i} style={[S.row, i % 2 === 1 ? S.rowAlt : {}]}>
+              <Text style={[S.col, S.bold, { flex: 0.7 }]}>{r.flat_code ?? '—'}</Text>
+              <Text style={[S.col, { flex: 1.3 }]}>{r.contributor ?? '—'}</Text>
+              <Text style={S.col}>{new Date(r.value_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</Text>
+              <Text style={[S.colR, r.cr_dr === 'DR' ? { color: '#dc2626' } : {}]}>
+                {r.cr_dr === 'DR' ? '− ' : ''}{formatINR(r.amount)}
+              </Text>
+            </View>
+          ))}
+          <View style={S.rowTotal}>
+            <Text style={[S.col, S.bold, { flex: 2 }]}>Balance in hand</Text>
+            <Text style={S.col} />
+            <Text style={[S.colR, S.bold]}>{formatINR(balance)}</Text>
+          </View>
+        </View>
+
+        <LetterheadFooter style={S.footer} generated={generated} />
+      </Page>
+    </Document>
+  )
+}
