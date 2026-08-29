@@ -103,6 +103,7 @@ interface PreviewRow {
   category: string
   corpus: 'YES' | 'NO'
   drive_id: string | null
+  resident_id: string | null
   fiscal_year: number
   fiscal_month: string
   fiscal_label: string
@@ -154,7 +155,7 @@ function UploadTab({ onImported }: { onImported: () => void }) {
           description: txn.description, cr_dr: txn.crDr, amount: txn.amount,
           flat_id: flatMap.get(tag.flatCode) ?? null,
           flat_code: tag.flatCode, category: tag.category, corpus: tag.corpus,
-          drive_id: null,
+          drive_id: null, resident_id: null,
           fiscal_year: getFiscalYear(txn.valueDate),
           fiscal_month: getFiscalMonth(txn.valueDate),
           fiscal_label: getFiscalLabel(txn.valueDate),
@@ -340,6 +341,24 @@ function ImportPreview({ preview, fileName, onConfirm, onCancel, onRowEdited }: 
       return (data ?? []) as { id: string; name: string }[]
     },
   })
+  const { data: residents = [] } = useQuery({
+    queryKey: ['residents-active-lite'],
+    queryFn: async () => {
+      const { data } = await supabase.from('residents').select('id, flat_id').eq('is_active', true)
+      return (data ?? []) as { id: string; flat_id: string }[]
+    },
+  })
+  // Most flats have exactly one resident on file — default a Contribution row to them
+  // rather than leaving it unattributed until someone edits it by hand later.
+  const soleResidentForFlat = useMemo(() => {
+    const byFlat = new Map<string, string[]>()
+    residents.forEach(r => byFlat.set(r.flat_id, [...(byFlat.get(r.flat_id) ?? []), r.id]))
+    return (flatId: string | null) => {
+      if (!flatId) return null
+      const ids = byFlat.get(flatId)
+      return ids?.length === 1 ? ids[0] : null
+    }
+  }, [residents])
   const driveIdByLabel = useMemo(() => {
     const map = new Map<string, string>()
     if (openDrives.length === 1) map.set('Contribution', openDrives[0].id)
@@ -380,6 +399,8 @@ function ImportPreview({ preview, fileName, onConfirm, onCancel, onRowEdited }: 
         const patch: Partial<PreviewRow> = { flat_code: newCode, flat_id: newFlatId }
         // If linking to a flat for the first time on a CR row, default category to Maintenance
         if (newCode && e.data.cr_dr === 'CR' && !e.data.category) patch.category = 'Maintenance'
+        // Contributor is flat-scoped — re-resolve for the new flat rather than carrying over.
+        if (e.data.category === 'Contribution') patch.resident_id = soleResidentForFlat(newFlatId)
         patch._confidence = 'Auto'
         onRowEdited(e.rowIndex, patch)
         // Resolving a previously-unrecognized row here skips the Review tab entirely (it's
@@ -405,6 +426,7 @@ function ImportPreview({ preview, fileName, onConfirm, onCancel, onRowEdited }: 
         const patch: Partial<PreviewRow> = { category, drive_id: driveId, _confidence: 'Auto' }
         if (category === 'Corpus') patch.corpus = 'YES'
         else patch.corpus = 'NO'
+        patch.resident_id = category === 'Contribution' ? soleResidentForFlat(e.data.flat_id) : null
         onRowEdited(e.rowIndex, patch)
       },
     },
@@ -414,7 +436,7 @@ function ImportPreview({ preview, fileName, onConfirm, onCancel, onRowEdited }: 
         : <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-green-100 text-green-700">Auto</span>,
     },
     { field: 'description', headerName: 'Description', flex: 1, minWidth: 200 },
-  ], [flatCodeOptions, categoryOptions, flatIdByCode, driveIdByLabel, driveNameById, onRowEdited])
+  ], [flatCodeOptions, categoryOptions, flatIdByCode, driveIdByLabel, driveNameById, soleResidentForFlat, onRowEdited])
 
   return (
     <div className="flex flex-col gap-4">
@@ -1039,8 +1061,16 @@ function ReviewItem({ item, flats, residents, onSaved }: {
                   setContributorResidentId(null)
                 } else if (val !== flatCode) {
                   // Contributor is flat-scoped — a stale pick from the previous flat must not
-                  // silently ride along onto the newly selected flat's Contribution row.
-                  setContributorResidentId(null)
+                  // silently ride along onto the newly selected flat's Contribution row. If
+                  // the row is already tagged Contribution, re-resolve for the new flat instead
+                  // of just clearing it, same as the Category dropdown below.
+                  if (category === 'Contribution') {
+                    const newFlat = flats.find((f: any) => f.code === val)
+                    const flatResidents = residents.filter(r => r.flat_id === newFlat?.id)
+                    setContributorResidentId(flatResidents.length === 1 ? flatResidents[0].id : null)
+                  } else {
+                    setContributorResidentId(null)
+                  }
                 }
               }}
               className="w-full ds-field bg-white"
@@ -1069,6 +1099,10 @@ function ReviewItem({ item, flats, residents, onSaved }: {
                     setCorpus('NO')
                     setPlanId(null)
                     setDriveId(openDrives.length === 1 ? openDrives[0].id : null)
+                    // Most flats have exactly one resident on file — default to them rather
+                    // than leaving every import-tagged Contribution row unattributed.
+                    const flatResidents = residents.filter(r => r.flat_id === selectedFlat?.id)
+                    setContributorResidentId(flatResidents.length === 1 ? flatResidents[0].id : null)
                   } else {
                     setCorpus('NO')
                     setPlanId(null)
@@ -1248,6 +1282,7 @@ function EditModal({ txn, flats, residents, onClose, onSaved, onSplit, onVoided 
   const driveIdByName = useMemo(() => new Map(openDrives.map(d => [d.name, d.id])), [openDrives])
 
   function handleFlatChange(val: string) {
+    const wasContribution = isFlat(flatCode) && category === 'Contribution'
     setFlatCode(val)
     if (!isFlat(val)) {
       const driveIdForVal = driveIdByName.get(val) ?? null
@@ -1258,6 +1293,12 @@ function EditModal({ txn, flats, residents, onClose, onSaved, onSplit, onVoided 
       if (!isCorpusCat) setPlanId(null)
       setDriveId(driveIdForVal)
       setResidentId(null)
+    }
+    else if (wasContribution) {
+      // Contributor is flat-scoped — re-resolve for the new flat instead of just clearing it.
+      const newFlat = flats.find((f: any) => f.code === val)
+      const flatResidents = residents.filter(r => r.flat_id === newFlat?.id)
+      setResidentId(flatResidents.length === 1 ? flatResidents[0].id : null)
     }
     else { setCategory('Maintenance'); setCorpus('NO'); setPlanId(null); setDriveId(null); setResidentId(null) }
   }
@@ -1272,6 +1313,11 @@ function EditModal({ txn, flats, residents, onClose, onSaved, onSplit, onVoided 
       setCorpus('NO')
       setPlanId(null)
       setDriveId(openDrives.length === 1 ? openDrives[0].id : null)
+      // Most flats have exactly one resident on file — default to them rather than
+      // leaving every import-tagged Contribution row unattributed.
+      const selectedFlat = flats.find((f: any) => f.code === flatCode)
+      const flatResidents = residents.filter(r => r.flat_id === selectedFlat?.id)
+      setResidentId(flatResidents.length === 1 ? flatResidents[0].id : null)
     } else {
       setCorpus('NO')
       setPlanId(null)
