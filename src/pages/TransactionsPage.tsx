@@ -102,6 +102,7 @@ interface PreviewRow {
   flat_code: string
   category: string
   corpus: 'YES' | 'NO'
+  drive_id: string | null
   fiscal_year: number
   fiscal_month: string
   fiscal_label: string
@@ -153,6 +154,7 @@ function UploadTab({ onImported }: { onImported: () => void }) {
           description: txn.description, cr_dr: txn.crDr, amount: txn.amount,
           flat_id: flatMap.get(tag.flatCode) ?? null,
           flat_code: tag.flatCode, category: tag.category, corpus: tag.corpus,
+          drive_id: null,
           fiscal_year: getFiscalYear(txn.valueDate),
           fiscal_month: getFiscalMonth(txn.valueDate),
           fiscal_label: getFiscalLabel(txn.valueDate),
@@ -327,8 +329,30 @@ function ImportPreview({ preview, fileName, onConfirm, onCancel, onRowEdited }: 
       return (data ?? []) as { id: string; code: string }[]
     },
   })
+  const { data: openDrives = [] } = useQuery({
+    queryKey: ['open-contribution-drives'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('contribution_drives')
+        .select('id, name')
+        .eq('status', 'open')
+        .order('name')
+      return (data ?? []) as { id: string; name: string }[]
+    },
+  })
+  const driveIdByLabel = useMemo(() => {
+    const map = new Map<string, string>()
+    if (openDrives.length === 1) map.set('Contribution', openDrives[0].id)
+    else openDrives.forEach(d => map.set(`Contribution: ${d.name}`, d.id))
+    return map
+  }, [openDrives])
+  const driveNameById = useMemo(() => new Map(openDrives.map(d => [d.id, d.name])), [openDrives])
+
   const flatCodeOptions = useMemo(() => ['', ...flats.map(f => f.code)], [flats])
-  const categoryOptions = useMemo(() => ['', 'Maintenance', 'Corpus', ...INCOME_CATS, ...EXPENSE_CATS], [])
+  const categoryOptions = useMemo(
+    () => ['', 'Maintenance', 'Corpus', ...INCOME_CATS, ...EXPENSE_CATS, ...driveIdByLabel.keys()],
+    [driveIdByLabel],
+  )
   const flatIdByCode = useMemo(() => new Map(flats.map(f => [f.code, f.id])), [flats])
 
   const colDefs = useMemo((): ColDef<any>[] => [
@@ -371,10 +395,16 @@ function ImportPreview({ preview, fileName, onConfirm, onCancel, onRowEdited }: 
       editable: true,
       cellEditor: 'agSelectCellEditor',
       cellEditorParams: { values: categoryOptions },
+      valueFormatter: (p: any) => p.value === 'Contribution'
+        ? `Contribution${driveNameById.get(p.data?.drive_id) ? `: ${driveNameById.get(p.data.drive_id)}` : ''}`
+        : (p.value ?? ''),
       onCellValueChanged: (e: any) => {
-        const patch: Partial<PreviewRow> = { category: e.newValue ?? '', _confidence: 'Auto' }
-        if (e.newValue === 'Corpus') patch.corpus = 'YES'
-        else if (e.newValue === 'Maintenance') patch.corpus = 'NO'
+        const raw = e.newValue ?? ''
+        const driveId = driveIdByLabel.get(raw) ?? null
+        const category = driveId ? 'Contribution' : raw
+        const patch: Partial<PreviewRow> = { category, drive_id: driveId, _confidence: 'Auto' }
+        if (category === 'Corpus') patch.corpus = 'YES'
+        else patch.corpus = 'NO'
         onRowEdited(e.rowIndex, patch)
       },
     },
@@ -384,7 +414,7 @@ function ImportPreview({ preview, fileName, onConfirm, onCancel, onRowEdited }: 
         : <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-green-100 text-green-700">Auto</span>,
     },
     { field: 'description', headerName: 'Description', flex: 1, minWidth: 200 },
-  ], [flatCodeOptions, categoryOptions, flatIdByCode, onRowEdited])
+  ], [flatCodeOptions, categoryOptions, flatIdByCode, driveIdByLabel, driveNameById, onRowEdited])
 
   return (
     <div className="flex flex-col gap-4">
