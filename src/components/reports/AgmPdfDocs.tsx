@@ -740,7 +740,11 @@ export function CashbookDoc({
 
 interface ContributionDriveRow {
   value_date: string; flat_code: string | null; contributor: string | null
-  cr_dr: 'CR' | 'DR'; amount: number
+  cr_dr: 'CR' | 'DR'; amount: number; description: string
+}
+
+function fmtLongDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
 export function ContributionDriveDoc({ driveName, description, status, collected, disbursed, rows, generated }: {
@@ -748,6 +752,7 @@ export function ContributionDriveDoc({ driveName, description, status, collected
   collected: number; disbursed: number; rows: ContributionDriveRow[]; generated: string
 }) {
   const balance = collected - disbursed
+  const drRows = rows.filter(r => r.cr_dr === 'DR')
   return (
     <Document>
       <Page size="A4" style={S.page}>
@@ -777,9 +782,9 @@ export function ContributionDriveDoc({ driveName, description, status, collected
           ]} />
           {rows.map((r, i) => (
             <View key={i} style={[S.row, i % 2 === 1 ? S.rowAlt : {}]}>
-              <Text style={[S.col, S.bold, { flex: 0.7 }]}>{r.flat_code ?? '—'}</Text>
+              <Text style={[S.col, S.bold, { flex: 0.7 }]}>{r.flat_code || '—'}</Text>
               <Text style={[S.col, { flex: 1.3 }]}>{r.contributor ?? '—'}</Text>
-              <Text style={S.col}>{new Date(r.value_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</Text>
+              <Text style={S.col}>{fmtLongDate(r.value_date)}</Text>
               <Text style={[S.colR, r.cr_dr === 'DR' ? { color: '#dc2626' } : {}]}>
                 {r.cr_dr === 'DR' ? '− ' : ''}{formatINR(r.amount)}
               </Text>
@@ -794,6 +799,45 @@ export function ContributionDriveDoc({ driveName, description, status, collected
 
         <LetterheadFooter style={S.footer} generated={generated} />
       </Page>
+
+      {drRows.length > 0 && (
+        <Page size="A4" style={S.page}>
+          <LetterheadHeader style={S.header}>
+            <Text style={S.title}>Contribution Drive — {driveName}</Text>
+            <Text style={S.subtitle}>Disbursement vouchers · {drRows.length} payment{drRows.length !== 1 ? 's' : ''}</Text>
+          </LetterheadHeader>
+
+          {drRows.map((r, i) => (
+            <View key={i} wrap={false} style={{
+              marginBottom: 14, padding: 10, borderRadius: 4,
+              border: '0.8pt solid #e2e8f0', backgroundColor: '#fff1f2',
+            }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 6, borderBottom: '0.8pt solid #fecdd3', paddingBottom: 4 }}>
+                <Text style={[S.bold, { fontSize: 10, color: '#9f1239' }]}>Disbursement voucher {i + 1}</Text>
+                <Text style={[S.bold, { fontSize: 13, color: '#dc2626' }]}>{formatINR(r.amount)}</Text>
+              </View>
+              <View style={S.row}>
+                <Text style={[S.col, S.small, { flex: 0.6 }]}>Date</Text>
+                <Text style={S.col}>{fmtLongDate(r.value_date)}</Text>
+              </View>
+              <View style={S.row}>
+                <Text style={[S.col, S.small, { flex: 0.6 }]}>Paid to</Text>
+                <Text style={[S.col, S.bold]}>{r.contributor ?? '—'}</Text>
+              </View>
+              <View style={S.row}>
+                <Text style={[S.col, S.small, { flex: 0.6 }]}>Bank reference</Text>
+                <Text style={S.col}>{r.description}</Text>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 24, marginTop: 14 }}>
+                <Text style={[S.small, { flex: 1, borderTop: '0.5pt solid #94a3b8', paddingTop: 3 }]}>Received by</Text>
+                <Text style={[S.small, { flex: 1, borderTop: '0.5pt solid #94a3b8', paddingTop: 3 }]}>Date</Text>
+              </View>
+            </View>
+          ))}
+
+          <LetterheadFooter style={S.footer} generated={generated} />
+        </Page>
+      )}
     </Document>
   )
 }

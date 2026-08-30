@@ -23,6 +23,7 @@ interface DriveTxn {
   cr_dr: 'CR' | 'DR'
   amount: number
   notes: string | null
+  description: string
   resident: { name: string } | null
 }
 
@@ -139,7 +140,7 @@ function DriveDetail({ drive, isAdmin, onClosed }: {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('transactions')
-        .select('id, value_date, flat_code, cr_dr, amount, notes, resident:resident_id(name)')
+        .select('id, value_date, flat_code, cr_dr, amount, notes, description, resident:resident_id(name)')
         .eq('drive_id', drive.drive_id)
         .neq('row_type', 'VOIDED')
         .order('value_date', { ascending: false })
@@ -170,8 +171,9 @@ function DriveDetail({ drive, isAdmin, onClosed }: {
           collected={drive.collected}
           disbursed={drive.disbursed}
           rows={byFlat.map(t => ({
-            value_date: t.value_date, flat_code: t.flat_code, contributor: t.resident?.name ?? null,
-            cr_dr: t.cr_dr, amount: t.amount,
+            value_date: t.value_date, flat_code: t.flat_code,
+            contributor: t.cr_dr === 'DR' ? (t.notes ?? null) : (t.resident?.name ?? null),
+            cr_dr: t.cr_dr, amount: t.amount, description: t.description,
           }))}
           generated={generated}
         />
@@ -193,7 +195,7 @@ function DriveDetail({ drive, isAdmin, onClosed }: {
     let cmp = 0
     if (sort.key === 'date') cmp = a.value_date.localeCompare(b.value_date)
     else if (sort.key === 'flat') cmp = (a.flat_code ?? '').localeCompare(b.flat_code ?? '')
-    else if (sort.key === 'contributor') cmp = (a.resident?.name ?? '').localeCompare(b.resident?.name ?? '')
+    else if (sort.key === 'contributor') cmp = (a.resident?.name ?? a.notes ?? '').localeCompare(b.resident?.name ?? b.notes ?? '')
     else if (sort.key === 'amount') cmp = a.amount - b.amount
     return sort.dir === 'asc' ? cmp : -cmp
   })
@@ -236,8 +238,12 @@ function DriveDetail({ drive, isAdmin, onClosed }: {
               {sortedTxns.map(t => (
                 <tr key={t.id}>
                   <td className="py-2 pr-3 font-mono text-xs whitespace-nowrap" style={{ color: 'var(--ink-600)' }}>{formatDateDMY(t.value_date)}</td>
-                  <td className="py-2 pr-3 text-xs" style={{ color: 'var(--ink-700)' }}>{t.flat_code ?? '—'}</td>
-                  <td className="py-2 pr-3 text-xs" style={{ color: 'var(--ink-700)' }}>{t.resident?.name ?? '—'}</td>
+                  <td className="py-2 pr-3 text-xs" style={{ color: 'var(--ink-700)' }}>{t.flat_code || '—'}</td>
+                  <td className="py-2 pr-3 text-xs" style={{ color: 'var(--ink-700)' }}>
+                    {t.cr_dr === 'DR'
+                      ? (t.notes ? `Paid: ${t.notes}` : '—')
+                      : (t.resident?.name ?? '—')}
+                  </td>
                   <td className={`py-2 pr-3 text-xs text-right font-semibold tabular-nums ${t.cr_dr === 'CR' ? 'text-green-700' : 'text-red-600'}`}>
                     {t.cr_dr === 'DR' ? '− ' : ''}{formatINR(t.amount)}
                   </td>

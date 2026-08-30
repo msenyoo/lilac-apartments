@@ -867,6 +867,7 @@ function ReviewItem({ item, flats, residents, onSaved }: {
   const [planId, setPlanId]       = useState<string | null>(null)
   const [driveId, setDriveId] = useState<string | null>(null)
   const [contributorResidentId, setContributorResidentId] = useState<string | null>(null)
+  const [contributionNotes, setContributionNotes] = useState('')
   const [saving, setSaving]       = useState(false)
   const [saved, setSaved]         = useState(false)
   const [showSplit, setShowSplit] = useState(false)
@@ -944,6 +945,7 @@ function ReviewItem({ item, flats, residents, onSaved }: {
       plan_id: resolvedPlanId,
       drive_id: resolvedDriveId,
       resident_id: isContribution ? contributorResidentId : null,
+      notes: isContribution ? (contributionNotes.trim() || null) : null,
       row_type: 'Normal',
     }).eq('id', item.id)
     if (!error && saveSender && senderResidentId && senderToken.trim()) {
@@ -1170,6 +1172,17 @@ function ReviewItem({ item, flats, residents, onSaved }: {
           </div>
         )}
 
+        {category === 'Contribution' && (
+          <div>
+            <label className="ds-lbl">{item.cr_dr === 'DR' ? 'Paid to (optional)' : 'Notes (optional)'}</label>
+            <input
+              type="text" value={contributionNotes} onChange={e => setContributionNotes(e.target.value)}
+              placeholder={item.cr_dr === 'DR' ? "e.g. Malliga (Kannan's wife)" : 'e.g. Handed over in person'}
+              className="w-full ds-field bg-white"
+            />
+          </div>
+        )}
+
         {showMonthHint && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700">
             This looks like <strong>{suggestedMonths} months</strong> of maintenance (
@@ -1238,6 +1251,7 @@ function EditModal({ txn, flats, residents, onClose, onSaved, onSplit, onVoided 
   const [planId,       setPlanId]       = useState<string | null>(txn.plan_id ?? null)
   const [driveId,      setDriveId]      = useState<string | null>(txn.drive_id ?? null)
   const [residentId,   setResidentId]   = useState<string | null>(txn.resident_id ?? null)
+  const [notes,        setNotes]        = useState(txn.notes ?? '')
   const [saving,       setSaving]       = useState(false)
   const [copied,       setCopied]       = useState(false)
   const [confirmVoid,  setConfirmVoid]  = useState(false)
@@ -1347,14 +1361,16 @@ function EditModal({ txn, flats, residents, onClose, onSaved, onSplit, onVoided 
     const flatId = flats.find(f => f.code === flatCode)?.id ?? null
     const resolvedCategory = isContribution ? 'Contribution' : (isFlat(flatCode) ? category : flatCode)
     const resolvedResidentId = isContribution ? residentId : null
+    const resolvedNotes = isContribution ? (notes.trim() || null) : null
     const { error } = await supabase.from('transactions').update({
       flat_code: flatCode, flat_id: flatId, category: resolvedCategory, corpus,
       plan_id: resolvedPlanId, drive_id: resolvedDriveId, resident_id: resolvedResidentId,
+      notes: resolvedNotes,
     }).eq('id', txn.id)
     setSaving(false)
     if (error) { toast.error(error.message); return }
     toast.success('Transaction updated')
-    onSaved({ ...txn, flat_code: flatCode, flat_id: flatId, category: resolvedCategory, corpus, plan_id: resolvedPlanId, drive_id: resolvedDriveId, resident_id: resolvedResidentId })
+    onSaved({ ...txn, flat_code: flatCode, flat_id: flatId, category: resolvedCategory, corpus, plan_id: resolvedPlanId, drive_id: resolvedDriveId, resident_id: resolvedResidentId, notes: resolvedNotes })
   }
 
   async function handleVoid() {
@@ -1482,6 +1498,20 @@ function EditModal({ txn, flats, residents, onClose, onSaved, onSplit, onVoided 
                   <option key={r.id} value={r.id}>{r.name} ({r.type})</option>
                 ))}
               </select>
+            </div>
+          )}
+
+          {category === 'Contribution' && (
+            <div>
+              <label className="ds-lbl">{txn.cr_dr === 'DR' ? 'Paid to (optional)' : 'Notes (optional)'}</label>
+              <input
+                type="text" value={notes} onChange={e => setNotes(e.target.value)}
+                placeholder={txn.cr_dr === 'DR' ? 'e.g. Malliga (Kannan\'s wife)' : 'e.g. Handed over in person'}
+                className="w-full ds-field"
+              />
+              {txn.cr_dr === 'DR' && (
+                <p className="text-xs text-slate-400 mt-1">Printed as "Paid to" on the drive's PDF export.</p>
+              )}
             </div>
           )}
 
