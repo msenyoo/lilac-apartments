@@ -19,6 +19,33 @@ const ROLE_LABEL: Record<string, string> = {
   owner:     'Owner',
 }
 
+// Lets the committee confirm which build is actually live without needing to ask —
+// __APP_COMMIT__ etc. are injected at build time from Vercel's env vars (vite.config.ts).
+function VersionTag() {
+  const sha = __APP_COMMIT__
+  const shortSha = sha ? sha.slice(0, 7) : 'local'
+  const builtAt = new Date(__APP_BUILT_AT__).toLocaleString('en-IN', {
+    day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+  })
+  const label = `v${shortSha}${__APP_ENV__ !== 'production' ? ` · ${__APP_ENV__}` : ''}`
+  const title = `Branch ${__APP_BRANCH__} · Built ${builtAt}${sha ? ` · ${sha}` : ''}`
+  const content = (
+    <span className="text-[10px] font-mono" style={{ color: 'var(--ink-300)' }} title={title}>
+      {label}
+    </span>
+  )
+  return (
+    <div className="px-2 pt-1 text-center">
+      {sha ? (
+        <a href={`https://github.com/msenyoo/lilac-apartments/commit/${sha}`} target="_blank" rel="noreferrer"
+          className="hover:underline">
+          {content}
+        </a>
+      ) : content}
+    </div>
+  )
+}
+
 const NAV = [
   { to: '/dashboard',        icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/dues',             icon: IndianRupee,     label: 'Maintenance Dues',  badge: 'dues', section: 'Money' },
@@ -223,6 +250,7 @@ export default function Layout() {
             <LogOut size={16} />
           </button>
         </div>
+        <VersionTag />
       </div>
     </aside>
   )

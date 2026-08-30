@@ -2,7 +2,19 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
+// Vercel sets these as build-time env vars; unset locally (npm run dev / npm run build
+// outside Vercel), where the fallbacks below apply instead.
+const commitSha    = process.env.VERCEL_GIT_COMMIT_SHA ?? ''
+const commitBranch = process.env.VERCEL_GIT_COMMIT_REF ?? 'local'
+const vercelEnv    = process.env.VERCEL_ENV ?? 'development'
+
 export default defineConfig({
+  define: {
+    __APP_COMMIT__:   JSON.stringify(commitSha),
+    __APP_BRANCH__:   JSON.stringify(commitBranch),
+    __APP_ENV__:      JSON.stringify(vercelEnv),
+    __APP_BUILT_AT__: JSON.stringify(new Date().toISOString()),
+  },
   plugins: [
     react(),
     VitePWA({
