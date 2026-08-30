@@ -767,7 +767,8 @@ export function ContributionDriveDoc({ driveName, description, status, collected
           {[
             { label: 'Collected', value: formatINR(collected) },
             { label: 'Disbursed', value: formatINR(disbursed) },
-            { label: balanceInfo.label, value: formatINR(balanceInfo.amount) },
+            // Omit when collected exactly covers disbursed — nothing to report either way.
+            ...(balance !== 0 ? [{ label: balanceInfo.label, value: formatINR(balanceInfo.amount) }] : []),
           ].map(({ label, value }) => (
             <View key={label} style={{ flex: 1, backgroundColor: '#f8fafc', borderRadius: 4, padding: 6, border: '0.5pt solid #e2e8f0' }}>
               <Text style={[S.small, { marginBottom: 2 }]}>{label}</Text>
@@ -812,10 +813,10 @@ export function ContributionDriveDoc({ driveName, description, status, collected
           {drRows.map((r, i) => (
             <View key={i} wrap={false} style={{
               marginBottom: 14, padding: 10, borderRadius: 4,
-              border: '0.8pt solid #e2e8f0', backgroundColor: '#fff1f2',
+              border: '0.8pt solid #bbf7d0', backgroundColor: '#f0fdf4',
             }}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 6, borderBottom: '0.8pt solid #fecdd3', paddingBottom: 4 }}>
-                <Text style={[S.bold, { fontSize: 10, color: '#9f1239' }]}>Disbursement voucher</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 6, borderBottom: '0.8pt solid #bbf7d0', paddingBottom: 4 }}>
+                <Text style={[S.bold, { fontSize: 10, color: '#166534' }]}>Disbursement voucher</Text>
                 <Text style={[S.bold, { fontSize: 13, color: '#16a34a' }]}>{formatINR(r.amount)}</Text>
               </View>
               <View style={S.row}>
