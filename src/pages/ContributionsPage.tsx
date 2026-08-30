@@ -4,6 +4,7 @@ import { Plus, HandHeart, ChevronDown, ChevronUp, Download, Loader2 } from 'luci
 import { supabase, ContributionTracker } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
 import { formatDateDMY } from '@/lib/date'
+import { driveBalanceLabel } from '@/lib/contributions'
 import { useRoleCtx } from '@/contexts/RoleContext'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -96,8 +97,10 @@ export default function ContributionsPage() {
                   </p>
                 </div>
                 <div className="text-right shrink-0">
-                  <p className="text-xs" style={{ color: 'var(--ink-400)' }}>Balance in hand</p>
-                  <p className="font-bold" style={{ color: d.balance !== 0 ? 'var(--brand-700)' : 'var(--ink-600)' }}>{formatINR(d.balance)}</p>
+                  <p className="text-xs" style={{ color: 'var(--ink-400)' }}>{driveBalanceLabel(d.balance).label}</p>
+                  <p className="font-bold" style={{ color: driveBalanceLabel(d.balance).overpaid ? '#dc2626' : d.balance !== 0 ? 'var(--brand-700)' : 'var(--ink-600)' }}>
+                    {formatINR(driveBalanceLabel(d.balance).amount)}
+                  </p>
                 </div>
                 {selectedDriveId === d.drive_id
                   ? <ChevronUp size={16} className="shrink-0" style={{ color: 'var(--ink-400)' }} />
@@ -133,6 +136,7 @@ function DriveDetail({ drive, isAdmin, onClosed }: {
   onClosed: () => void
 }) {
   const [showClose, setShowClose] = useState(false)
+  const [showReopen, setShowReopen] = useState(false)
   const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'flat', dir: 'asc' })
 
   const { data: txns = [], isLoading, isError } = useQuery({
@@ -265,6 +269,9 @@ function DriveDetail({ drive, isAdmin, onClosed }: {
         {isAdmin && drive.status === 'open' && (
           <button onClick={() => setShowClose(true)} className="btn-secondary self-start text-sm">Close drive</button>
         )}
+        {isAdmin && drive.status === 'closed' && (
+          <button onClick={() => setShowReopen(true)} className="btn-secondary self-start text-sm">Reopen drive</button>
+        )}
       </div>
 
       {showClose && (
@@ -272,6 +279,14 @@ function DriveDetail({ drive, isAdmin, onClosed }: {
           drive={drive}
           onClose={() => setShowClose(false)}
           onClosed={() => { setShowClose(false); onClosed() }}
+        />
+      )}
+
+      {showReopen && (
+        <ReopenDriveDialog
+          drive={drive}
+          onClose={() => setShowReopen(false)}
+          onReopened={() => { setShowReopen(false); onClosed() }}
         />
       )}
     </div>
@@ -355,8 +370,10 @@ function CloseDriveDialog({ drive, onClose, onClosed }: {
         <div className="flex flex-col gap-3 py-2">
           {drive.balance !== 0 && (
             <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700">
-              This drive still has a balance of <strong>{formatINR(drive.balance)}</strong> in hand. Closing does not
-              block on this — make sure that's intentional (e.g. rounding, or a carry-forward you're tracking in the notes below).
+              {driveBalanceLabel(drive.balance).overpaid
+                ? <>This drive was <strong>{formatINR(driveBalanceLabel(drive.balance).amount)}</strong> funded by the association (disbursed more than collected).</>
+                : <>This drive still has a balance of <strong>{formatINR(drive.balance)}</strong> in hand.</>}
+              {' '}Closing does not block on this — make sure that's intentional (e.g. rounding, or a carry-forward you're tracking in the notes below).
             </div>
           )}
           <div>
@@ -369,6 +386,54 @@ function CloseDriveDialog({ drive, onClose, onClosed }: {
           <button onClick={onClose} className="btn-secondary flex-1 text-sm">Cancel</button>
           <button onClick={handleConfirm} disabled={saving} className="btn-primary flex-1 text-sm">
             {saving ? 'Closing…' : 'Close drive'}
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function ReopenDriveDialog({ drive, onClose, onReopened }: {
+  drive: ContributionTracker
+  onClose: () => void
+  onReopened: () => void
+}) {
+  const [saving, setSaving] = useState(false)
+
+  async function handleConfirm() {
+    setSaving(true)
+    const { error } = await supabase.from('contribution_drives').update({
+      status: 'open',
+      closed_at: null,
+      close_notes: null,
+    }).eq('id', drive.drive_id)
+    setSaving(false)
+    if (error) { toast.error(error.message); return }
+    toast.success('Drive reopened')
+    onReopened()
+  }
+
+  return (
+    <Dialog open onOpenChange={v => { if (!v) onClose() }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Reopen "{drive.name}"?</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-3 py-2">
+          <p className="text-sm" style={{ color: 'var(--ink-600)' }}>
+            This makes the drive selectable again when tagging bank transactions, so new
+            contributions (or corrections to accidental closes) can be added to it.
+          </p>
+          {drive.close_notes && (
+            <div className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-600">
+              Previous close notes: {drive.close_notes}
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <button onClick={onClose} className="btn-secondary flex-1 text-sm">Cancel</button>
+          <button onClick={handleConfirm} disabled={saving} className="btn-primary flex-1 text-sm">
+            {saving ? 'Reopening…' : 'Reopen drive'}
           </button>
         </DialogFooter>
       </DialogContent>

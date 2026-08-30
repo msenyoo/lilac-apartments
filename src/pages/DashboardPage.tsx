@@ -10,6 +10,7 @@ import {
 } from 'recharts'
 import { supabase } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
+import { driveBalanceLabel } from '@/lib/contributions'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useRoleCtx } from '@/contexts/RoleContext'
@@ -432,8 +433,8 @@ function DashboardContent() {
                   </p>
                 </div>
                 <div className="text-right shrink-0">
-                  <p className="text-[11px]" style={{ color: 'var(--ink-400)' }}>Balance in hand</p>
-                  <p className="text-[16px] font-bold tnum" style={{ color: '#e11d48' }}>{formatINR(d.balance)}</p>
+                  <p className="text-[11px]" style={{ color: 'var(--ink-400)' }}>{driveBalanceLabel(d.balance).label}</p>
+                  <p className="text-[16px] font-bold tnum" style={{ color: '#e11d48' }}>{formatINR(driveBalanceLabel(d.balance).amount)}</p>
                 </div>
               </button>
             ))}

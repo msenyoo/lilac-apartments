@@ -3,6 +3,7 @@ import {
   Document, Page, Text, View, StyleSheet,
 } from '@react-pdf/renderer'
 import { LetterheadHeader, LetterheadFooter } from './Letterhead'
+import { driveBalanceLabel } from '@/lib/contributions'
 
 // ── Shared styles ──────────────────────────────────────────────
 
@@ -752,6 +753,7 @@ export function ContributionDriveDoc({ driveName, description, status, collected
   collected: number; disbursed: number; rows: ContributionDriveRow[]; generated: string
 }) {
   const balance = collected - disbursed
+  const balanceInfo = driveBalanceLabel(balance)
   const drRows = rows.filter(r => r.cr_dr === 'DR')
   return (
     <Document>
@@ -765,11 +767,11 @@ export function ContributionDriveDoc({ driveName, description, status, collected
           {[
             { label: 'Collected', value: formatINR(collected) },
             { label: 'Disbursed', value: formatINR(disbursed) },
-            { label: 'Balance in hand', value: formatINR(balance) },
+            { label: balanceInfo.label, value: formatINR(balanceInfo.amount) },
           ].map(({ label, value }) => (
             <View key={label} style={{ flex: 1, backgroundColor: '#f8fafc', borderRadius: 4, padding: 6, border: '0.5pt solid #e2e8f0' }}>
               <Text style={[S.small, { marginBottom: 2 }]}>{label}</Text>
-              <Text style={[S.bold, { fontSize: 10 }]}>{value}</Text>
+              <Text style={[S.bold, { fontSize: 10 }, balanceInfo.overpaid ? { color: '#dc2626' } : {}]}>{value}</Text>
             </View>
           ))}
         </View>
@@ -791,9 +793,9 @@ export function ContributionDriveDoc({ driveName, description, status, collected
             </View>
           ))}
           <View style={S.rowTotal}>
-            <Text style={[S.col, S.bold, { flex: 2 }]}>Balance in hand</Text>
+            <Text style={[S.col, S.bold, { flex: 2 }]}>{balanceInfo.label}</Text>
             <Text style={S.col} />
-            <Text style={[S.colR, S.bold]}>{formatINR(balance)}</Text>
+            <Text style={[S.colR, S.bold, balanceInfo.overpaid ? { color: '#dc2626' } : {}]}>{formatINR(balanceInfo.amount)}</Text>
           </View>
         </View>
 

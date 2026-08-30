@@ -262,6 +262,7 @@ export interface ContributionTracker {
   disbursed: number
   balance: number
   last_activity: string | null
+  close_notes: string | null
 }
 
 export interface ExpenseEntry {
