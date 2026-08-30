@@ -815,8 +815,8 @@ export function ContributionDriveDoc({ driveName, description, status, collected
               border: '0.8pt solid #e2e8f0', backgroundColor: '#fff1f2',
             }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 6, borderBottom: '0.8pt solid #fecdd3', paddingBottom: 4 }}>
-                <Text style={[S.bold, { fontSize: 10, color: '#9f1239' }]}>Disbursement voucher {i + 1}</Text>
-                <Text style={[S.bold, { fontSize: 13, color: '#dc2626' }]}>{formatINR(r.amount)}</Text>
+                <Text style={[S.bold, { fontSize: 10, color: '#9f1239' }]}>Disbursement voucher</Text>
+                <Text style={[S.bold, { fontSize: 13, color: '#16a34a' }]}>{formatINR(r.amount)}</Text>
               </View>
               <View style={S.row}>
                 <Text style={[S.col, S.small, { flex: 0.6 }]}>Date</Text>
