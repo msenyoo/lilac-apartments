@@ -1525,18 +1525,10 @@ function EditModal({ txn, flats, residents, onClose, onSaved, onSplit, onVoided 
 
           {/* Secondary actions */}
           <div className="border-t hairline pt-3 flex gap-2">
-            {txn.cr_dr === 'CR' && (
-              <button onClick={() => {
-                if (txn.drive_id) {
-                  toast.error('This transaction is tagged to a contribution drive — splitting would remove it from the drive. Not supported yet.')
-                  return
-                }
-                onSplit()
-              }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 text-sm text-slate-600 hover:bg-[var(--ink-100)] flex-1 justify-center">
-                <Scissors size={13} /> Split
-              </button>
-            )}
+            <button onClick={onSplit}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 text-sm text-slate-600 hover:bg-[var(--ink-100)] flex-1 justify-center">
+              <Scissors size={13} /> Split
+            </button>
             {isAdmin && (!confirmVoid ? (
               <button onClick={() => setConfirmVoid(true)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-300 text-red-600 text-sm hover:bg-red-50 flex-1 justify-center">
@@ -1628,8 +1620,10 @@ function SplitModal({ txn, onClose, onSaved, flats, residents }: {
       ref_code: refCode, original_amount: txn.amount, split_count: rows.length, notes: txn.description,
     }).select('id').single()
 
-    // Void original
-    await supabase.from('transactions').update({ row_type: 'VOIDED' }).eq('id', txn.id)
+    // Void original — stamped with the same split_ref so "Undo split" can find it later
+    await supabase.from('transactions').update({
+      row_type: 'VOIDED', split_ref_id: splitRef?.id ?? null, split_ref_code: refCode,
+    }).eq('id', txn.id)
 
     // Insert split rows
     const flatMap = new Map(flats.map(f => [f.code, f.id]))
@@ -1808,6 +1802,87 @@ function SplitModal({ txn, onClose, onSaved, flats, residents }: {
   )
 }
 
+// ── UNDO SPLIT MODAL ──────────────────────────────────────────
+function UndoSplitModal({ txn, onClose, onUndone }: {
+  txn: Transaction; onClose: () => void; onUndone: () => void
+}) {
+  const [undoing, setUndoing] = useState(false)
+
+  const { data: splitRows = [], isLoading } = useQuery({
+    queryKey: ['split-rows', txn.split_ref_id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('id, flat_code, category, amount')
+        .eq('split_ref_id', txn.split_ref_id as string)
+        .eq('row_type', 'SPLIT')
+        .order('created_at')
+      if (error) throw error
+      return (data ?? []) as { id: string; flat_code: string | null; category: string | null; amount: number }[]
+    },
+    enabled: !!txn.split_ref_id,
+  })
+
+  async function handleUndo() {
+    setUndoing(true)
+    const ids = splitRows.map(r => r.id)
+    if (ids.length > 0) {
+      const { error: voidErr } = await supabase.from('transactions').update({ row_type: 'VOIDED' }).in('id', ids)
+      if (voidErr) { toast.error(voidErr.message); setUndoing(false); return }
+    }
+    const { error } = await supabase.from('transactions').update({ row_type: 'Normal' }).eq('id', txn.id)
+    setUndoing(false)
+    if (error) { toast.error(error.message); return }
+    toast.success('Split undone — original transaction restored')
+    onUndone()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[85vh] overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between p-5 border-b hairline shrink-0">
+          <div>
+            <h3 className="font-semibold">Undo split</h3>
+            <p className="text-sm text-slate-500 mt-0.5">{formatDateDMY(txn.value_date)} · {formatINR(txn.amount)}</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[var(--ink-100)]"><X size={18} /></button>
+        </div>
+
+        <div className="p-5 space-y-3 overflow-y-auto flex-1 min-h-0">
+          <p className="text-sm text-slate-600">
+            This restores the original {formatINR(txn.amount)} transaction and removes
+            {isLoading ? '' : ` the ${splitRows.length} row${splitRows.length !== 1 ? 's' : ''}`} it was split into:
+          </p>
+          {isLoading ? (
+            <div className="h-16 animate-pulse rounded-lg bg-slate-100" />
+          ) : splitRows.length === 0 ? (
+            <p className="text-sm text-slate-400">No active split rows found — this may already be undone.</p>
+          ) : (
+            <div className="divide-rows border rounded-lg hairline overflow-hidden">
+              {splitRows.map(r => (
+                <div key={r.id} className="flex justify-between px-3 py-2 text-sm">
+                  <span className="text-slate-600">{r.flat_code || r.category || '—'}</span>
+                  <span className="font-medium">{formatINR(r.amount)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            This can't be re-applied automatically — you'd need to re-split manually to redo it.
+          </p>
+        </div>
+
+        <div className="flex gap-2 p-5 border-t hairline">
+          <button onClick={onClose} className="btn-secondary flex-1">Cancel</button>
+          <button onClick={handleUndo} disabled={undoing || isLoading} className="btn-primary flex-1 disabled:opacity-50">
+            {undoing ? 'Undoing…' : 'Yes, undo split'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── ALL TRANSACTIONS TAB ──────────────────────────────────────
 type DateMode = 'fy' | 'custom' | 'all'
 
@@ -1835,6 +1910,7 @@ function AllTransactionsTab() {
   const [selectedTxn, setSelectedTxn] = useState<Transaction | null>(null)
   const [showEdit, setShowEdit]       = useState(false)
   const [showSplit, setShowSplit]     = useState(false)
+  const [showUndoSplit, setShowUndoSplit] = useState(false)
 
   const effectiveStart = mode === 'fy' ? fy.start : mode === 'custom' ? appliedStart : null
   const effectiveEnd   = mode === 'fy' ? fy.end   : mode === 'custom' ? appliedEnd   : null
@@ -2036,6 +2112,12 @@ function AllTransactionsTab() {
                 Created by a direct payment — void it from the expense instead.
               </span>
             )}
+            {canWrite && selectedTxn.row_type === 'VOIDED' && selectedTxn.split_ref_id && (
+              <button onClick={() => setShowUndoSplit(true)}
+                className="flex items-center gap-1.5 border border-amber-300 text-amber-700 rounded-lg px-3 py-1.5 text-sm font-medium hover:bg-amber-50">
+                <RefreshCw size={13} /> Undo split
+              </button>
+            )}
             <button onClick={() => setSelectedTxn(null)}
               className="p-1.5 rounded-lg hover:bg-blue-100 text-slate-500">
               <X size={14} />
@@ -2053,6 +2135,17 @@ function AllTransactionsTab() {
           onSaved={(updated) => { setSelectedTxn(updated); setShowEdit(false); qc.invalidateQueries() }}
           onSplit={() => { setShowEdit(false); setShowSplit(true) }}
           onVoided={() => { setShowEdit(false); setSelectedTxn(null); qc.invalidateQueries({ queryKey: ['all-transactions'] }) }}
+        />
+      )}
+
+      {showUndoSplit && selectedTxn && (
+        <UndoSplitModal
+          txn={selectedTxn}
+          onClose={() => setShowUndoSplit(false)}
+          onUndone={() => {
+            setShowUndoSplit(false); setSelectedTxn(null)
+            qc.invalidateQueries({ queryKey: ['all-transactions'] })
+          }}
         />
       )}
 
