@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import { execSync } from 'node:child_process'
 
 // Vercel sets these as build-time env vars; unset locally (npm run dev / npm run build
 // outside Vercel), where the fallbacks below apply instead.
@@ -8,8 +9,19 @@ const commitSha    = process.env.VERCEL_GIT_COMMIT_SHA ?? ''
 const commitBranch = process.env.VERCEL_GIT_COMMIT_REF ?? 'local'
 const vercelEnv    = process.env.VERCEL_ENV ?? 'development'
 
+// A plain incrementing number reads better to non-technical committee members than a hex
+// SHA. Total commit count is deterministic and always goes up — no manual version bumping.
+function getBuildNumber(): string {
+  try {
+    return execSync('git rev-list --count HEAD', { cwd: __dirname }).toString().trim()
+  } catch {
+    return '0'
+  }
+}
+
 export default defineConfig({
   define: {
+    __APP_BUILD__:    JSON.stringify(getBuildNumber()),
     __APP_COMMIT__:   JSON.stringify(commitSha),
     __APP_BRANCH__:   JSON.stringify(commitBranch),
     __APP_ENV__:      JSON.stringify(vercelEnv),

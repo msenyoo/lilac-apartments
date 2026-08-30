@@ -11,6 +11,7 @@ import { supabase } from '@/lib/supabase'
 import { useQuery } from '@tanstack/react-query'
 import HelpButton from '@/components/HelpButton'
 import { useRoleCtx } from '@/contexts/RoleContext'
+import { useAppVersion } from '@/hooks/useAppVersion'
 
 const ROLE_LABEL: Record<string, string> = {
   admin:     'Treasurer',
@@ -19,16 +20,12 @@ const ROLE_LABEL: Record<string, string> = {
   owner:     'Owner',
 }
 
-// Lets the committee confirm which build is actually live without needing to ask —
-// __APP_COMMIT__ etc. are injected at build time from Vercel's env vars (vite.config.ts).
+// Lets the committee confirm which build is actually live without needing to ask.
 function VersionTag() {
-  const sha = __APP_COMMIT__
-  const shortSha = sha ? sha.slice(0, 7) : 'local'
-  const builtAt = new Date(__APP_BUILT_AT__).toLocaleString('en-IN', {
-    day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
-  })
-  const label = `v${shortSha}${__APP_ENV__ !== 'production' ? ` · ${__APP_ENV__}` : ''}`
-  const title = `Branch ${__APP_BRANCH__} · Built ${builtAt}${sha ? ` · ${sha}` : ''}`
+  const v = useAppVersion()
+  const builtAt = v.builtAt.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+  const label = `v${v.build}${v.env !== 'production' ? ` · ${v.env}` : ''}`
+  const title = `Commit ${v.shortCommit} on ${v.branch} · Built ${builtAt}`
   const content = (
     <span className="text-[10px] font-mono" style={{ color: 'var(--ink-300)' }} title={title}>
       {label}
@@ -36,8 +33,8 @@ function VersionTag() {
   )
   return (
     <div className="px-2 pt-1 text-center">
-      {sha ? (
-        <a href={`https://github.com/msenyoo/lilac-apartments/commit/${sha}`} target="_blank" rel="noreferrer"
+      {!v.isLocal ? (
+        <a href={`https://github.com/msenyoo/lilac-apartments/commit/${v.commit}`} target="_blank" rel="noreferrer"
           className="hover:underline">
           {content}
         </a>
