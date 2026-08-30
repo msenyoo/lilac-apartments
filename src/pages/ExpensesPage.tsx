@@ -1803,6 +1803,9 @@ function ReconcileTab() {
         .neq('row_type', 'VOIDED')
         .is('expense_id', null)
         .is('deposit_id', null)
+        // Contribution-drive disbursements (e.g. a payout tagged to a drive) reconcile via
+        // drive_id, not an expenses record — they'd otherwise sit here unmatchable forever.
+        .is('drive_id', null)
         .order('value_date', { ascending: false })
       return (data ?? []) as UnmatchedDR[]
     },
