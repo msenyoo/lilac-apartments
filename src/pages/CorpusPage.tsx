@@ -833,15 +833,18 @@ function FlatCorpusPanel({ flat, onClose }: { flat: CorpusEntry; onClose: () => 
 
         {flat.balance > 0 && (
           <div className="flex gap-2">
-            <button
-              onClick={handleCopy}
-              className="flex-1 flex items-center justify-center gap-2 py-2 rounded-[10px] border font-medium text-[13px] transition-colors"
-              style={{ borderColor: 'var(--ink-200)', background: '#fff', color: 'var(--ink-700)' }}
-            >
-              {copied
-                ? <><Check size={14} /> Copied!</>
-                : <><MessageCircle size={14} /> Copy</>}
-            </button>
+            {/* Redundant once a contact is tagged — WhatsAppSendButtons sends directly. */}
+            {(!contacts || contacts.length === 0) && (
+              <button
+                onClick={handleCopy}
+                className="flex-1 flex items-center justify-center gap-2 py-2 rounded-[10px] border font-medium text-[13px] transition-colors"
+                style={{ borderColor: 'var(--ink-200)', background: '#fff', color: 'var(--ink-700)' }}
+              >
+                {copied
+                  ? <><Check size={14} /> Copied!</>
+                  : <><MessageCircle size={14} /> Copy</>}
+              </button>
+            )}
             <WhatsAppSendButtons contacts={contacts ?? []} text={buildReminderText()} />
           </div>
         )}

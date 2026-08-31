@@ -441,15 +441,18 @@ function FlatPaymentPanel({ flat, fiscalYear, startFiscalYear, onClose }: { flat
 
         {flat.total_outstanding > 0 && (
           <div className="flex gap-2">
-            <button
-              onClick={handleCopyReminder}
-              className="flex-1 flex items-center justify-center gap-2 py-2 rounded-[10px] border font-medium text-[13px] transition-colors"
-              style={{ borderColor: 'var(--ink-200)', background: '#fff', color: 'var(--ink-700)' }}
-            >
-              {copied
-                ? <><Check size={14} /> Copied!</>
-                : <><MessageCircle size={14} /> Copy</>}
-            </button>
+            {/* Redundant once a contact is tagged — WhatsAppSendButtons sends directly. */}
+            {(!contacts || contacts.length === 0) && (
+              <button
+                onClick={handleCopyReminder}
+                className="flex-1 flex items-center justify-center gap-2 py-2 rounded-[10px] border font-medium text-[13px] transition-colors"
+                style={{ borderColor: 'var(--ink-200)', background: '#fff', color: 'var(--ink-700)' }}
+              >
+                {copied
+                  ? <><Check size={14} /> Copied!</>
+                  : <><MessageCircle size={14} /> Copy</>}
+              </button>
+            )}
             <WhatsAppSendButtons contacts={contacts ?? []} text={buildReminderText()} />
           </div>
         )}
