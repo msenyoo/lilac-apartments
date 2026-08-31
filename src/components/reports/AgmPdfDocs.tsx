@@ -903,14 +903,16 @@ export function FlatStatementDoc({
         <Text style={S.sectionHead}>TRANSACTIONS</Text>
         <View style={S.table}>
           <TableHead cols={[
-            { label: 'Date' }, { label: 'Category', flex: 1.2 },
-            { label: 'Type' }, { label: 'Amount', right: true },
+            { label: 'Date' }, { label: 'Category', flex: 2 },
+            { label: 'Amount', right: true },
           ]} />
           {rows.map((r, i) => (
             <View key={i} style={[S.row, i % 2 === 1 ? S.rowAlt : {}]}>
               <Text style={S.col}>{fmtLongDate(r.value_date)}</Text>
-              <Text style={[S.col, { flex: 1.2 }]}>{r.category ?? '—'}{r.corpus === 'YES' && r.category !== 'Corpus' ? ' (Corpus)' : ''}</Text>
-              <Text style={S.col}>{r.row_type !== 'Normal' ? r.row_type : ''}</Text>
+              <Text style={[S.col, { flex: 2 }]}>
+                {r.category ?? '—'}{r.corpus === 'YES' && r.category !== 'Corpus' ? ' (Corpus)' : ''}
+                {r.row_type !== 'Normal' ? ` · ${r.row_type}` : ''}
+              </Text>
               <Text style={[S.colR, r.cr_dr === 'DR' ? { color: '#dc2626' } : { color: '#16a34a' }]}>
                 {r.cr_dr === 'DR' ? '− ' : ''}{formatINR(r.amount)}
               </Text>
