@@ -844,3 +844,82 @@ export function ContributionDriveDoc({ driveName, description, status, collected
     </Document>
   )
 }
+
+// ── Flat Statement ────────────────────────────────────────────
+
+interface FlatStatementRow {
+  value_date: string; fiscal_label: string; cr_dr: 'CR' | 'DR'; amount: number
+  category: string | null; corpus: 'YES' | 'NO'; row_type: string; description: string
+}
+
+export function FlatStatementDoc({
+  flatCode, bhkType, periodLabel, sinceFyLabel,
+  rate, maintenanceCollected, outstanding,
+  corpus, rows, generated,
+}: {
+  flatCode: string; bhkType: string; periodLabel: string; sinceFyLabel: string
+  rate: number; maintenanceCollected: number; outstanding: number | null
+  corpus: { collected: number; target: number; balance: number } | null
+  rows: FlatStatementRow[]; generated: string
+}) {
+  return (
+    <Document>
+      <Page size="A4" style={S.page}>
+        <LetterheadHeader style={S.header}>
+          <Text style={S.title}>Flat Statement — {flatCode}</Text>
+          <Text style={S.subtitle}>{bhkType} · Period: {periodLabel}</Text>
+        </LetterheadHeader>
+
+        <Text style={S.sectionHead}>SUMMARY (cumulative since {sinceFyLabel})</Text>
+        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+          {[
+            { label: 'Rate / month', value: formatINR(rate) },
+            { label: 'Maintenance collected', value: formatINR(maintenanceCollected) },
+            { label: 'Outstanding', value: outstanding !== null ? (outstanding > 0 ? formatINR(outstanding) : 'Clear') : '—',
+              color: outstanding !== null && outstanding > 0 ? '#dc2626' : '#16a34a' },
+            ...(corpus ? [{ label: 'Corpus balance', value: formatINR(corpus.balance) }] : []),
+          ].map(({ label, value, color }) => (
+            <View key={label} style={{ flex: 1, backgroundColor: '#f8fafc', borderRadius: 4, padding: 6, border: '0.5pt solid #e2e8f0' }}>
+              <Text style={[S.small, { marginBottom: 2 }]}>{label}</Text>
+              <Text style={[S.bold, { fontSize: 10 }, color ? { color } : {}]}>{value}</Text>
+            </View>
+          ))}
+        </View>
+
+        {corpus && (
+          <>
+            <Text style={S.sectionHead}>CORPUS</Text>
+            <View style={S.table}>
+              <TableHead cols={[{ label: 'Collected', right: true }, { label: 'Target', right: true }, { label: 'Balance', right: true }]} />
+              <View style={S.row}>
+                <Text style={S.colR}>{formatINR(corpus.collected)}</Text>
+                <Text style={S.colR}>{formatINR(corpus.target)}</Text>
+                <Text style={S.colR}>{formatINR(corpus.balance)}</Text>
+              </View>
+            </View>
+          </>
+        )}
+
+        <Text style={S.sectionHead}>TRANSACTIONS</Text>
+        <View style={S.table}>
+          <TableHead cols={[
+            { label: 'Date' }, { label: 'Category', flex: 1.2 },
+            { label: 'Type' }, { label: 'Amount', right: true },
+          ]} />
+          {rows.map((r, i) => (
+            <View key={i} style={[S.row, i % 2 === 1 ? S.rowAlt : {}]}>
+              <Text style={S.col}>{fmtLongDate(r.value_date)}</Text>
+              <Text style={[S.col, { flex: 1.2 }]}>{r.category ?? '—'}{r.corpus === 'YES' && r.category !== 'Corpus' ? ' (Corpus)' : ''}</Text>
+              <Text style={S.col}>{r.row_type !== 'Normal' ? r.row_type : ''}</Text>
+              <Text style={[S.colR, r.cr_dr === 'DR' ? { color: '#dc2626' } : { color: '#16a34a' }]}>
+                {r.cr_dr === 'DR' ? '− ' : ''}{formatINR(r.amount)}
+              </Text>
+            </View>
+          ))}
+        </View>
+
+        <LetterheadFooter style={S.footer} generated={generated} />
+      </Page>
+    </Document>
+  )
+}

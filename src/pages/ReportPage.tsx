@@ -844,6 +844,7 @@ function FlatStatementTab() {
   const effectiveStart = mode === 'fy' ? fy.start : mode === 'custom' ? appliedStart : null
   const effectiveEnd   = mode === 'fy' ? fy.end   : mode === 'custom' ? appliedEnd   : null
   const canApply = draftStart && draftEnd && (draftStart !== appliedStart || draftEnd !== appliedEnd)
+  const rangeLabel = mode === 'fy' ? fy.label : mode === 'custom' ? `${appliedStart} to ${appliedEnd}` : 'All time'
 
   const { data: flatInfo } = useQuery({
     queryKey: ['flat-info', flatCode],
@@ -918,9 +919,11 @@ function FlatStatementTab() {
     return Array.from(map.entries())
   }, [txns])
 
-  function handleExport() {
+  const [exportOpen, setExportOpen]   = useState(false)
+  const [exportingPdf, setExportingPdf] = useState(false)
+
+  function handleExportExcel() {
     const wb = XLSX.utils.book_new()
-    const rangeLabel = mode === 'fy' ? fy.label : mode === 'custom' ? `${appliedStart} to ${appliedEnd}` : 'All time'
     const headerRows: any[][] = [
       ['Lilac Apartment Association — Flat Statement'],
       [`Flat: ${flatCode}`, `BHK: ${flatInfo?.bhk_type ?? ''}`, `Period: ${rangeLabel}`],
@@ -947,6 +950,44 @@ function FlatStatementTab() {
   }
 
   const outstandingAmt = duesEntry ? Number(duesEntry.total_outstanding) : null
+
+  async function handleExportPdf() {
+    setExportingPdf(true)
+    try {
+      const [{ pdf }, { FlatStatementDoc }] = await Promise.all([
+        import('@react-pdf/renderer'),
+        import('@/components/reports/AgmPdfDocs'),
+      ])
+      const generated = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+      const blob = await pdf(
+        <FlatStatementDoc
+          flatCode={flatCode}
+          bhkType={flatInfo?.bhk_type ?? ''}
+          periodLabel={rangeLabel}
+          sinceFyLabel={`Apr-${String(duesEntry?.start_fiscal_year ?? '').slice(-2)}`}
+          rate={flatInfo?.maintenance_amt ?? 0}
+          maintenanceCollected={maintenanceCollected}
+          outstanding={outstandingAmt}
+          corpus={corpusTotals ? { collected: corpusTotals.collected, target: corpusTotals.target, balance: corpusTotals.balance } : null}
+          rows={(txns ?? []).map((t: any) => ({
+            value_date: t.value_date, fiscal_label: t.fiscal_label, cr_dr: t.cr_dr, amount: t.amount,
+            category: t.category, corpus: t.corpus, row_type: t.row_type, description: t.description,
+          }))}
+          generated={generated}
+        />
+      ).toBlob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `Lilac_${flatCode}_${rangeLabel.replace(/\s/g, '_')}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } finally {
+      setExportingPdf(false)
+    }
+  }
 
   const [copied, setCopied] = useState(false)
 
@@ -1048,20 +1089,42 @@ function FlatStatementTab() {
         <div className="ml-auto flex items-center gap-2 flex-wrap">
           {combinedOutstanding > 0 && (
             <>
-              <button onClick={handleCopyConsolidated}
-                className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border hover:opacity-80"
-                style={{ borderColor: 'var(--ink-200)', color: 'var(--ink-700)' }}>
-                {copied
-                  ? <><Check size={14} /> Copied!</>
-                  : <><MessageCircle size={14} /> Copy reminder</>}
-              </button>
+              {/* Redundant once a contact is tagged — WhatsAppSendButtons below sends directly. */}
+              {(!contacts || contacts.length === 0) && (
+                <button onClick={handleCopyConsolidated}
+                  className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border hover:opacity-80"
+                  style={{ borderColor: 'var(--ink-200)', color: 'var(--ink-700)' }}>
+                  {copied
+                    ? <><Check size={14} /> Copied!</>
+                    : <><MessageCircle size={14} /> Copy reminder</>}
+                </button>
+              )}
               <WhatsAppSendButtons contacts={contacts ?? []} text={buildConsolidatedReminder()} />
             </>
           )}
-          <button onClick={handleExport} disabled={!txns?.length}
-            className="flex items-center gap-1.5 text-sm hover:opacity-80 disabled:opacity-40" style={{ color: 'var(--brand-700)' }}>
-            <Download size={14} /> Export Excel
-          </button>
+          <Popover open={exportOpen} onOpenChange={setExportOpen}>
+            <PopoverTrigger asChild>
+              <button disabled={!txns?.length}
+                className="flex items-center gap-1.5 text-sm hover:opacity-80 disabled:opacity-40" style={{ color: 'var(--brand-700)' }}>
+                {exportingPdf ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                Export <ChevronDown size={13} />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-40 p-1">
+              <div className="flex flex-col">
+                <button
+                  onClick={() => { setExportOpen(false); handleExportPdf() }}
+                  className="text-left px-2.5 py-1.5 rounded-md text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">
+                  Export as PDF
+                </button>
+                <button
+                  onClick={() => { setExportOpen(false); handleExportExcel() }}
+                  className="text-left px-2.5 py-1.5 rounded-md text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">
+                  Export as Excel
+                </button>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
       </div>
 
