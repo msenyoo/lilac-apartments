@@ -142,6 +142,9 @@ const expenseSchema = z.object({
 type ExpenseFormData = z.infer<typeof expenseSchema>
 
 const PAYEE_TYPES  = ['Staff', 'Vendor', 'Intermediary', 'Municipal', 'Other']
+// Line items have no 'Intermediary' payee type in the DB (expense_line_items_payee_type_check) —
+// intermediary routing is an expense-header concept, not a per-item one.
+const LINE_ITEM_PAYEE_TYPES = ['Staff', 'Vendor', 'Utility', 'Municipal', 'Other']
 const PAYMENT_MODES = ['Cash', 'Online', 'Bank Transfer', 'Cheque', 'Direct']
 const paymentModeLabel = (m: string) => m === 'Direct' ? 'Direct (owner paid)' : m
 const COST_CENTERS = ['Block-A', 'Block-B', 'Block-C', 'Block-D', 'Block-E', 'Common', 'Municipal', 'All']
@@ -1251,6 +1254,10 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
             reference_no:   li.reference_no ?? null,
           }))
           await supabase.from('expense_line_items').insert(originals)
+        } else if (!isEditMode) {
+          // The header was just created in this same attempt — remove it so a failed
+          // line-item save doesn't leave an orphan expense with no line items behind.
+          await supabase.from('expenses').delete().eq('id', expenseId)
         }
         throw liErr
       }
@@ -1590,7 +1597,7 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
                           <Select value={f.value} onValueChange={f.onChange}>
                             <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                             <SelectContent>
-                              {PAYEE_TYPES.concat(['Utility']).map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                              {LINE_ITEM_PAYEE_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                             </SelectContent>
                           </Select>
                         )} />
