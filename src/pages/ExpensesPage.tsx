@@ -1242,8 +1242,30 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
   })
   const tdsRequired = !!watchedVendorId && vendorYtd >= 30000
 
+  const { data: pettyCashTxnsRaw = [] } = useQuery({
+    queryKey: ['petty-cash-balance-raw'],
+    queryFn: async () => {
+      const { data } = await supabase.from('petty_cash_transactions').select('id, txn_type, amount, expense_id')
+      return (data ?? []) as { id: string; txn_type: string; amount: number; expense_id: string | null }[]
+    },
+  })
+  const pettyCashBalance = computePettyCashBalance(pettyCashTxnsRaw)
+  const existingLinkedDisbursement = isEditMode
+    ? pettyCashTxnsRaw.find(t => t.expense_id === editExpense!.id && t.txn_type === 'Disbursement')
+    : undefined
+  // Balance as if this expense's own prior draw (if any) were freed — what edit validation checks against.
+  const adjustedPettyCashBalance = pettyCashBalance + (existingLinkedDisbursement?.amount ?? 0)
+
   const mutation = useMutation({
     mutationFn: async (data: ExpenseFormData) => {
+      if (data.payment_mode === 'Cash') {
+        const balanceExcludingSelf = isEditMode
+          ? pettyCashBalance + (existingLinkedDisbursement?.amount ?? 0)
+          : pettyCashBalance
+        if (data.amount > balanceExcludingSelf) {
+          throw new Error(`Amount exceeds available Petty Cash balance (₹${balanceExcludingSelf} available)`)
+        }
+      }
       const { data: { user } } = await supabase.auth.getUser()
 
       const pendingIds = data.line_items
@@ -1382,6 +1404,29 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
           toast.error(`Expense saved, but ${failed} contribution(s) could not be recorded — open the expense and add them again.`, { duration: 10000 })
         }
       }
+
+      // Keep the linked Petty Cash disbursement in sync with this expense's
+      // final payment_mode/amount. Delete-then-recreate is simpler and safer
+      // than trying to patch amounts in place — this only ever runs on save,
+      // not on every render.
+      if (existingLinkedDisbursement) {
+        const { error: delErr } = await supabase
+          .from('petty_cash_transactions')
+          .delete()
+          .eq('id', existingLinkedDisbursement.id)
+        if (delErr) throw delErr
+      }
+      if (data.payment_mode === 'Cash') {
+        const { error: pcErr } = await supabase.from('petty_cash_transactions').insert({
+          txn_date: data.expense_date,
+          txn_type: 'Disbursement',
+          amount: data.amount,
+          expense_id: expenseId,
+          transaction_id: null,
+          notes: `Auto: ${data.description}`,
+        })
+        if (pcErr) throw pcErr
+      }
     },
     onSuccess: () => {
       toast.success(isEditMode ? 'Expense updated' : 'Expense saved')
@@ -1389,6 +1434,10 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
       qc.invalidateQueries({ queryKey: ['pending-line-items'] })
       qc.invalidateQueries({ queryKey: ['direct-crs'] })
       qc.invalidateQueries({ queryKey: ['unreconciled-expenses'] })
+      qc.invalidateQueries({ queryKey: ['petty-cash'] })
+      qc.invalidateQueries({ queryKey: ['petty-cash-balance'] })
+      qc.invalidateQueries({ queryKey: ['petty-cash-balance-raw'] })
+      qc.invalidateQueries({ queryKey: ['petty-cash-links'] })
       setStaged([])
       reset()
       onClose()
@@ -1537,6 +1586,11 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
                     </SelectContent>
                   </Select>
                 )} />
+                {watchedMode === 'Cash' && (
+                  <p className="text-xs mt-1" style={{ color: adjustedPettyCashBalance < (Number(watchedAmount) || 0) ? '#dc2626' : 'var(--ink-500)' }}>
+                    Available in Petty Cash: {formatINR(adjustedPettyCashBalance)}
+                  </p>
+                )}
               </div>
               <div className="flex flex-col gap-1">
                 {(watchedMode === 'Online' || watchedMode === 'Bank Transfer') ? (
