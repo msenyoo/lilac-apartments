@@ -295,6 +295,29 @@ function DayBook() {
     },
   })
 
+  // A posted Disbursement links straight to the expense via expense_id. A posted
+  // Replenishment (the surplus case — most of the retroactive backfill) links to the
+  // *bank transaction* via transaction_id instead, since the money went back into the
+  // till rather than out of it against this expense. So "is this expense linked" has to
+  // check both: expense_id matches directly, or transaction_id matches the expense's own
+  // linked bank transaction.
+  const { data: pettyCashLinks = [] } = useQuery({
+    queryKey: ['petty-cash-links'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('petty_cash_transactions')
+        .select('expense_id, transaction_id')
+      return (data ?? []) as { expense_id: string | null; transaction_id: string | null }[]
+    },
+  })
+  const linkedExpenseIdSet = new Set(pettyCashLinks.map(l => l.expense_id).filter((id): id is string => !!id))
+  const linkedTransactionIdSet = new Set(pettyCashLinks.map(l => l.transaction_id).filter((id): id is string => !!id))
+  const linkedExpenseIds = new Set(
+    expenses
+      .filter(e => linkedExpenseIdSet.has(e.id) || (e.transaction_id && linkedTransactionIdSet.has(e.transaction_id)))
+      .map(e => e.id)
+  )
+
   const selectedExpense = expenses.find(e => e.id === detailId) ?? null
 
   useEffect(() => {
@@ -601,6 +624,11 @@ function DayBook() {
                         Rejected
                       </span>
                     )}
+                    {linkedExpenseIds.has(e.id) && (
+                      <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-blue-100 text-blue-700 flex items-center gap-1">
+                        <Coins size={10} /> Petty Cash
+                      </span>
+                    )}
                     <span className={`text-sm font-semibold ${isVoided ? 'line-through text-muted-foreground' : ''}`} style={isVoided ? undefined : { color: 'var(--ink-800)' }}>{formatINR(e.amount)}</span>
                   </div>
                 </button>
@@ -647,6 +675,7 @@ function DayBook() {
               expense={selectedExpense}
               onClose={() => setDetailId(null)}
               onVoidSuccess={() => setDetailId(null)}
+              linkedExpenseIds={linkedExpenseIds}
             />
           )}
         </div>
@@ -658,11 +687,12 @@ function DayBook() {
 // ── Expense detail panel ──────────────────────────────────────
 
 function ExpenseDetailPanel({
-  expense: e, onClose, onVoidSuccess,
+  expense: e, onClose, onVoidSuccess, linkedExpenseIds,
 }: {
   expense: Expense
   onClose: () => void
   onVoidSuccess: () => void
+  linkedExpenseIds: Set<string>
 }) {
   const { isAdmin, canWrite } = useRoleCtx()
   const qc = useQueryClient()
@@ -670,6 +700,47 @@ function ExpenseDetailPanel({
   const payeeName = e.payee_name_raw ?? e.vendor?.name ?? e.staff_member?.name ?? '—'
   const lineTotal = e.line_items.reduce((s, li) => s + li.amount, 0)
   const isVoided = !!e.voided_at
+
+  const hasBankMismatchDiff = !!e.transaction && e.transaction.amount !== e.amount
+  const alreadyLinked = linkedExpenseIds.has(e.id)
+  const showPostToPettyCash = !isVoided && hasBankMismatchDiff && !alreadyLinked
+
+  const { data: pettyCashBalance = 0 } = useQuery({
+    queryKey: ['petty-cash-balance'],
+    enabled: showPostToPettyCash,
+    queryFn: async () => {
+      const { data } = await supabase.from('petty_cash_transactions').select('txn_type, amount')
+      return computePettyCashBalance(data ?? [])
+    },
+  })
+
+  const [postingDiff, setPostingDiff] = useState(false)
+
+  async function handlePostDiffToPettyCash() {
+    if (!e.transaction) return
+    const diff = e.transaction.amount - e.amount
+    const kind: 'Replenishment' | 'Disbursement' = diff > 0 ? 'Replenishment' : 'Disbursement'
+    const amount = Math.abs(diff)
+    if (kind === 'Disbursement' && amount > pettyCashBalance) {
+      toast.error(`₹${amount} exceeds the available Petty Cash balance (₹${pettyCashBalance})`)
+      return
+    }
+    setPostingDiff(true)
+    const { error } = await supabase.from('petty_cash_transactions').insert({
+      txn_date: e.expense_date,
+      txn_type: kind,
+      amount,
+      expense_id: kind === 'Disbursement' ? e.id : null,
+      transaction_id: kind === 'Replenishment' ? e.transaction.id : null,
+      notes: `Auto: reconciliation ${kind === 'Replenishment' ? 'surplus' : 'shortfall'} (retroactive)`,
+    })
+    setPostingDiff(false)
+    if (error) { toast.error(error.message); return }
+    toast.success(`${kind} posted to Petty Cash`)
+    qc.invalidateQueries({ queryKey: ['petty-cash'] })
+    qc.invalidateQueries({ queryKey: ['petty-cash-balance'] })
+    qc.invalidateQueries({ queryKey: ['petty-cash-links'] })
+  }
 
   const [voidOpen, setVoidOpen] = useState(false)
   const [voidReason, setVoidReason] = useState('')
@@ -815,6 +886,23 @@ function ExpenseDetailPanel({
                 <span className="block truncate text-[11px]" style={{ color: 'var(--ink-400)' }}>{e.transaction.description}</span>
               </span>
             } />
+          )}
+          {alreadyLinked && (
+            <p className="text-xs mt-1 flex items-center gap-1" style={{ color: 'var(--ink-500)' }}>
+              <Coins size={12} /> Posted to Petty Cash
+            </p>
+          )}
+          {showPostToPettyCash && (
+            <div className="mt-2 flex items-center gap-2">
+              <p className="text-xs" style={{ color: 'var(--ink-500)' }}>
+                {formatINR(Math.abs(e.transaction!.amount - e.amount))} unposted diff vs. linked bank transaction
+              </p>
+              {canWrite && (
+                <Button size="sm" variant="outline" onClick={handlePostDiffToPettyCash} disabled={postingDiff}>
+                  {postingDiff ? 'Posting…' : 'Post to Petty Cash'}
+                </Button>
+              )}
+            </div>
           )}
           {e.notes && !e.notes.startsWith('Imported from') && (
             <div className="flex flex-col gap-1 pt-1">
