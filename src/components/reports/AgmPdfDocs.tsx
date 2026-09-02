@@ -278,13 +278,15 @@ export function ReceiptsPaymentsDoc({ receipts, payments, fyLabel, generated }: 
 interface RPPaymentRow { category: string; amount: number }
 
 export function RPStatementDoc({
-  fyLabel, openingBalance, maintenanceCR, corpusCR, fdInterest, payments, generated,
+  fyLabel, openingBalance, maintenanceCR, corpusCR, fdInterest, pettyCashOpening, pettyCashClosing, payments, generated,
 }: {
   fyLabel: string
   openingBalance: number
   maintenanceCR: number
   corpusCR: number
   fdInterest: number
+  pettyCashOpening: number
+  pettyCashClosing: number
   payments: RPPaymentRow[]
   generated: string
 }) {
@@ -357,6 +359,10 @@ export function RPStatementDoc({
             </Text>
           </View>
         )}
+
+        <Text style={[S.small, { marginTop: 8 }]}>
+          Petty Cash: opening {formatINR(pettyCashOpening)}{' -> closing '}{formatINR(pettyCashClosing)}
+        </Text>
 
         <LetterheadFooter style={S.footer} generated={generated} />
       </Page>
@@ -631,11 +637,13 @@ interface CashbookDrGroup { category: string; total: number; items: CashbookDrIt
 interface CashbookDuesRow { label: string; amount: number; flats: number }
 
 export function CashbookDoc({
-  month, openingBalance, closingBalance, receipts, payments, dues, generated,
+  month, openingBalance, closingBalance, pettyCashOpening, pettyCashClosing, receipts, payments, dues, generated,
 }: {
   month: string
   openingBalance: number
   closingBalance: number
+  pettyCashOpening: number
+  pettyCashClosing: number
   receipts: CashbookCrRow[]
   payments: CashbookDrGroup[]
   dues: CashbookDuesRow[]
@@ -714,6 +722,10 @@ export function CashbookDoc({
           <Text style={[S.col, S.bold]}>Closing Balance</Text>
           <Text style={[S.colR, S.bold]}>{formatINR(closingBalance)}</Text>
         </View>
+
+        <Text style={[S.small, { marginTop: 4 }]}>
+          Petty Cash: opening {formatINR(pettyCashOpening)}{' -> closing '}{formatINR(pettyCashClosing)}
+        </Text>
 
         <Text style={[S.sectionHead, { marginTop: 12 }]}>PENDING DUES (AS OF {generated.toUpperCase()})</Text>
         <View style={S.table}>
