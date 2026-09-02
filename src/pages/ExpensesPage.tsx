@@ -1414,7 +1414,9 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
           .from('petty_cash_transactions')
           .delete()
           .eq('id', existingLinkedDisbursement.id)
-        if (delErr) throw delErr
+        if (delErr) {
+          toast.error('Expense saved, but its old Petty Cash entry could not be removed — check the Petty Cash tab and remove it manually if needed.', { duration: 10000 })
+        }
       }
       if (data.payment_mode === 'Cash') {
         const { error: pcErr } = await supabase.from('petty_cash_transactions').insert({
@@ -1425,7 +1427,9 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
           transaction_id: null,
           notes: `Auto: ${data.description}`,
         })
-        if (pcErr) throw pcErr
+        if (pcErr) {
+          toast.error('Expense saved, but its Petty Cash entry could not be recorded — open the expense and check the Petty Cash tab.', { duration: 10000 })
+        }
       }
     },
     onSuccess: () => {
