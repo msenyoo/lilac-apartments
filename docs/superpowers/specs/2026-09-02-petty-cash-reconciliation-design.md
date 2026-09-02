@@ -15,12 +15,15 @@ while reconciling July/August cash-salary batches:
    salaries), the leftover is real cash still sitting in the caretaker's hand
    — but the app has no representation of it. It just disappears from the
    books the moment the mismatched match is confirmed.
-2. Conversely, some expenses cost *more* than any single bank withdrawal
-   covers, with the caretaker topping up from cash he's already holding (the
-   Sewage Lorry payment — ₹12,500 actual cost, only ₹10,000 came through a
-   bank transfer, ₹2,500 came from float he was already holding). Today
-   there's no way to record that without either understating the expense or
-   inventing a bank transaction that didn't happen.
+2. Conversely, an expense could in principle cost *more* than any single bank
+   withdrawal covers, with the caretaker topping up from cash he's already
+   holding (this was suspected of the Sewage Lorry payment — 5 loads at
+   ₹2,500 would have meant a ₹2,500 shortfall over its ₹10,000 bank transfer
+   — but Eugene confirmed on 2026-09-02 it was actually 4 loads, exactly
+   ₹10,000, no shortfall; the concrete example didn't hold up, but the
+   scenario itself is real and will recur). Today there's no way to record a
+   genuine case of this without either understating the expense or inventing
+   a bank transaction that didn't happen.
 3. Many small cash expenses (a water can, a one-off supply run) never get
    their own bank transaction at all — they're paid straight out of
    whatever's in the pool from an earlier withdrawal. `payment_mode = Cash`
@@ -202,24 +205,13 @@ ships, using the UI it adds:
 sheet throughout. Steps 2–3 don't depend on the Sewage Lorry question below
 and can be done as soon as the feature ships.
 
-### Sewage Lorry — pending, not a blocker
+### Sewage Lorry — resolved, confirmed with Eugene (2026-09-02)
 
-**Unconfirmed as of 2026-09-02:** whether the Sewage Lorry payment was really
-5 loads at ₹2,500 (₹12,500 total, ₹2,500 over the ₹10,000 bank transfer,
-drawn from float) or whether "5" is a miscount and it was actually 4 loads
-(₹10,000 exactly, no shortfall — EXP-2026-0032 stays as entered, no
-correction needed at all). Awaiting confirmation from Eugene. Two outcomes,
-not treated as fact until then:
-
-- **If 5 loads / ₹12,500 confirmed:** correct EXP-2026-0032's amount via Edit
-  Expense, then post a ₹2,500 Disbursement (linked to the expense) against
-  the ₹6,583 balance above → final balance **₹4,083**.
-- **If 4 loads / ₹10,000 confirmed** (or the sheet is corrected some other
-  way): EXP-2026-0032 needs no change and no Petty Cash entry — the exact
-  match already recorded stands. Final balance stays **₹6,583**.
-
-This step is deliberately excluded from "Migration & deploy" below — it's a
-follow-up once Eugene confirms, not part of shipping the feature.
+**Confirmed: 4 loads, not 5** — ₹10,000 total (4 × ₹2,500), matching the
+₹10,000 bank transfer exactly. The original photographed sheet's "5" was a
+miscount. **No correction needed:** EXP-2026-0032 stays exactly as originally
+entered (₹10,000, exact match, no diff), and gets no Petty Cash entry — there
+was never a shortfall to fund from the float.
 
 ## Migration & deploy
 
@@ -227,8 +219,8 @@ follow-up once Eugene confirms, not part of shipping the feature.
    policies don't break existing Petty Cash reads/writes for admin.
 2. Apply to prod.
 3. Deploy frontend.
-4. Run the Opening + two Replenishment backfill steps against prod (the
-   Sewage Lorry step is separately gated on Eugene's confirmation).
+4. Run the Opening + two Replenishment backfill steps against prod. No
+   separate Sewage Lorry step — resolved, no correction needed.
 
 ## Acceptance
 
@@ -250,4 +242,5 @@ follow-up once Eugene confirms, not part of shipping the feature.
 - After the Opening + two Replenishment backfill steps: Petty Cash balance
   reads ₹6,583, with three entries, each traceable to the expense/transaction
   that produced it (or, for Opening, clearly labeled as brought forward).
-  The Sewage Lorry entry is a separate follow-up, pending confirmation.
+  EXP-2026-0032 (Sewage Lorry) needs no entry — confirmed exact match,
+  no shortfall.
