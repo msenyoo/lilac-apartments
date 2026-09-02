@@ -11,6 +11,7 @@ import {
 import { supabase } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
 import { driveBalanceLabel } from '@/lib/contributions'
+import { computePettyCashBalance } from '@/lib/pettyCash'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useRoleCtx } from '@/contexts/RoleContext'
@@ -85,6 +86,14 @@ function DashboardContent() {
       return (data ?? []) as { fund: string; receipts: number; payments: number; balance: number }[]
     },
   })
+  const { data: pettyCashBalance = 0 } = useQuery({
+    queryKey: ['petty-cash-balance'],
+    queryFn: async () => {
+      const { data } = await supabase.from('petty_cash_transactions').select('txn_type, amount')
+      return computePettyCashBalance(data ?? [])
+    },
+  })
+
   const maintenancePos    = fundPositions.find(p => p.fund === 'Maintenance')
   const corpusPos         = fundPositions.find(p => p.fund === 'Corpus')
   const contributionPos   = fundPositions.find(p => p.fund === 'Contribution')
@@ -265,6 +274,11 @@ function DashboardContent() {
           <p className="text-[11.5px] mt-1" style={{ color: 'var(--brand-500)' }}>
             Maintenance + Corpus{contributionAvailable > 0 ? ' + Contributions' : ''} available
           </p>
+          {pettyCashBalance > 0 && (
+            <p className="text-[10.5px] mt-0.5" style={{ color: 'var(--brand-400)' }}>
+              + {formatINR(pettyCashBalance)} cash in hand
+            </p>
+          )}
         </button>
 
         <button
