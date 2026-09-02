@@ -1790,6 +1790,17 @@ function ReconcileTab() {
   const [selectedExpenseId, setSelectedExpenseId] = useState<string | null>(null)
   const [selectedTxnId,     setSelectedTxnId]     = useState<string | null>(null)
   const [forceMatchOpen,    setForceMatchOpen]    = useState(false)
+  const [postDiffPrompt, setPostDiffPrompt] = useState<{
+    expenseId: string; transactionId: string; amount: number; kind: 'Replenishment' | 'Disbursement'
+  } | null>(null)
+
+  const { data: pettyCashBalance = 0 } = useQuery({
+    queryKey: ['petty-cash-balance'],
+    queryFn: async () => {
+      const { data } = await supabase.from('petty_cash_transactions').select('txn_type, amount')
+      return computePettyCashBalance(data ?? [])
+    },
+  })
 
   const { data: expenses = [], isLoading: loadingExp } = useQuery({
     queryKey: ['unreconciled-expenses'],
@@ -1862,6 +1873,15 @@ function ReconcileTab() {
     },
     onSuccess: () => {
       toast.success('Reconciled successfully')
+      if (!amountMatch && selExp && selTxn) {
+        const diff = selTxn.amount - netOf(selExp)
+        setPostDiffPrompt({
+          expenseId: selExp.id,
+          transactionId: selTxn.id,
+          amount: Math.abs(diff),
+          kind: diff > 0 ? 'Replenishment' : 'Disbursement',
+        })
+      }
       qc.invalidateQueries({ queryKey: ['unreconciled-expenses'] })
       qc.invalidateQueries({ queryKey: ['unmatched-bank-drs'] })
       qc.invalidateQueries({ queryKey: ['expenses'] })
@@ -1873,6 +1893,31 @@ function ReconcileTab() {
     onError: (e: any) => {
       toast.error(e.message ?? 'Failed to reconcile')
     },
+  })
+
+  const postDiffMutation = useMutation({
+    mutationFn: async () => {
+      if (!postDiffPrompt) return
+      if (postDiffPrompt.kind === 'Disbursement' && postDiffPrompt.amount > pettyCashBalance) {
+        throw new Error(`₹${postDiffPrompt.amount} exceeds the available Petty Cash balance (₹${pettyCashBalance})`)
+      }
+      const { error } = await supabase.from('petty_cash_transactions').insert({
+        txn_date: new Date().toISOString().slice(0, 10),
+        txn_type: postDiffPrompt.kind,
+        amount: postDiffPrompt.amount,
+        expense_id: postDiffPrompt.kind === 'Disbursement' ? postDiffPrompt.expenseId : null,
+        transaction_id: postDiffPrompt.kind === 'Replenishment' ? postDiffPrompt.transactionId : null,
+        notes: `Auto: reconciliation ${postDiffPrompt.kind === 'Replenishment' ? 'surplus' : 'shortfall'}`,
+      })
+      if (error) throw error
+    },
+    onSuccess: () => {
+      toast.success(`${postDiffPrompt?.kind} posted to Petty Cash`)
+      qc.invalidateQueries({ queryKey: ['petty-cash'] })
+      qc.invalidateQueries({ queryKey: ['petty-cash-balance'] })
+      setPostDiffPrompt(null)
+    },
+    onError: (e: any) => toast.error(e.message ?? 'Failed to post to Petty Cash'),
   })
 
   const loading = loadingExp || loadingDR
@@ -1971,6 +2016,28 @@ function ReconcileTab() {
               disabled={matchMutation.isPending}
             >
               {matchMutation.isPending ? 'Matching…' : 'Match anyway'}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {postDiffPrompt && (
+        <div className="rounded-xl p-4 flex items-start gap-3" style={{ background: 'var(--ink-50)', border: '1px solid var(--ink-200)' }}>
+          <Coins size={18} className="shrink-0 mt-0.5" style={{ color: 'var(--ink-500)' }} />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold" style={{ color: 'var(--ink-800)' }}>
+              {formatINR(postDiffPrompt.amount)} {postDiffPrompt.kind === 'Replenishment' ? 'surplus' : 'shortfall'} — post to Petty Cash?
+            </p>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--ink-400)' }}>
+              {postDiffPrompt.kind === 'Replenishment'
+                ? 'Adds the unspent leftover to the cash-in-hand pool.'
+                : 'Draws the shortfall from the cash-in-hand pool.'}
+            </p>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <Button size="sm" variant="outline" onClick={() => setPostDiffPrompt(null)}>Skip</Button>
+            <Button size="sm" onClick={() => postDiffMutation.mutate()} disabled={postDiffMutation.isPending}>
+              {postDiffMutation.isPending ? 'Posting…' : `Post ${formatINR(postDiffPrompt.amount)}`}
             </Button>
           </div>
         </div>
