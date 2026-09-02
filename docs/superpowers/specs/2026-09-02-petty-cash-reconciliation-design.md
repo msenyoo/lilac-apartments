@@ -194,23 +194,32 @@ ships, using the UI it adds:
    new "Post to Petty Cash" affordance → Replenishment linked to its
    transaction. Running balance: 3,783 + 1,500 = **5,283** — matches the
    paper sheet's own "B/F Rs.5283" figure exactly.
-3. **Correct EXP-2026-0032** (Sewage Lorry) from ₹10,000 to ₹12,500 via Edit
-   Expense (bump the existing line item's amount — one undifferentiated
-   service charge, not worth splitting into two lines). This turns it from
-   an exact match into a ₹2,500 deficit against its already-linked
-   ₹10,000 transaction.
-4. Post the **₹2,500 shortfall** on the corrected EXP-2026-0032 →
-   Disbursement linked to the expense. Running balance: 5,283 − 2,500 =
-   **2,783**.
-5. Post the **₹1,300 surplus** on EXP-2026-0030 (Aug salary batch) →
-   Replenishment. Running balance: 2,783 + 1,300 = **4,083**.
+3. Post the **₹1,300 surplus** on EXP-2026-0030 (Aug salary batch) →
+   Replenishment. Running balance: 5,283 + 1,300 = **6,583** — matches the
+   paper sheet's own final "Balance Available" figure exactly.
 
-**Expected final balance: ₹4,083** — not the ₹6,583 written on the paper
-sheet. The ₹2,500 difference is exactly the Sewage Lorry correction: the
-paper sheet's own running total never accounted for that shortfall being
-drawn from the float, because it was never written down at the time. This is
-the real, corrected position, and the point of doing this backfill at all —
-capturing what the paper sheet is missing, not reproducing its number.
+**Expected balance after these three steps: ₹6,583**, matching the paper
+sheet throughout. Steps 2–3 don't depend on the Sewage Lorry question below
+and can be done as soon as the feature ships.
+
+### Sewage Lorry — pending, not a blocker
+
+**Unconfirmed as of 2026-09-02:** whether the Sewage Lorry payment was really
+5 loads at ₹2,500 (₹12,500 total, ₹2,500 over the ₹10,000 bank transfer,
+drawn from float) or whether "5" is a miscount and it was actually 4 loads
+(₹10,000 exactly, no shortfall — EXP-2026-0032 stays as entered, no
+correction needed at all). Awaiting confirmation from Eugene. Two outcomes,
+not treated as fact until then:
+
+- **If 5 loads / ₹12,500 confirmed:** correct EXP-2026-0032's amount via Edit
+  Expense, then post a ₹2,500 Disbursement (linked to the expense) against
+  the ₹6,583 balance above → final balance **₹4,083**.
+- **If 4 loads / ₹10,000 confirmed** (or the sheet is corrected some other
+  way): EXP-2026-0032 needs no change and no Petty Cash entry — the exact
+  match already recorded stands. Final balance stays **₹6,583**.
+
+This step is deliberately excluded from "Migration & deploy" below — it's a
+follow-up once Eugene confirms, not part of shipping the feature.
 
 ## Migration & deploy
 
@@ -218,7 +227,8 @@ capturing what the paper sheet is missing, not reproducing its number.
    policies don't break existing Petty Cash reads/writes for admin.
 2. Apply to prod.
 3. Deploy frontend.
-4. Run the backfill checklist above against prod.
+4. Run the Opening + two Replenishment backfill steps against prod (the
+   Sewage Lorry step is separately gated on Eugene's confirmation).
 
 ## Acceptance
 
@@ -237,6 +247,7 @@ capturing what the paper sheet is missing, not reproducing its number.
 - Balance Sheet's total assets include Cash in Hand; Cashbook and R&P
   Statement show the period's Petty Cash opening/closing balance; Dashboard
   shows a compact Cash in Hand figure.
-- After backfill: Petty Cash balance reads ₹4,083, with five entries (one
-  Opening, two Replenishment, two Disbursement) each traceable to the
-  expense or transaction that produced it.
+- After the Opening + two Replenishment backfill steps: Petty Cash balance
+  reads ₹6,583, with three entries, each traceable to the expense/transaction
+  that produced it (or, for Opening, clearly labeled as brought forward).
+  The Sewage Lorry entry is a separate follow-up, pending confirmation.
