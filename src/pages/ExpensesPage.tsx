@@ -11,6 +11,7 @@ import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
 import { formatDateDMY } from '@/lib/date'
+import { computePettyCashBalance } from '@/lib/pettyCash'
 import { BulkAddPendingDialog } from '@/components/expenses/BulkAddPendingDialog'
 import { DirectContributionsSection, directTotalOf, type StagedContribution } from '@/components/expenses/DirectContributions'
 import { normalizeImageFile, isHeicName, heicBlobToObjectUrl } from '@/lib/heic'
@@ -40,7 +41,12 @@ interface RecurringTemplate {
   category: { id: string; name: string } | null
   amount: number; payment_mode: string; frequency: string; active: boolean
 }
-interface PettyCashTxn { id: string; txn_date: string; txn_type: string; amount: number; notes: string | null }
+interface PettyCashTxn {
+  id: string; txn_date: string; txn_type: string; amount: number; notes: string | null
+  expense_id: string | null; transaction_id: string | null
+  expense: { voucher_no: string | null; description: string } | null
+  transaction: { description: string } | null
+}
 interface Attachment { id: string; expense_id: string; file_name: string; file_url: string; file_size: number | null; uploaded_at: string }
 interface StaffMember { id: string; name: string; role: string; assigned_area: string | null; phone: string | null; joined_date: string | null; left_date: string | null }
 interface Expense {
@@ -3125,15 +3131,40 @@ function PettyCashTab() {
     queryFn: async () => {
       const { data } = await supabase
         .from('petty_cash_transactions')
-        .select('*')
+        .select('*, expense:expense_id(voucher_no, description), transaction:transaction_id(description)')
         .order('txn_date', { ascending: false })
       return (data ?? []) as PettyCashTxn[]
     },
   })
 
-  const balance = txns.reduce((s, t) =>
-    t.txn_type === 'Disbursement' ? s - t.amount : s + t.amount, 0
-  )
+  const balance = computePettyCashBalance(txns)
+
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(25)
+  const totalPages = Math.max(1, Math.ceil(txns.length / pageSize))
+  const pageSafe = Math.min(page, totalPages)
+  const pagedTxns = txns.slice((pageSafe - 1) * pageSize, pageSafe * pageSize)
+
+  function handleExport() {
+    const rows = [
+      ['Date', 'Type', 'Amount', 'Linked to', 'Notes'],
+      ...txns.map(t => [
+        t.txn_date,
+        t.txn_type,
+        String(t.amount),
+        t.expense ? `${t.expense.voucher_no ?? 'EXP'} · ${t.expense.description}` : t.transaction ? t.transaction.description : '',
+        t.notes ?? '',
+      ]),
+    ]
+    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `Lilac_PettyCash_${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   async function handleAdd(form: { txn_date: string; txn_type: string; amount: string; notes: string }) {
     const { error } = await supabase.from('petty_cash_transactions').insert({
@@ -3159,6 +3190,9 @@ function PettyCashTab() {
           </p>
           <p className="text-xs mt-0.5" style={{ color: 'var(--ink-400)' }}>{txns.length} entries</p>
         </div>
+        <Button size="sm" variant="outline" onClick={handleExport} className="flex items-center gap-1.5 mt-1">
+          <Download size={14} /> Export
+        </Button>
         {canWrite && (
           <Button size="sm" onClick={() => setAddOpen(true)} className="flex items-center gap-1.5 mt-1">
             <Plus size={14} /> Add Entry
@@ -3176,7 +3210,7 @@ function PettyCashTab() {
         </div>
       ) : (
         <div className="surface !p-0 divide-rows">
-          {txns.map(t => (
+          {pagedTxns.map(t => (
             <div key={t.id} className="flex items-center gap-3 px-4 py-3">
               <div className="shrink-0 w-10 text-center">
                 <p className="text-xs font-bold leading-tight" style={{ color: 'var(--ink-800)' }}>
@@ -3191,7 +3225,17 @@ function PettyCashTab() {
                   <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${TXN_TYPE_STYLE[t.txn_type] ?? ''}`} style={!TXN_TYPE_STYLE[t.txn_type] ? { background: 'var(--ink-100)', color: 'var(--ink-600)' } : undefined}>
                     {t.txn_type}
                   </span>
-                  {t.notes && <span className="text-xs truncate" style={{ color: 'var(--ink-500)' }}>{t.notes}</span>}
+                  {t.expense ? (
+                    <span className="text-xs truncate" style={{ color: 'var(--ink-500)' }}>
+                      → {t.expense.voucher_no ?? 'EXP'} · {t.expense.description}
+                    </span>
+                  ) : t.transaction ? (
+                    <span className="text-xs truncate" style={{ color: 'var(--ink-500)' }}>
+                      → {t.transaction.description}
+                    </span>
+                  ) : t.notes ? (
+                    <span className="text-xs truncate" style={{ color: 'var(--ink-500)' }}>{t.notes}</span>
+                  ) : null}
                 </div>
               </div>
               <span className={`text-sm font-semibold shrink-0 ${t.txn_type === 'Disbursement' ? 'text-red-600' : 'text-green-700'}`}>
@@ -3199,6 +3243,32 @@ function PettyCashTab() {
               </span>
             </div>
           ))}
+          {txns.length > pageSize && (
+            <div className="flex items-center justify-between px-4 py-3 text-xs" style={{ color: 'var(--ink-500)' }}>
+              <span>
+                Showing {(pageSafe - 1) * pageSize + 1}–{Math.min(pageSafe * pageSize, txns.length)} of {txns.length}
+              </span>
+              <div className="flex items-center gap-2">
+                <select
+                  value={pageSize}
+                  onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}
+                  className="ds-field !h-7 !py-0 text-xs"
+                >
+                  {[25, 50, 100].map(n => <option key={n} value={n}>{n}/page</option>)}
+                </select>
+                <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={pageSafe <= 1}>
+                  <ChevronLeft size={14} />
+                </button>
+                <span>{pageSafe} / {totalPages}</span>
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={pageSafe >= totalPages}
+                >
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
