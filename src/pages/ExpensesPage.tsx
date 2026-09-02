@@ -3252,17 +3252,23 @@ function PettyCashTab() {
                 <select
                   value={pageSize}
                   onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}
-                  className="ds-field !h-7 !py-0 text-xs"
+                  className="h-7 px-1.5 border rounded text-xs"
+                  style={{ borderColor: 'var(--ink-200, #e2e8f0)' }}
                 >
                   {[25, 50, 100].map(n => <option key={n} value={n}>{n}/page</option>)}
                 </select>
-                <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={pageSafe <= 1}>
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={pageSafe <= 1}
+                  className="p-1 rounded hover:bg-[var(--ink-100)] disabled:opacity-30"
+                >
                   <ChevronLeft size={14} />
                 </button>
                 <span>{pageSafe} / {totalPages}</span>
                 <button
                   onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                   disabled={pageSafe >= totalPages}
+                  className="p-1 rounded hover:bg-[var(--ink-100)] disabled:opacity-30"
                 >
                   <ChevronRight size={14} />
                 </button>
