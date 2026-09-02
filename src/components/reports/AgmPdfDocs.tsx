@@ -368,7 +368,7 @@ export function RPStatementDoc({
 
 export function BalanceSheetDoc({
   fyLabel, asAtDate,
-  bankBalance, fdTotal, corpusCollected, totalAssets,
+  bankBalance, fdTotal, corpusCollected, cashInHand, totalAssets,
   pendingDues, corpusBalance, totalLiabilities, netPosition,
   generated,
 }: {
@@ -377,6 +377,7 @@ export function BalanceSheetDoc({
   bankBalance: number
   fdTotal: number
   corpusCollected: number
+  cashInHand: number
   totalAssets: number
   pendingDues: number
   corpusBalance: number
@@ -400,6 +401,7 @@ export function BalanceSheetDoc({
                 { label: 'Bank balance',            amount: bankBalance },
                 { label: 'Fixed deposits (active)', amount: fdTotal },
                 { label: 'Corpus fund collected',   amount: corpusCollected },
+                { label: 'Cash in hand',            amount: cashInHand },
               ].map((r, i) => (
                 <View key={r.label} style={[S.row, i % 2 === 1 ? S.rowAlt : {}]}>
                   <Text style={S.col}>{r.label}</Text>

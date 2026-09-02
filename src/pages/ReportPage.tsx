@@ -2742,6 +2742,15 @@ function BalanceSheetTab() {
     },
   })
 
+  const { data: cashInHandData = 0 } = useQuery({
+    queryKey: ['bs-cash-in-hand', selectedFy.end],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('fn_petty_cash_balance_as_of', { p_date: selectedFy.end })
+      if (error) throw error
+      return (data as number) ?? 0
+    },
+  })
+
   const { data: activeFDs } = useQuery({
     queryKey: ['bs-active-fds'],
     queryFn: async () => {
@@ -2787,7 +2796,8 @@ function BalanceSheetTab() {
   const bankBalance = bankBalanceData
   const fdTotal     = activeFDs ?? 0
   const corpColl    = corpusCollected ?? 0
-  const totalAssets = bankBalance + fdTotal + corpColl
+  const cashInHand  = cashInHandData
+  const totalAssets = bankBalance + fdTotal + corpColl + cashInHand
 
   const pendDues    = pendingDues ?? 0
   const corpBal     = corpusBalance ?? 0
@@ -2810,6 +2820,7 @@ function BalanceSheetTab() {
           bankBalance={bankBalance}
           fdTotal={fdTotal}
           corpusCollected={corpColl}
+          cashInHand={cashInHand}
           totalAssets={totalAssets}
           pendingDues={pendDues}
           corpusBalance={corpBal}
@@ -2864,6 +2875,7 @@ function BalanceSheetTab() {
               { label: 'Bank balance',           amount: bankBalance, note: 'Cumulative CRs − DRs through this date (audit-derived)' },
               { label: 'Fixed deposits (active)', amount: fdTotal,    note: 'Sum of active FD principals' },
               { label: 'Corpus fund collected',   amount: corpColl,   note: 'All plans combined' },
+              { label: 'Cash in hand',            amount: cashInHand, note: 'Petty cash balance held by caretaker' },
             ].map(({ label, amount, note }) => (
               <div key={label} className="flex justify-between items-start px-5 py-3 border-b hairline text-sm">
                 <div>
