@@ -762,6 +762,13 @@ function ExpenseDetailPanel({
         void_reason: voidReason.trim(),
       }).eq('id', e.id)
       if (error) throw error
+      const { error: pcErr } = await supabase
+        .from('petty_cash_transactions')
+        .delete()
+        .eq('expense_id', e.id)
+      if (pcErr) {
+        toast.error('Expense voided, but its linked Petty Cash entry could not be removed — check the Petty Cash tab and remove it manually if needed.', { duration: 10000 })
+      }
       if (directTotalOf(e.direct_txns) > 0) {
         const { error: dpErr } = await supabase.rpc('void_direct_pairs', { p_expense_id: e.id })
         if (dpErr) {
@@ -772,6 +779,9 @@ function ExpenseDetailPanel({
       qc.invalidateQueries({ queryKey: ['unreconciled-expenses'] })
       qc.invalidateQueries({ queryKey: ['unreconciled-count'] })
       qc.invalidateQueries({ queryKey: ['direct-crs', e.id] })
+      qc.invalidateQueries({ queryKey: ['petty-cash'] })
+      qc.invalidateQueries({ queryKey: ['petty-cash-balance'] })
+      qc.invalidateQueries({ queryKey: ['petty-cash-links'] })
       setVoidOpen(false)
       setVoidReason('')
       onVoidSuccess()
