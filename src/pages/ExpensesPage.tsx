@@ -701,7 +701,8 @@ function ExpenseDetailPanel({
   const lineTotal = e.line_items.reduce((s, li) => s + li.amount, 0)
   const isVoided = !!e.voided_at
 
-  const hasBankMismatchDiff = !!e.transaction && e.transaction.amount !== e.amount
+  const netAmount = e.amount - directTotalOf(e.direct_txns)
+  const hasBankMismatchDiff = !!e.transaction && e.transaction.amount !== netAmount
   const alreadyLinked = linkedExpenseIds.has(e.id)
   const showPostToPettyCash = !isVoided && hasBankMismatchDiff && !alreadyLinked
 
@@ -718,7 +719,7 @@ function ExpenseDetailPanel({
 
   async function handlePostDiffToPettyCash() {
     if (!e.transaction) return
-    const diff = e.transaction.amount - e.amount
+    const diff = e.transaction.amount - netAmount
     const kind: 'Replenishment' | 'Disbursement' = diff > 0 ? 'Replenishment' : 'Disbursement'
     const amount = Math.abs(diff)
     if (kind === 'Disbursement' && amount > pettyCashBalance) {
@@ -762,11 +763,14 @@ function ExpenseDetailPanel({
         void_reason: voidReason.trim(),
       }).eq('id', e.id)
       if (error) throw error
-      const { error: pcErr } = await supabase
+      const { error: pcErr1 } = await supabase
         .from('petty_cash_transactions')
         .delete()
         .eq('expense_id', e.id)
-      if (pcErr) {
+      const { error: pcErr2 } = e.transaction_id
+        ? (await supabase.from('petty_cash_transactions').delete().eq('transaction_id', e.transaction_id))
+        : { error: null }
+      if (pcErr1 || pcErr2) {
         toast.error('Expense voided, but its linked Petty Cash entry could not be removed — check the Petty Cash tab and remove it manually if needed.', { duration: 10000 })
       }
       if (directTotalOf(e.direct_txns) > 0) {
@@ -810,11 +814,25 @@ function ExpenseDetailPanel({
           .eq('id', e.id)
         throw e2
       }
+      const { error: pcErr1 } = await supabase
+        .from('petty_cash_transactions')
+        .delete()
+        .eq('transaction_id', txnId)
+      const { error: pcErr2 } = await supabase
+        .from('petty_cash_transactions')
+        .delete()
+        .eq('expense_id', e.id)
+      if (pcErr1 || pcErr2) {
+        toast.error('Reconciliation removed, but a linked Petty Cash entry could not be removed — check the Petty Cash tab and remove it manually if needed.', { duration: 10000 })
+      }
       toast.success('Reconciliation removed')
       qc.invalidateQueries({ queryKey: ['unreconciled-expenses'] })
       qc.invalidateQueries({ queryKey: ['unmatched-bank-drs'] })
       qc.invalidateQueries({ queryKey: ['expenses'] })
       qc.invalidateQueries({ queryKey: ['unreconciled-count'] })
+      qc.invalidateQueries({ queryKey: ['petty-cash'] })
+      qc.invalidateQueries({ queryKey: ['petty-cash-balance'] })
+      qc.invalidateQueries({ queryKey: ['petty-cash-links'] })
       onClose()
     } catch (err: any) {
       toast.error(err.message ?? 'Failed to un-reconcile')
@@ -905,7 +923,7 @@ function ExpenseDetailPanel({
           {showPostToPettyCash && (
             <div className="mt-2 flex items-center gap-2">
               <p className="text-xs" style={{ color: 'var(--ink-500)' }}>
-                {formatINR(Math.abs(e.transaction!.amount - e.amount))} unposted diff vs. linked bank transaction
+                {formatINR(Math.abs(e.transaction!.amount - netAmount))} unposted diff vs. linked bank transaction
               </p>
               {canWrite && (
                 <Button size="sm" variant="outline" onClick={handlePostDiffToPettyCash} disabled={postingDiff}>
@@ -1260,7 +1278,11 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
     },
   })
   const pettyCashBalance = computePettyCashBalance(pettyCashTxnsRaw)
-  const existingLinkedDisbursement = isEditMode
+  // Only treat a linked Disbursement as "this expense's own draw" when the expense is
+  // actually Cash-mode — otherwise this can match a retroactive reconciliation-shortfall
+  // posting (also a Disbursement, also linked via expense_id), and editing an unrelated
+  // field on that expense would silently delete a real financial record.
+  const existingLinkedDisbursement = isEditMode && editExpense!.payment_mode === 'Cash'
     ? pettyCashTxnsRaw.find(t => t.expense_id === editExpense!.id && t.txn_type === 'Disbursement')
     : undefined
   // Balance as if this expense's own prior draw (if any) were freed — what edit validation checks against.
@@ -1269,11 +1291,8 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
   const mutation = useMutation({
     mutationFn: async (data: ExpenseFormData) => {
       if (data.payment_mode === 'Cash') {
-        const balanceExcludingSelf = isEditMode
-          ? pettyCashBalance + (existingLinkedDisbursement?.amount ?? 0)
-          : pettyCashBalance
-        if (data.amount > balanceExcludingSelf) {
-          throw new Error(`Amount exceeds available Petty Cash balance (₹${balanceExcludingSelf} available)`)
+        if (data.amount > adjustedPettyCashBalance) {
+          throw new Error(`Amount exceeds available Petty Cash balance (₹${adjustedPettyCashBalance} available)`)
         }
       }
       const { data: { user } } = await supabase.auth.getUser()
@@ -1947,7 +1966,7 @@ function ReconcileTab() {
   const [selectedTxnId,     setSelectedTxnId]     = useState<string | null>(null)
   const [forceMatchOpen,    setForceMatchOpen]    = useState(false)
   const [postDiffPrompt, setPostDiffPrompt] = useState<{
-    expenseId: string; transactionId: string; amount: number; kind: 'Replenishment' | 'Disbursement'
+    expenseId: string; transactionId: string; amount: number; kind: 'Replenishment' | 'Disbursement'; expenseDate: string
   } | null>(null)
 
   const { data: pettyCashBalance = 0 } = useQuery({
@@ -2036,6 +2055,7 @@ function ReconcileTab() {
           transactionId: selTxn.id,
           amount: Math.abs(diff),
           kind: diff > 0 ? 'Replenishment' : 'Disbursement',
+          expenseDate: selExp.expense_date,
         })
       }
       qc.invalidateQueries({ queryKey: ['unreconciled-expenses'] })
@@ -2058,7 +2078,7 @@ function ReconcileTab() {
         throw new Error(`₹${postDiffPrompt.amount} exceeds the available Petty Cash balance (₹${pettyCashBalance})`)
       }
       const { error } = await supabase.from('petty_cash_transactions').insert({
-        txn_date: new Date().toISOString().slice(0, 10),
+        txn_date: postDiffPrompt.expenseDate,
         txn_type: postDiffPrompt.kind,
         amount: postDiffPrompt.amount,
         expense_id: postDiffPrompt.kind === 'Disbursement' ? postDiffPrompt.expenseId : null,
@@ -2071,6 +2091,7 @@ function ReconcileTab() {
       toast.success(`${postDiffPrompt?.kind} posted to Petty Cash`)
       qc.invalidateQueries({ queryKey: ['petty-cash'] })
       qc.invalidateQueries({ queryKey: ['petty-cash-balance'] })
+      qc.invalidateQueries({ queryKey: ['petty-cash-links'] })
       setPostDiffPrompt(null)
     },
     onError: (e: any) => toast.error(e.message ?? 'Failed to post to Petty Cash'),
@@ -3399,6 +3420,8 @@ function PettyCashTab() {
     if (error) throw error
     toast.success(`Petty cash ${form.txn_type.toLowerCase()} added`)
     qc.invalidateQueries({ queryKey: ['petty-cash'] })
+    qc.invalidateQueries({ queryKey: ['petty-cash-balance'] })
+    qc.invalidateQueries({ queryKey: ['petty-cash-balance-raw'] })
   }
 
   if (isLoading) return <div className="surface h-40 animate-pulse" style={{ background: 'var(--ink-100)' }} />
