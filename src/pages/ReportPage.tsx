@@ -2179,6 +2179,23 @@ function CashbookTab() {
     },
   })
 
+  const { data: pcOpening = 0 } = useQuery({
+    queryKey: ['cashbook-pc-opening', prevEnd],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('fn_petty_cash_balance_as_of', { p_date: prevEnd })
+      if (error) throw error
+      return (data as number) ?? 0
+    },
+  })
+  const { data: pcClosing = 0 } = useQuery({
+    queryKey: ['cashbook-pc-closing', end],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('fn_petty_cash_balance_as_of', { p_date: end })
+      if (error) throw error
+      return (data as number) ?? 0
+    },
+  })
+
   const { data: crSplitup } = useQuery({
     queryKey: ['cashbook-cr', start, end],
     queryFn: async () => {
@@ -2322,6 +2339,7 @@ function CashbookTab() {
     const rows: any[][] = [
       [`Lilac Apartment Association — Cash Book Statement — ${month}`], [],
       ['Opening Balance', openingBalance],
+      ['Petty Cash — Opening', pcOpening],
       [],
       ['RECEIPTS'],
       ...(crSplitup ?? []).map(r => [`  ${r.category}`, r.amount]),
@@ -2342,6 +2360,7 @@ function CashbookTab() {
       ['  Total Payments', totalPayments],
       [],
       ['Closing Balance', closingBalance],
+      ['Petty Cash — Closing', pcClosing],
       [],
       [`PENDING DUES (as of ${asOfDate})`],
       ['  Current FY Pending', pendingTotal, `${pendingRows.length} flats`],
@@ -2369,6 +2388,8 @@ function CashbookTab() {
           month={month}
           openingBalance={openingBalance}
           closingBalance={closingBalance}
+          pettyCashOpening={pcOpening}
+          pettyCashClosing={pcClosing}
           receipts={crSplitup ?? []}
           payments={drSplitup ?? []}
           dues={[
@@ -2425,6 +2446,10 @@ function CashbookTab() {
           <p className="text-xl font-bold text-violet-700">{formatINR(closingBalance)}</p>
         </div>
       </div>
+
+      <p className="text-xs px-1" style={{ color: 'var(--ink-500)' }}>
+        Petty Cash: opening {formatINR(pcOpening)} → closing {formatINR(pcClosing)}
+      </p>
 
       {/* Receipts / Payments */}
       <div className="flex flex-col lg:flex-row gap-4">
@@ -2543,6 +2568,26 @@ function RPStatementTab() {
     },
   })
 
+  const { data: rpPcOpening = 0 } = useQuery({
+    queryKey: ['rp-pc-opening', selectedFy.start],
+    queryFn: async () => {
+      const d = new Date(selectedFy.start)
+      d.setDate(d.getDate() - 1)
+      const priorDate = d.toISOString().slice(0, 10)
+      const { data, error } = await supabase.rpc('fn_petty_cash_balance_as_of', { p_date: priorDate })
+      if (error) throw error
+      return (data as number) ?? 0
+    },
+  })
+  const { data: rpPcClosing = 0 } = useQuery({
+    queryKey: ['rp-pc-closing', selectedFy.end],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('fn_petty_cash_balance_as_of', { p_date: selectedFy.end })
+      if (error) throw error
+      return (data as number) ?? 0
+    },
+  })
+
   const { data: maintenanceCR } = useQuery({
     queryKey: ['rp-maintenance-cr', selectedFyYear],
     queryFn: async () => {
@@ -2633,6 +2678,8 @@ function RPStatementTab() {
           maintenanceCR={mCR}
           corpusCR={cCR}
           fdInterest={fdInt}
+          pettyCashOpening={rpPcOpening}
+          pettyCashClosing={rpPcClosing}
           payments={paymentRows ?? []}
           generated={generated}
         />
@@ -2720,6 +2767,10 @@ function RPStatementTab() {
         </span>
       </div>
 
+      <p className="text-xs px-1" style={{ color: 'var(--ink-500)' }}>
+        Petty Cash: opening {formatINR(rpPcOpening)} → closing {formatINR(rpPcClosing)}
+      </p>
+
       <p className="text-xs text-center" style={{ color: 'var(--ink-400)' }}>
         Cash-basis statement · All monetary transactions for {selectedFy.label}
       </p>
@@ -2737,6 +2788,15 @@ function BalanceSheetTab() {
     queryKey: ['bs-bank-balance', selectedFy.end],
     queryFn: async () => {
       const { data, error } = await supabase.rpc('fn_bank_balance_as_of', { p_date: selectedFy.end })
+      if (error) throw error
+      return (data as number) ?? 0
+    },
+  })
+
+  const { data: cashInHandData = 0 } = useQuery({
+    queryKey: ['bs-cash-in-hand', selectedFy.end],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('fn_petty_cash_balance_as_of', { p_date: selectedFy.end })
       if (error) throw error
       return (data as number) ?? 0
     },
@@ -2787,7 +2847,8 @@ function BalanceSheetTab() {
   const bankBalance = bankBalanceData
   const fdTotal     = activeFDs ?? 0
   const corpColl    = corpusCollected ?? 0
-  const totalAssets = bankBalance + fdTotal + corpColl
+  const cashInHand  = cashInHandData
+  const totalAssets = bankBalance + fdTotal + corpColl + cashInHand
 
   const pendDues    = pendingDues ?? 0
   const corpBal     = corpusBalance ?? 0
@@ -2810,6 +2871,7 @@ function BalanceSheetTab() {
           bankBalance={bankBalance}
           fdTotal={fdTotal}
           corpusCollected={corpColl}
+          cashInHand={cashInHand}
           totalAssets={totalAssets}
           pendingDues={pendDues}
           corpusBalance={corpBal}
@@ -2864,6 +2926,7 @@ function BalanceSheetTab() {
               { label: 'Bank balance',           amount: bankBalance, note: 'Cumulative CRs − DRs through this date (audit-derived)' },
               { label: 'Fixed deposits (active)', amount: fdTotal,    note: 'Sum of active FD principals' },
               { label: 'Corpus fund collected',   amount: corpColl,   note: 'All plans combined' },
+              { label: 'Cash in hand',            amount: cashInHand, note: 'Petty cash balance held by caretaker' },
             ].map(({ label, amount, note }) => (
               <div key={label} className="flex justify-between items-start px-5 py-3 border-b hairline text-sm">
                 <div>

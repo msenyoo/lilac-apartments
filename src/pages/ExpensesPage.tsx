@@ -11,6 +11,7 @@ import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import { formatINR } from '@/lib/tagger'
 import { formatDateDMY } from '@/lib/date'
+import { computePettyCashBalance } from '@/lib/pettyCash'
 import { BulkAddPendingDialog } from '@/components/expenses/BulkAddPendingDialog'
 import { DirectContributionsSection, directTotalOf, type StagedContribution } from '@/components/expenses/DirectContributions'
 import { normalizeImageFile, isHeicName, heicBlobToObjectUrl } from '@/lib/heic'
@@ -40,7 +41,12 @@ interface RecurringTemplate {
   category: { id: string; name: string } | null
   amount: number; payment_mode: string; frequency: string; active: boolean
 }
-interface PettyCashTxn { id: string; txn_date: string; txn_type: string; amount: number; notes: string | null }
+interface PettyCashTxn {
+  id: string; txn_date: string; txn_type: string; amount: number; notes: string | null
+  expense_id: string | null; transaction_id: string | null
+  expense: { voucher_no: string | null; description: string } | null
+  transaction: { description: string } | null
+}
 interface Attachment { id: string; expense_id: string; file_name: string; file_url: string; file_size: number | null; uploaded_at: string }
 interface StaffMember { id: string; name: string; role: string; assigned_area: string | null; phone: string | null; joined_date: string | null; left_date: string | null }
 interface Expense {
@@ -288,6 +294,29 @@ function DayBook() {
       return (data ?? []) as { id: string; name: string }[]
     },
   })
+
+  // A posted Disbursement links straight to the expense via expense_id. A posted
+  // Replenishment (the surplus case — most of the retroactive backfill) links to the
+  // *bank transaction* via transaction_id instead, since the money went back into the
+  // till rather than out of it against this expense. So "is this expense linked" has to
+  // check both: expense_id matches directly, or transaction_id matches the expense's own
+  // linked bank transaction.
+  const { data: pettyCashLinks = [] } = useQuery({
+    queryKey: ['petty-cash-links'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('petty_cash_transactions')
+        .select('expense_id, transaction_id')
+      return (data ?? []) as { expense_id: string | null; transaction_id: string | null }[]
+    },
+  })
+  const linkedExpenseIdSet = new Set(pettyCashLinks.map(l => l.expense_id).filter((id): id is string => !!id))
+  const linkedTransactionIdSet = new Set(pettyCashLinks.map(l => l.transaction_id).filter((id): id is string => !!id))
+  const linkedExpenseIds = new Set(
+    expenses
+      .filter(e => linkedExpenseIdSet.has(e.id) || (e.transaction_id && linkedTransactionIdSet.has(e.transaction_id)))
+      .map(e => e.id)
+  )
 
   const selectedExpense = expenses.find(e => e.id === detailId) ?? null
 
@@ -595,6 +624,11 @@ function DayBook() {
                         Rejected
                       </span>
                     )}
+                    {linkedExpenseIds.has(e.id) && (
+                      <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-blue-100 text-blue-700 flex items-center gap-1">
+                        <Coins size={10} /> Petty Cash
+                      </span>
+                    )}
                     <span className={`text-sm font-semibold ${isVoided ? 'line-through text-muted-foreground' : ''}`} style={isVoided ? undefined : { color: 'var(--ink-800)' }}>{formatINR(e.amount)}</span>
                   </div>
                 </button>
@@ -641,6 +675,7 @@ function DayBook() {
               expense={selectedExpense}
               onClose={() => setDetailId(null)}
               onVoidSuccess={() => setDetailId(null)}
+              linkedExpenseIds={linkedExpenseIds}
             />
           )}
         </div>
@@ -652,11 +687,12 @@ function DayBook() {
 // ── Expense detail panel ──────────────────────────────────────
 
 function ExpenseDetailPanel({
-  expense: e, onClose, onVoidSuccess,
+  expense: e, onClose, onVoidSuccess, linkedExpenseIds,
 }: {
   expense: Expense
   onClose: () => void
   onVoidSuccess: () => void
+  linkedExpenseIds: Set<string>
 }) {
   const { isAdmin, canWrite } = useRoleCtx()
   const qc = useQueryClient()
@@ -664,6 +700,48 @@ function ExpenseDetailPanel({
   const payeeName = e.payee_name_raw ?? e.vendor?.name ?? e.staff_member?.name ?? '—'
   const lineTotal = e.line_items.reduce((s, li) => s + li.amount, 0)
   const isVoided = !!e.voided_at
+
+  const netAmount = e.amount - directTotalOf(e.direct_txns)
+  const hasBankMismatchDiff = !!e.transaction && e.transaction.amount !== netAmount
+  const alreadyLinked = linkedExpenseIds.has(e.id)
+  const showPostToPettyCash = !isVoided && hasBankMismatchDiff && !alreadyLinked
+
+  const { data: pettyCashBalance = 0 } = useQuery({
+    queryKey: ['petty-cash-balance'],
+    enabled: showPostToPettyCash,
+    queryFn: async () => {
+      const { data } = await supabase.from('petty_cash_transactions').select('txn_type, amount')
+      return computePettyCashBalance(data ?? [])
+    },
+  })
+
+  const [postingDiff, setPostingDiff] = useState(false)
+
+  async function handlePostDiffToPettyCash() {
+    if (!e.transaction) return
+    const diff = e.transaction.amount - netAmount
+    const kind: 'Replenishment' | 'Disbursement' = diff > 0 ? 'Replenishment' : 'Disbursement'
+    const amount = Math.abs(diff)
+    if (kind === 'Disbursement' && amount > pettyCashBalance) {
+      toast.error(`₹${amount} exceeds the available Petty Cash balance (₹${pettyCashBalance})`)
+      return
+    }
+    setPostingDiff(true)
+    const { error } = await supabase.from('petty_cash_transactions').insert({
+      txn_date: e.expense_date,
+      txn_type: kind,
+      amount,
+      expense_id: kind === 'Disbursement' ? e.id : null,
+      transaction_id: kind === 'Replenishment' ? e.transaction.id : null,
+      notes: `Auto: reconciliation ${kind === 'Replenishment' ? 'surplus' : 'shortfall'} (retroactive)`,
+    })
+    setPostingDiff(false)
+    if (error) { toast.error(error.message); return }
+    toast.success(`${kind} posted to Petty Cash`)
+    qc.invalidateQueries({ queryKey: ['petty-cash'] })
+    qc.invalidateQueries({ queryKey: ['petty-cash-balance'] })
+    qc.invalidateQueries({ queryKey: ['petty-cash-links'] })
+  }
 
   const [voidOpen, setVoidOpen] = useState(false)
   const [voidReason, setVoidReason] = useState('')
@@ -685,6 +763,16 @@ function ExpenseDetailPanel({
         void_reason: voidReason.trim(),
       }).eq('id', e.id)
       if (error) throw error
+      const { error: pcErr1 } = await supabase
+        .from('petty_cash_transactions')
+        .delete()
+        .eq('expense_id', e.id)
+      const { error: pcErr2 } = e.transaction_id
+        ? (await supabase.from('petty_cash_transactions').delete().eq('transaction_id', e.transaction_id))
+        : { error: null }
+      if (pcErr1 || pcErr2) {
+        toast.error('Expense voided, but its linked Petty Cash entry could not be removed — check the Petty Cash tab and remove it manually if needed.', { duration: 10000 })
+      }
       if (directTotalOf(e.direct_txns) > 0) {
         const { error: dpErr } = await supabase.rpc('void_direct_pairs', { p_expense_id: e.id })
         if (dpErr) {
@@ -695,6 +783,9 @@ function ExpenseDetailPanel({
       qc.invalidateQueries({ queryKey: ['unreconciled-expenses'] })
       qc.invalidateQueries({ queryKey: ['unreconciled-count'] })
       qc.invalidateQueries({ queryKey: ['direct-crs', e.id] })
+      qc.invalidateQueries({ queryKey: ['petty-cash'] })
+      qc.invalidateQueries({ queryKey: ['petty-cash-balance'] })
+      qc.invalidateQueries({ queryKey: ['petty-cash-links'] })
       setVoidOpen(false)
       setVoidReason('')
       onVoidSuccess()
@@ -723,11 +814,25 @@ function ExpenseDetailPanel({
           .eq('id', e.id)
         throw e2
       }
+      const { error: pcErr1 } = await supabase
+        .from('petty_cash_transactions')
+        .delete()
+        .eq('transaction_id', txnId)
+      const { error: pcErr2 } = await supabase
+        .from('petty_cash_transactions')
+        .delete()
+        .eq('expense_id', e.id)
+      if (pcErr1 || pcErr2) {
+        toast.error('Reconciliation removed, but a linked Petty Cash entry could not be removed — check the Petty Cash tab and remove it manually if needed.', { duration: 10000 })
+      }
       toast.success('Reconciliation removed')
       qc.invalidateQueries({ queryKey: ['unreconciled-expenses'] })
       qc.invalidateQueries({ queryKey: ['unmatched-bank-drs'] })
       qc.invalidateQueries({ queryKey: ['expenses'] })
       qc.invalidateQueries({ queryKey: ['unreconciled-count'] })
+      qc.invalidateQueries({ queryKey: ['petty-cash'] })
+      qc.invalidateQueries({ queryKey: ['petty-cash-balance'] })
+      qc.invalidateQueries({ queryKey: ['petty-cash-links'] })
       onClose()
     } catch (err: any) {
       toast.error(err.message ?? 'Failed to un-reconcile')
@@ -809,6 +914,23 @@ function ExpenseDetailPanel({
                 <span className="block truncate text-[11px]" style={{ color: 'var(--ink-400)' }}>{e.transaction.description}</span>
               </span>
             } />
+          )}
+          {alreadyLinked && (
+            <p className="text-xs mt-1 flex items-center gap-1" style={{ color: 'var(--ink-500)' }}>
+              <Coins size={12} /> Posted to Petty Cash
+            </p>
+          )}
+          {showPostToPettyCash && (
+            <div className="mt-2 flex items-center gap-2">
+              <p className="text-xs" style={{ color: 'var(--ink-500)' }}>
+                {formatINR(Math.abs(e.transaction!.amount - netAmount))} unposted diff vs. linked bank transaction
+              </p>
+              {canWrite && (
+                <Button size="sm" variant="outline" onClick={handlePostDiffToPettyCash} disabled={postingDiff}>
+                  {postingDiff ? 'Posting…' : 'Post to Petty Cash'}
+                </Button>
+              )}
+            </div>
           )}
           {e.notes && !e.notes.startsWith('Imported from') && (
             <div className="flex flex-col gap-1 pt-1">
@@ -1148,8 +1270,31 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
   })
   const tdsRequired = !!watchedVendorId && vendorYtd >= 30000
 
+  const { data: pettyCashTxnsRaw = [] } = useQuery({
+    queryKey: ['petty-cash-balance-raw'],
+    queryFn: async () => {
+      const { data } = await supabase.from('petty_cash_transactions').select('id, txn_type, amount, expense_id')
+      return (data ?? []) as { id: string; txn_type: string; amount: number; expense_id: string | null }[]
+    },
+  })
+  const pettyCashBalance = computePettyCashBalance(pettyCashTxnsRaw)
+  // Only treat a linked Disbursement as "this expense's own draw" when the expense is
+  // actually Cash-mode — otherwise this can match a retroactive reconciliation-shortfall
+  // posting (also a Disbursement, also linked via expense_id), and editing an unrelated
+  // field on that expense would silently delete a real financial record.
+  const existingLinkedDisbursement = isEditMode && editExpense!.payment_mode === 'Cash'
+    ? pettyCashTxnsRaw.find(t => t.expense_id === editExpense!.id && t.txn_type === 'Disbursement')
+    : undefined
+  // Balance as if this expense's own prior draw (if any) were freed — what edit validation checks against.
+  const adjustedPettyCashBalance = pettyCashBalance + (existingLinkedDisbursement?.amount ?? 0)
+
   const mutation = useMutation({
     mutationFn: async (data: ExpenseFormData) => {
+      if (data.payment_mode === 'Cash') {
+        if (data.amount > adjustedPettyCashBalance) {
+          throw new Error(`Amount exceeds available Petty Cash balance (₹${adjustedPettyCashBalance} available)`)
+        }
+      }
       const { data: { user } } = await supabase.auth.getUser()
 
       const pendingIds = data.line_items
@@ -1288,6 +1433,33 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
           toast.error(`Expense saved, but ${failed} contribution(s) could not be recorded — open the expense and add them again.`, { duration: 10000 })
         }
       }
+
+      // Keep the linked Petty Cash disbursement in sync with this expense's
+      // final payment_mode/amount. Delete-then-recreate is simpler and safer
+      // than trying to patch amounts in place — this only ever runs on save,
+      // not on every render.
+      if (existingLinkedDisbursement) {
+        const { error: delErr } = await supabase
+          .from('petty_cash_transactions')
+          .delete()
+          .eq('id', existingLinkedDisbursement.id)
+        if (delErr) {
+          toast.error('Expense saved, but its old Petty Cash entry could not be removed — check the Petty Cash tab and remove it manually if needed.', { duration: 10000 })
+        }
+      }
+      if (data.payment_mode === 'Cash') {
+        const { error: pcErr } = await supabase.from('petty_cash_transactions').insert({
+          txn_date: data.expense_date,
+          txn_type: 'Disbursement',
+          amount: data.amount,
+          expense_id: expenseId,
+          transaction_id: null,
+          notes: `Auto: ${data.description}`,
+        })
+        if (pcErr) {
+          toast.error('Expense saved, but its Petty Cash entry could not be recorded — open the expense and check the Petty Cash tab.', { duration: 10000 })
+        }
+      }
     },
     onSuccess: () => {
       toast.success(isEditMode ? 'Expense updated' : 'Expense saved')
@@ -1295,6 +1467,10 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
       qc.invalidateQueries({ queryKey: ['pending-line-items'] })
       qc.invalidateQueries({ queryKey: ['direct-crs'] })
       qc.invalidateQueries({ queryKey: ['unreconciled-expenses'] })
+      qc.invalidateQueries({ queryKey: ['petty-cash'] })
+      qc.invalidateQueries({ queryKey: ['petty-cash-balance'] })
+      qc.invalidateQueries({ queryKey: ['petty-cash-balance-raw'] })
+      qc.invalidateQueries({ queryKey: ['petty-cash-links'] })
       setStaged([])
       reset()
       onClose()
@@ -1443,6 +1619,11 @@ function AddExpenseDialog({ open, onClose, editExpense }: {
                     </SelectContent>
                   </Select>
                 )} />
+                {watchedMode === 'Cash' && (
+                  <p className="text-xs mt-1" style={{ color: adjustedPettyCashBalance < (Number(watchedAmount) || 0) ? '#dc2626' : 'var(--ink-500)' }}>
+                    Available in Petty Cash: {formatINR(adjustedPettyCashBalance)}
+                  </p>
+                )}
               </div>
               <div className="flex flex-col gap-1">
                 {(watchedMode === 'Online' || watchedMode === 'Bank Transfer') ? (
@@ -1784,6 +1965,17 @@ function ReconcileTab() {
   const [selectedExpenseId, setSelectedExpenseId] = useState<string | null>(null)
   const [selectedTxnId,     setSelectedTxnId]     = useState<string | null>(null)
   const [forceMatchOpen,    setForceMatchOpen]    = useState(false)
+  const [postDiffPrompt, setPostDiffPrompt] = useState<{
+    expenseId: string; transactionId: string; amount: number; kind: 'Replenishment' | 'Disbursement'; expenseDate: string
+  } | null>(null)
+
+  const { data: pettyCashBalance = 0 } = useQuery({
+    queryKey: ['petty-cash-balance'],
+    queryFn: async () => {
+      const { data } = await supabase.from('petty_cash_transactions').select('txn_type, amount')
+      return computePettyCashBalance(data ?? [])
+    },
+  })
 
   const { data: expenses = [], isLoading: loadingExp } = useQuery({
     queryKey: ['unreconciled-expenses'],
@@ -1856,6 +2048,16 @@ function ReconcileTab() {
     },
     onSuccess: () => {
       toast.success('Reconciled successfully')
+      if (!amountMatch && selExp && selTxn) {
+        const diff = selTxn.amount - netOf(selExp)
+        setPostDiffPrompt({
+          expenseId: selExp.id,
+          transactionId: selTxn.id,
+          amount: Math.abs(diff),
+          kind: diff > 0 ? 'Replenishment' : 'Disbursement',
+          expenseDate: selExp.expense_date,
+        })
+      }
       qc.invalidateQueries({ queryKey: ['unreconciled-expenses'] })
       qc.invalidateQueries({ queryKey: ['unmatched-bank-drs'] })
       qc.invalidateQueries({ queryKey: ['expenses'] })
@@ -1867,6 +2069,32 @@ function ReconcileTab() {
     onError: (e: any) => {
       toast.error(e.message ?? 'Failed to reconcile')
     },
+  })
+
+  const postDiffMutation = useMutation({
+    mutationFn: async () => {
+      if (!postDiffPrompt) return
+      if (postDiffPrompt.kind === 'Disbursement' && postDiffPrompt.amount > pettyCashBalance) {
+        throw new Error(`₹${postDiffPrompt.amount} exceeds the available Petty Cash balance (₹${pettyCashBalance})`)
+      }
+      const { error } = await supabase.from('petty_cash_transactions').insert({
+        txn_date: postDiffPrompt.expenseDate,
+        txn_type: postDiffPrompt.kind,
+        amount: postDiffPrompt.amount,
+        expense_id: postDiffPrompt.kind === 'Disbursement' ? postDiffPrompt.expenseId : null,
+        transaction_id: postDiffPrompt.kind === 'Replenishment' ? postDiffPrompt.transactionId : null,
+        notes: `Auto: reconciliation ${postDiffPrompt.kind === 'Replenishment' ? 'surplus' : 'shortfall'}`,
+      })
+      if (error) throw error
+    },
+    onSuccess: () => {
+      toast.success(`${postDiffPrompt?.kind} posted to Petty Cash`)
+      qc.invalidateQueries({ queryKey: ['petty-cash'] })
+      qc.invalidateQueries({ queryKey: ['petty-cash-balance'] })
+      qc.invalidateQueries({ queryKey: ['petty-cash-links'] })
+      setPostDiffPrompt(null)
+    },
+    onError: (e: any) => toast.error(e.message ?? 'Failed to post to Petty Cash'),
   })
 
   const loading = loadingExp || loadingDR
@@ -1965,6 +2193,28 @@ function ReconcileTab() {
               disabled={matchMutation.isPending}
             >
               {matchMutation.isPending ? 'Matching…' : 'Match anyway'}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {postDiffPrompt && (
+        <div className="rounded-xl p-4 flex items-start gap-3" style={{ background: 'var(--ink-50)', border: '1px solid var(--ink-200)' }}>
+          <Coins size={18} className="shrink-0 mt-0.5" style={{ color: 'var(--ink-500)' }} />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold" style={{ color: 'var(--ink-800)' }}>
+              {formatINR(postDiffPrompt.amount)} {postDiffPrompt.kind === 'Replenishment' ? 'surplus' : 'shortfall'} — post to Petty Cash?
+            </p>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--ink-400)' }}>
+              {postDiffPrompt.kind === 'Replenishment'
+                ? 'Adds the unspent leftover to the cash-in-hand pool.'
+                : 'Draws the shortfall from the cash-in-hand pool.'}
+            </p>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <Button size="sm" variant="outline" onClick={() => setPostDiffPrompt(null)}>Skip</Button>
+            <Button size="sm" onClick={() => postDiffMutation.mutate()} disabled={postDiffMutation.isPending}>
+              {postDiffMutation.isPending ? 'Posting…' : `Post ${formatINR(postDiffPrompt.amount)}`}
             </Button>
           </div>
         </div>
@@ -3125,15 +3375,40 @@ function PettyCashTab() {
     queryFn: async () => {
       const { data } = await supabase
         .from('petty_cash_transactions')
-        .select('*')
+        .select('*, expense:expense_id(voucher_no, description), transaction:transaction_id(description)')
         .order('txn_date', { ascending: false })
       return (data ?? []) as PettyCashTxn[]
     },
   })
 
-  const balance = txns.reduce((s, t) =>
-    t.txn_type === 'Disbursement' ? s - t.amount : s + t.amount, 0
-  )
+  const balance = computePettyCashBalance(txns)
+
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(25)
+  const totalPages = Math.max(1, Math.ceil(txns.length / pageSize))
+  const pageSafe = Math.min(page, totalPages)
+  const pagedTxns = txns.slice((pageSafe - 1) * pageSize, pageSafe * pageSize)
+
+  function handleExport() {
+    const rows = [
+      ['Date', 'Type', 'Amount', 'Linked to', 'Notes'],
+      ...txns.map(t => [
+        t.txn_date,
+        t.txn_type,
+        String(t.amount),
+        t.expense ? `${t.expense.voucher_no ?? 'EXP'} · ${t.expense.description}` : t.transaction ? t.transaction.description : '',
+        t.notes ?? '',
+      ]),
+    ]
+    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `Lilac_PettyCash_${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   async function handleAdd(form: { txn_date: string; txn_type: string; amount: string; notes: string }) {
     const { error } = await supabase.from('petty_cash_transactions').insert({
@@ -3145,6 +3420,8 @@ function PettyCashTab() {
     if (error) throw error
     toast.success(`Petty cash ${form.txn_type.toLowerCase()} added`)
     qc.invalidateQueries({ queryKey: ['petty-cash'] })
+    qc.invalidateQueries({ queryKey: ['petty-cash-balance'] })
+    qc.invalidateQueries({ queryKey: ['petty-cash-balance-raw'] })
   }
 
   if (isLoading) return <div className="surface h-40 animate-pulse" style={{ background: 'var(--ink-100)' }} />
@@ -3159,6 +3436,9 @@ function PettyCashTab() {
           </p>
           <p className="text-xs mt-0.5" style={{ color: 'var(--ink-400)' }}>{txns.length} entries</p>
         </div>
+        <Button size="sm" variant="outline" onClick={handleExport} className="flex items-center gap-1.5 mt-1">
+          <Download size={14} /> Export
+        </Button>
         {canWrite && (
           <Button size="sm" onClick={() => setAddOpen(true)} className="flex items-center gap-1.5 mt-1">
             <Plus size={14} /> Add Entry
@@ -3176,7 +3456,7 @@ function PettyCashTab() {
         </div>
       ) : (
         <div className="surface !p-0 divide-rows">
-          {txns.map(t => (
+          {pagedTxns.map(t => (
             <div key={t.id} className="flex items-center gap-3 px-4 py-3">
               <div className="shrink-0 w-10 text-center">
                 <p className="text-xs font-bold leading-tight" style={{ color: 'var(--ink-800)' }}>
@@ -3191,7 +3471,17 @@ function PettyCashTab() {
                   <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${TXN_TYPE_STYLE[t.txn_type] ?? ''}`} style={!TXN_TYPE_STYLE[t.txn_type] ? { background: 'var(--ink-100)', color: 'var(--ink-600)' } : undefined}>
                     {t.txn_type}
                   </span>
-                  {t.notes && <span className="text-xs truncate" style={{ color: 'var(--ink-500)' }}>{t.notes}</span>}
+                  {t.expense ? (
+                    <span className="text-xs truncate" style={{ color: 'var(--ink-500)' }}>
+                      → {t.expense.voucher_no ?? 'EXP'} · {t.expense.description}
+                    </span>
+                  ) : t.transaction ? (
+                    <span className="text-xs truncate" style={{ color: 'var(--ink-500)' }}>
+                      → {t.transaction.description}
+                    </span>
+                  ) : t.notes ? (
+                    <span className="text-xs truncate" style={{ color: 'var(--ink-500)' }}>{t.notes}</span>
+                  ) : null}
                 </div>
               </div>
               <span className={`text-sm font-semibold shrink-0 ${t.txn_type === 'Disbursement' ? 'text-red-600' : 'text-green-700'}`}>
@@ -3199,6 +3489,38 @@ function PettyCashTab() {
               </span>
             </div>
           ))}
+          {txns.length > pageSize && (
+            <div className="flex items-center justify-between px-4 py-3 text-xs" style={{ color: 'var(--ink-500)' }}>
+              <span>
+                Showing {(pageSafe - 1) * pageSize + 1}–{Math.min(pageSafe * pageSize, txns.length)} of {txns.length}
+              </span>
+              <div className="flex items-center gap-2">
+                <select
+                  value={pageSize}
+                  onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}
+                  className="h-7 px-1.5 border rounded text-xs"
+                  style={{ borderColor: 'var(--ink-200, #e2e8f0)' }}
+                >
+                  {[25, 50, 100].map(n => <option key={n} value={n}>{n}/page</option>)}
+                </select>
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={pageSafe <= 1}
+                  className="p-1 rounded hover:bg-[var(--ink-100)] disabled:opacity-30"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                <span>{pageSafe} / {totalPages}</span>
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={pageSafe >= totalPages}
+                  className="p-1 rounded hover:bg-[var(--ink-100)] disabled:opacity-30"
+                >
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
