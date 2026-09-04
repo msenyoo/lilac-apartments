@@ -583,9 +583,9 @@ function DayBook() {
                   )}
                 <button
                   onClick={() => setDetailId(d => d === e.id ? null : e.id)}
-                  className={`flex-1 min-w-0 flex items-center gap-3 px-4 py-3 hover:bg-[var(--ink-50)] text-left transition-colors ${isVoided ? 'opacity-60' : ''}`}
+                  className={`flex-1 min-w-0 flex items-start gap-3 px-4 py-3 hover:bg-[var(--ink-50)] text-left transition-colors ${isVoided ? 'opacity-60' : ''}`}
                 >
-                  <div className="shrink-0 text-center w-10">
+                  <div className="shrink-0 text-center w-10 pt-0.5">
                     <p className={`text-xs font-bold leading-tight ${isVoided ? 'line-through text-muted-foreground' : ''}`} style={isVoided ? undefined : { color: 'var(--ink-800)' }}>
                       {new Date(e.expense_date).getDate().toString().padStart(2, '0')}
                     </p>
@@ -594,41 +594,43 @@ function DayBook() {
                     </p>
                   </div>
 
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 flex flex-col gap-1">
                     <p className={`text-sm font-medium line-clamp-2 leading-snug ${isVoided ? 'line-through text-muted-foreground' : ''}`} style={isVoided ? undefined : { color: 'var(--ink-800)' }}>{e.description}</p>
-                    <p className="text-xs mt-0.5 flex items-center gap-1 flex-wrap" style={{ color: 'var(--ink-500)' }}>
+                    <p className="text-xs flex items-center gap-1 flex-wrap" style={{ color: 'var(--ink-500)' }}>
                       {payeeName}
                       <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${categoryBadgeClass(e.category?.name ?? e.payment_mode)}`}>
                         {e.category?.name ?? e.payment_mode}
                       </span>
                       {e.voucher_no && <span className="ml-1" style={{ color: 'var(--ink-400)' }}>{e.voucher_no}</span>}
                     </p>
-                  </div>
 
-                  <div className="flex items-center gap-1.5 flex-wrap justify-end shrink-0 max-w-[45%] sm:max-w-none">
-                    {isVoided ? (
-                      <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-red-100 text-red-600">Voided</span>
-                    ) : (
-                      <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${STATUS_STYLE[status]}`} style={STATUS_INLINE[status]}>
-                        {status}
-                      </span>
-                    )}
-                    {e.approval_status === 'pending' && (
-                      <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-amber-100 text-amber-700">
-                        Pending
-                      </span>
-                    )}
-                    {e.approval_status === 'rejected' && (
-                      <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-red-100 text-red-600">
-                        Rejected
-                      </span>
-                    )}
-                    {linkedExpenseAmounts.has(e.id) && (
-                      <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-blue-100 text-blue-700 flex items-center gap-1">
-                        <Coins size={10} /> Petty Cash {linkedExpenseAmounts.get(e.id)!.txn_type === 'Disbursement' ? '-' : '+'}{formatINR(linkedExpenseAmounts.get(e.id)!.amount)}
-                      </span>
-                    )}
-                    <span className={`text-sm font-semibold ${isVoided ? 'line-through text-muted-foreground' : ''}`} style={isVoided ? undefined : { color: 'var(--ink-800)' }}>{formatINR(e.amount)}</span>
+                    <div className="flex items-center gap-1.5 flex-wrap justify-between">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {isVoided ? (
+                          <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-red-100 text-red-600">Voided</span>
+                        ) : (
+                          <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${STATUS_STYLE[status]}`} style={STATUS_INLINE[status]}>
+                            {status}
+                          </span>
+                        )}
+                        {e.approval_status === 'pending' && (
+                          <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-amber-100 text-amber-700">
+                            Pending
+                          </span>
+                        )}
+                        {e.approval_status === 'rejected' && (
+                          <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-red-100 text-red-600">
+                            Rejected
+                          </span>
+                        )}
+                        {linkedExpenseAmounts.has(e.id) && (
+                          <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-blue-100 text-blue-700 flex items-center gap-1">
+                            <Coins size={10} /> Petty Cash {linkedExpenseAmounts.get(e.id)!.txn_type === 'Disbursement' ? '-' : '+'}{formatINR(linkedExpenseAmounts.get(e.id)!.amount)}
+                          </span>
+                        )}
+                      </div>
+                      <span className={`text-sm font-semibold shrink-0 ${isVoided ? 'line-through text-muted-foreground' : ''}`} style={isVoided ? undefined : { color: 'var(--ink-800)' }}>{formatINR(e.amount)}</span>
+                    </div>
                   </div>
                 </button>
                 </div>
