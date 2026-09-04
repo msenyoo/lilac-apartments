@@ -306,18 +306,17 @@ function DayBook() {
     queryFn: async () => {
       const { data } = await supabase
         .from('petty_cash_transactions')
-        .select('expense_id, transaction_id')
-      return (data ?? []) as { expense_id: string | null; transaction_id: string | null }[]
+        .select('expense_id, transaction_id, amount, txn_type')
+      return (data ?? []) as { expense_id: string | null; transaction_id: string | null; amount: number; txn_type: string }[]
     },
   })
-  const linkedExpenseIdSet = new Set(pettyCashLinks.map(l => l.expense_id).filter((id): id is string => !!id))
-  const linkedTransactionIdSet = new Set(pettyCashLinks.map(l => l.transaction_id).filter((id): id is string => !!id))
-  const linkedExpenseIds = new Set(
+  const pettyCashByExpenseId = new Map(pettyCashLinks.filter(l => l.expense_id).map(l => [l.expense_id as string, l]))
+  const pettyCashByTransactionId = new Map(pettyCashLinks.filter(l => l.transaction_id).map(l => [l.transaction_id as string, l]))
+  const linkedExpenseAmounts = new Map(
     expenses
-      .filter(e => linkedExpenseIdSet.has(e.id) || (e.transaction_id && linkedTransactionIdSet.has(e.transaction_id)))
-      .map(e => e.id)
+      .map(e => [e.id, pettyCashByExpenseId.get(e.id) ?? (e.transaction_id ? pettyCashByTransactionId.get(e.transaction_id) : undefined)] as const)
+      .filter((pair): pair is [string, { amount: number; txn_type: string }] => !!pair[1])
   )
-
   const selectedExpense = expenses.find(e => e.id === detailId) ?? null
 
   useEffect(() => {
@@ -624,9 +623,9 @@ function DayBook() {
                         Rejected
                       </span>
                     )}
-                    {linkedExpenseIds.has(e.id) && (
+                    {linkedExpenseAmounts.has(e.id) && (
                       <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-blue-100 text-blue-700 flex items-center gap-1">
-                        <Coins size={10} /> Petty Cash
+                        <Coins size={10} /> Petty Cash {linkedExpenseAmounts.get(e.id)!.txn_type === 'Disbursement' ? '-' : '+'}{formatINR(linkedExpenseAmounts.get(e.id)!.amount)}
                       </span>
                     )}
                     <span className={`text-sm font-semibold ${isVoided ? 'line-through text-muted-foreground' : ''}`} style={isVoided ? undefined : { color: 'var(--ink-800)' }}>{formatINR(e.amount)}</span>
@@ -675,7 +674,7 @@ function DayBook() {
               expense={selectedExpense}
               onClose={() => setDetailId(null)}
               onVoidSuccess={() => setDetailId(null)}
-              linkedExpenseIds={linkedExpenseIds}
+              linkedExpenseAmounts={linkedExpenseAmounts}
             />
           )}
         </div>
@@ -687,12 +686,12 @@ function DayBook() {
 // ── Expense detail panel ──────────────────────────────────────
 
 function ExpenseDetailPanel({
-  expense: e, onClose, onVoidSuccess, linkedExpenseIds,
+  expense: e, onClose, onVoidSuccess, linkedExpenseAmounts,
 }: {
   expense: Expense
   onClose: () => void
   onVoidSuccess: () => void
-  linkedExpenseIds: Set<string>
+  linkedExpenseAmounts: Map<string, { amount: number; txn_type: string }>
 }) {
   const { isAdmin, canWrite } = useRoleCtx()
   const qc = useQueryClient()
@@ -703,7 +702,8 @@ function ExpenseDetailPanel({
 
   const netAmount = e.amount - directTotalOf(e.direct_txns)
   const hasBankMismatchDiff = !!e.transaction && e.transaction.amount !== netAmount
-  const alreadyLinked = linkedExpenseIds.has(e.id)
+  const linkedPettyCash = linkedExpenseAmounts.get(e.id)
+  const alreadyLinked = !!linkedPettyCash
   const showPostToPettyCash = !isVoided && hasBankMismatchDiff && !alreadyLinked
 
   const { data: pettyCashBalance = 0 } = useQuery({
@@ -915,9 +915,9 @@ function ExpenseDetailPanel({
               </span>
             } />
           )}
-          {alreadyLinked && (
+          {linkedPettyCash && (
             <p className="text-xs mt-1 flex items-center gap-1" style={{ color: 'var(--ink-500)' }}>
-              <Coins size={12} /> Posted to Petty Cash
+              <Coins size={12} /> Posted to Petty Cash: {linkedPettyCash.txn_type === 'Disbursement' ? '-' : '+'}{formatINR(linkedPettyCash.amount)}
             </p>
           )}
           {showPostToPettyCash && (
