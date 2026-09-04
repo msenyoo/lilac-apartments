@@ -605,7 +605,7 @@ function DayBook() {
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-1.5 flex-wrap justify-end shrink-0 max-w-[45%] sm:max-w-none">
                     {isVoided ? (
                       <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-red-100 text-red-600">Voided</span>
                     ) : (
