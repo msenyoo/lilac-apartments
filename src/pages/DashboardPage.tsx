@@ -223,7 +223,7 @@ function DashboardContent() {
   // always ties to the actual bank balance. corpusCollected/corpusSpent stay
   // for plan-progress displays only.
   const corpusAvailable       = Math.max(0, corpusPos?.balance ?? 0)
-  const maintAvailable        = Math.max(0, maintenancePos?.balance ?? 0)
+  const maintBalance          = maintenancePos?.balance ?? 0
   const contributionAvailable = Math.max(0, contributionPos?.balance ?? 0)
 
   const fdTotal        = deposits.reduce((s, d) => s + d.principal, 0)
@@ -359,8 +359,8 @@ function DashboardContent() {
           </div>
           <div className="flex items-center justify-between rounded-xl px-4 py-3" style={{ background: 'white' }}>
             <div>
-              <p className="text-[11.5px]" style={{ color: 'var(--ink-500)' }}>Available</p>
-              <p className="text-[22px] font-extrabold tnum" style={{ color: 'var(--brand-700)' }}>{formatINR(maintAvailable)}</p>
+              <p className="text-[11.5px]" style={{ color: 'var(--ink-500)' }}>{maintBalance < 0 ? 'Funded by Corpus' : 'Available'}</p>
+              <p className="text-[22px] font-extrabold tnum" style={{ color: maintBalance < 0 ? '#dc2626' : 'var(--brand-700)' }}>{formatINR(Math.abs(maintBalance))}</p>
             </div>
             <Button size="sm" variant="outline" className="text-[12px]" style={{ borderColor: 'var(--brand-400)', color: 'var(--brand-700)' }} onClick={() => navigate('/expenses?filter=maintenance')}>
               View expenses <ArrowRight size={13} className="ml-1" />
