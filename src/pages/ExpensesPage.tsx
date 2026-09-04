@@ -472,25 +472,6 @@ function DayBook() {
               </span>
             )}
           </label>
-          <div className="relative w-full sm:w-[260px]">
-            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--ink-400)' }} />
-            <Input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search description, payee, voucher…"
-              className="text-[13px]"
-              style={{ paddingLeft: '2rem', paddingRight: search ? '2rem' : undefined }}
-            />
-            {search && (
-              <button
-                onClick={() => setSearch('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 hover:opacity-70"
-                style={{ color: 'var(--ink-400)' }}
-              >
-                <X size={14} />
-              </button>
-            )}
-          </div>
         </div>
         <div className="flex items-center gap-3">
           {selectedIds.size > 0 && (
@@ -505,6 +486,26 @@ function DayBook() {
             <Download size={14} /> Export
           </button>
         </div>
+      </div>
+
+      <div className="relative w-full sm:w-[260px]">
+        <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--ink-400)' }} />
+        <Input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search description, payee, voucher…"
+          className="text-[13px]"
+          style={{ paddingLeft: '2rem', paddingRight: search ? '2rem' : undefined }}
+        />
+        {search && (
+          <button
+            onClick={() => setSearch('')}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 hover:opacity-70"
+            style={{ color: 'var(--ink-400)' }}
+          >
+            <X size={14} />
+          </button>
+        )}
       </div>
 
       <div className="flex items-center gap-3 flex-wrap">
