@@ -315,7 +315,7 @@ function DayBook() {
   const linkedExpenseAmounts = new Map(
     expenses
       .map(e => [e.id, pettyCashByExpenseId.get(e.id) ?? (e.transaction_id ? pettyCashByTransactionId.get(e.transaction_id) : undefined)] as const)
-      .filter((pair): pair is [string, { amount: number; txn_type: string }] => !!pair[1])
+      .filter((pair): pair is [string, { expense_id: string | null; transaction_id: string | null; amount: number; txn_type: string }] => !!pair[1])
   )
   const selectedExpense = expenses.find(e => e.id === detailId) ?? null
 
@@ -691,7 +691,7 @@ function ExpenseDetailPanel({
   expense: Expense
   onClose: () => void
   onVoidSuccess: () => void
-  linkedExpenseAmounts: Map<string, { amount: number; txn_type: string }>
+  linkedExpenseAmounts: Map<string, { expense_id: string | null; transaction_id: string | null; amount: number; txn_type: string }>
 }) {
   const { isAdmin, canWrite } = useRoleCtx()
   const qc = useQueryClient()

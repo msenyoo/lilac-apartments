@@ -233,7 +233,10 @@ function DashboardContent() {
     : null
 
   const pendingActionsCount = overdueFlatCount + unreconciledCount + fdMaturingSoon.length
-  const netAvailableCash    = maintAvailable + corpusAvailable + contributionAvailable
+  // Sum raw (unclamped) fund balances, not the per-fund clamped Available values above —
+  // a fund running a deficit (e.g. Maintenance overspent, covered by Corpus) must still net
+  // out here, or this headline stops tying to the actual bank balance.
+  const netAvailableCash    = (maintenancePos?.balance ?? 0) + (corpusPos?.balance ?? 0) + (contributionPos?.balance ?? 0)
 
   type MonthlyRow = { fiscal_label: string; maintenance_collected: number | null; corpus_collected: number | null; total_expenses: number | null }
   const chartData = (monthlyRaw as MonthlyRow[]).slice(-12).map(m => ({
