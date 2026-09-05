@@ -917,7 +917,7 @@ export const HELP_SECTIONS: HelpSection[] = [
         steps: [
           { text: 'Go to Reports → Collection tab.' },
           { text: 'Select the fiscal year from the dropdown.' },
-          { text: 'Choose a report type: Monthly summary, Flat-wise history, Dues aging, or Defaulters list.' },
+          { text: 'Choose a report type: Cash Book, Flat-wise history, Dues aging, or Defaulters list.' },
           { text: 'Click Generate / Download PDF to produce the report.' },
         ],
         examples: [
