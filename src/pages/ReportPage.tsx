@@ -151,6 +151,34 @@ async function fetchContributionDisbursements(start: string, end: string, driveN
   return Array.from(grouped.entries()).map(([category, amount]) => ({ category, amount }))
 }
 
+// expenses.category_id is frequently NULL on vouchers split across categories at entry time —
+// the real categorisation lives on expense_line_items.category_id instead. Grouping by
+// expenses.category_id directly (as several report tabs used to) misreports a fully-categorised
+// voucher as 'Uncategorised' whenever it has line items. v_expense_category_spend (migration 041)
+// already resolves this per-line, so first narrow to "reportable" (confirmed-spend) expense ids
+// via applyReportableFilter, then pull their resolved categories from that view.
+async function fetchCategorisedSpend(start: string, end: string) {
+  const { data: reportable } = await applyReportableFilter(supabase.from('expenses').select('id'))
+    .gte('expense_date', start)
+    .lte('expense_date', end)
+  const ids = (reportable ?? []).map((e: any) => e.id)
+  if (ids.length === 0) return []
+
+  const { data: rows } = await supabase
+    .from('v_expense_category_spend')
+    .select('category_name, amount')
+    .in('expense_id', ids)
+
+  const grouped = new Map<string, number>()
+  for (const r of (rows ?? []) as any[]) {
+    const cat = r.category_name ?? 'Uncategorised'
+    grouped.set(cat, (grouped.get(cat) ?? 0) + (r.amount ?? 0))
+  }
+  return Array.from(grouped.entries())
+    .map(([category, amount]) => ({ category, amount }))
+    .sort((a, b) => b.amount - a.amount)
+}
+
 const BLOCK_COLORS: Record<string, string> = {
   'Block-A': '#7c3aed',
   'Block-B': '#2563eb',
@@ -691,26 +719,12 @@ function AGMReportsTab() {
     },
   })
 
-  // Expenditure: from expenses table by category
+  // Expenditure: from expenses (+ line items) by category, via v_expense_category_spend so a
+  // voucher split across categories at entry time resolves correctly instead of showing as
+  // 'Uncategorised' just because expenses.category_id itself was left blank.
   const { data: expenditure } = useQuery({
     queryKey: ['agm-expenses', selectedFyYear],
-    queryFn: async () => {
-      const [{ data: exps }, { data: cats }] = await Promise.all([
-        applyReportableFilter(supabase.from('expenses').select('amount, category_id'))
-          .gte('expense_date', selectedFy.start)
-          .lte('expense_date', selectedFy.end),
-        supabase.from('expense_categories').select('id, name'),
-      ])
-      const catMap = new Map((cats ?? []).map((c: any) => [c.id, c.name as string]))
-      const grouped = new Map<string, number>()
-      for (const e of exps ?? []) {
-        const cat = catMap.get((e as any).category_id) ?? 'Uncategorised'
-        grouped.set(cat, (grouped.get(cat) ?? 0) + ((e as any).amount ?? 0))
-      }
-      return Array.from(grouped.entries())
-        .map(([category, amount]) => ({ category, amount }))
-        .sort((a, b) => b.amount - a.amount)
-    },
+    queryFn: () => fetchCategorisedSpend(selectedFy.start, selectedFy.end),
   })
 
   // Corpus plans for fund statement
@@ -2856,26 +2870,11 @@ function RPStatementTab() {
 
   const { data: driveNameById } = useContributionDriveNames()
 
+  // Via v_expense_category_spend so a voucher split across categories at entry time resolves
+  // correctly instead of showing as 'Uncategorised' just because expenses.category_id was blank.
   const { data: expensePayments } = useQuery({
     queryKey: ['rp-payments', selectedFyYear],
-    queryFn: async () => {
-      const [{ data: exps }, { data: cats }] = await Promise.all([
-        applyReportableFilter(supabase.from('expenses')
-          .select('amount, category_id'))
-          .gte('expense_date', selectedFy.start)
-          .lte('expense_date', selectedFy.end),
-        supabase.from('expense_categories').select('id, name'),
-      ])
-      const catMap = new Map((cats ?? []).map((c: any) => [c.id, c.name as string]))
-      const grouped = new Map<string, number>()
-      for (const e of exps ?? []) {
-        const cat = catMap.get((e as any).category_id) ?? 'Uncategorised'
-        grouped.set(cat, (grouped.get(cat) ?? 0) + ((e as any).amount ?? 0))
-      }
-      return Array.from(grouped.entries())
-        .map(([category, amount]) => ({ category, amount }))
-        .sort((a, b) => b.amount - a.amount)
-    },
+    queryFn: () => fetchCategorisedSpend(selectedFy.start, selectedFy.end),
   })
 
   // Contribution-drive disbursements never go through the `expenses` table — merge them in.
