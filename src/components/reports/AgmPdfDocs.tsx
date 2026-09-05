@@ -194,16 +194,19 @@ interface CorpusPlanSummary {
 // ── Receipts & Payments Account ──────────────────────────────
 
 interface RPRow { category: string; amount: number }
+interface DirectPaymentRow { description: string; amount: number }
 
-export function ReceiptsPaymentsDoc({ receipts, payments, fyLabel, generated }: {
+export function ReceiptsPaymentsDoc({ receipts, payments, directPayments, fyLabel, generated }: {
   receipts: RPRow[]
   payments: RPRow[]
+  directPayments?: DirectPaymentRow[]
   fyLabel: string
   generated: string
 }) {
   const totalReceipts = receipts.reduce((s, r) => s + r.amount, 0)
   const totalPayments = payments.reduce((s, r) => s + r.amount, 0)
   const closingBal    = totalReceipts - totalPayments
+  const totalDirect   = (directPayments ?? []).reduce((s, r) => s + r.amount, 0)
 
   return (
     <Document>
@@ -267,6 +270,19 @@ export function ReceiptsPaymentsDoc({ receipts, payments, fyLabel, generated }: 
           </Text>
         </View>
 
+        {totalDirect > 0 && (
+          <View style={{ marginTop: 10 }}>
+            <Text style={S.small}>
+              Includes {formatINR(totalDirect)} paid directly by flat-owner(s) to vendors (no bank movement):
+            </Text>
+            {(directPayments ?? []).map((d, i) => (
+              <Text key={i} style={[S.small, { marginTop: 2 }]}>
+                • {d.description} — {formatINR(d.amount)}
+              </Text>
+            ))}
+          </View>
+        )}
+
         <LetterheadFooter style={S.footer} generated={generated} />
       </Page>
     </Document>
@@ -278,19 +294,21 @@ export function ReceiptsPaymentsDoc({ receipts, payments, fyLabel, generated }: 
 interface RPPaymentRow { category: string; amount: number }
 
 export function RPStatementDoc({
-  fyLabel, openingBalance, maintenanceCR, corpusCR, fdInterest, pettyCashOpening, pettyCashClosing, payments, generated,
+  fyLabel, openingBalance, maintenanceCR, corpusCR, contributionCR, fdInterest, pettyCashOpening, pettyCashClosing, payments, generated,
 }: {
   fyLabel: string
   openingBalance: number
   maintenanceCR: number
   corpusCR: number
+  contributionCR?: number
   fdInterest: number
   pettyCashOpening: number
   pettyCashClosing: number
   payments: RPPaymentRow[]
   generated: string
 }) {
-  const totalReceipts = openingBalance + maintenanceCR + corpusCR + fdInterest
+  const contCR = contributionCR ?? 0
+  const totalReceipts = openingBalance + maintenanceCR + corpusCR + contCR + fdInterest
   const totalPayments = payments.reduce((s, r) => s + r.amount, 0)
   const closingBal    = totalReceipts - totalPayments
 
@@ -298,6 +316,7 @@ export function RPStatementDoc({
     { label: 'Opening balance (b/f)', amount: openingBalance },
     { label: 'Maintenance collected', amount: maintenanceCR },
     { label: 'Corpus collected',      amount: corpusCR },
+    { label: 'Contribution collected', amount: contCR },
     { label: 'FD interest received',  amount: fdInterest },
   ].filter(r => r.amount > 0)
 
@@ -374,7 +393,7 @@ export function RPStatementDoc({
 
 export function BalanceSheetDoc({
   fyLabel, asAtDate,
-  bankBalance, fdTotal, corpusCollected, cashInHand, totalAssets,
+  bankBalance, fdTotal, corpusHeld, cashInHand, totalAssets,
   pendingDues, corpusBalance, totalLiabilities, netPosition,
   generated,
 }: {
@@ -382,7 +401,9 @@ export function BalanceSheetDoc({
   asAtDate: string
   bankBalance: number
   fdTotal: number
-  corpusCollected: number
+  // Lifetime corpus collected minus lifetime corpus spend — the portion still ring-fenced
+  // within Bank balance today, not the raw lifetime collection total.
+  corpusHeld: number
   cashInHand: number
   totalAssets: number
   pendingDues: number
@@ -406,7 +427,6 @@ export function BalanceSheetDoc({
               {[
                 { label: 'Bank balance',            amount: bankBalance },
                 { label: 'Fixed deposits (active)', amount: fdTotal },
-                { label: 'Corpus fund collected',   amount: corpusCollected },
                 { label: 'Cash in hand',            amount: cashInHand },
               ].map((r, i) => (
                 <View key={r.label} style={[S.row, i % 2 === 1 ? S.rowAlt : {}]}>
@@ -426,7 +446,7 @@ export function BalanceSheetDoc({
             <View style={S.table}>
               {[
                 { label: 'Pending maintenance dues', amount: pendingDues },
-                { label: 'Corpus yet to collect',    amount: corpusBalance },
+                { label: 'Corpus fund (still held)', amount: corpusHeld },
               ].map((r, i) => (
                 <View key={r.label} style={[S.row, i % 2 === 1 ? S.rowAlt : {}]}>
                   <Text style={r.amount > 0 ? S.col : [S.col, { color: '#94a3b8' }]}>{r.label}</Text>
@@ -436,6 +456,10 @@ export function BalanceSheetDoc({
               <View style={S.rowTotal}>
                 <Text style={[S.col, S.bold]}>Total Liabilities</Text>
                 <Text style={[S.colR, S.bold]}>{formatINR(totalLiabilities)}</Text>
+              </View>
+              <View style={[S.row, { marginTop: 4 }]}>
+                <Text style={[S.col, S.small]}>Memo: Corpus yet to collect (future target, not a current obligation)</Text>
+                <Text style={[S.colR, S.small]}>{formatINR(corpusBalance)}</Text>
               </View>
             </View>
           </View>
