@@ -96,6 +96,61 @@ function triggerDownload(blob: Blob, filename: string) {
   URL.revokeObjectURL(url)
 }
 
+// Raw transaction category codes that read as jargon to residents — expanded for display.
+const CATEGORY_LABELS: Record<string, string> = { EB: 'Electricity Bill' }
+function labelForCategory(cat: string | null | undefined): string {
+  if (!cat) return 'Uncategorised'
+  return CATEGORY_LABELS[cat] ?? cat
+}
+
+function useContributionDriveNames() {
+  return useQuery({
+    queryKey: ['contribution-drive-names'],
+    queryFn: async () => {
+      const { data } = await supabase.from('contribution_drives').select('id, name')
+      return new Map((data ?? []).map((d: any) => [d.id as string, d.name as string]))
+    },
+  })
+}
+
+// CR transactions grouped by category, with 'Contribution' broken out by drive — a shared
+// literal category (migration 045) that otherwise hides which drive the money belongs to.
+function groupReceiptsByCategory(
+  txns: { category: string | null; amount: number; drive_id?: string | null }[],
+  driveNameById: Map<string, string>,
+) {
+  const grouped = new Map<string, number>()
+  for (const t of txns) {
+    const label = t.category === 'Contribution'
+      ? `Contribution: ${(t.drive_id && driveNameById.get(t.drive_id)) || 'Other'}`
+      : labelForCategory(t.category ?? 'Other')
+    grouped.set(label, (grouped.get(label) ?? 0) + (t.amount ?? 0))
+  }
+  return Array.from(grouped.entries())
+    .map(([category, amount]) => ({ category, amount }))
+    .sort((a, b) => b.amount - a.amount)
+}
+
+// Contribution-drive disbursements are plain DR transactions (category='Contribution'), never
+// routed through the `expenses` table — so any Payments view built only from `expenses` misses
+// them entirely. Fetch them separately and merge in wherever Payments/Expenditure is shown.
+async function fetchContributionDisbursements(start: string, end: string, driveNameById: Map<string, string>) {
+  const { data } = await supabase
+    .from('transactions')
+    .select('amount, drive_id')
+    .eq('cr_dr', 'DR')
+    .eq('category', 'Contribution')
+    .neq('row_type', 'VOIDED')
+    .gte('value_date', start)
+    .lte('value_date', end)
+  const grouped = new Map<string, number>()
+  for (const t of (data ?? []) as any[]) {
+    const label = `Contribution: ${(t.drive_id && driveNameById.get(t.drive_id)) || 'Other'} (disbursed)`
+    grouped.set(label, (grouped.get(label) ?? 0) + (t.amount ?? 0))
+  }
+  return Array.from(grouped.entries()).map(([category, amount]) => ({ category, amount }))
+}
+
 const BLOCK_COLORS: Record<string, string> = {
   'Block-A': '#7c3aed',
   'Block-B': '#2563eb',
@@ -111,6 +166,8 @@ export default function ReportPage() {
   const [tab, setTab] = useState<ReportTab>('monthly')
   const [month, setMonth] = useState(currentFiscalLabel)
   const [generatingPdf, setGeneratingPdf] = useState(false)
+  const [generatingCashbookPdf, setGeneratingCashbookPdf] = useState(false)
+  const cashbook = useCashbookData(month)
 
   const { data: summary } = useQuery({
     queryKey: ['monthly-summary', month],
@@ -128,13 +185,43 @@ export default function ReportPage() {
     },
   })
 
-  const { data: expenses } = useQuery({
-    queryKey: ['expenses', month],
+  const { data: expenseTxns } = useQuery({
+    queryKey: ['expense-txns', month],
     queryFn: async () => {
-      const { data } = await supabase.from('v_expenses').select('*').eq('fiscal_label', month).order('total_amount', { ascending: false })
+      const { data } = await supabase
+        .from('transactions')
+        .select('category, amount, description, drive_id')
+        .eq('fiscal_label', month)
+        .eq('cr_dr', 'DR')
+        .neq('row_type', 'VOIDED')
       return data ?? []
     },
   })
+
+  const { data: driveNameById } = useContributionDriveNames()
+
+  // Raw category codes ('EB') and shared literals ('Contribution', 'Direct') read as jargon or
+  // hide who the money actually went to — expand them into readable, specific lines here.
+  const expenses = useMemo(() => {
+    const grouped = new Map<string, { total: number; count: number }>()
+    for (const t of (expenseTxns ?? []) as any[]) {
+      let label: string
+      if (t.category === 'Contribution') {
+        label = `Contribution: ${(t.drive_id && driveNameById?.get(t.drive_id)) || 'Other'}`
+      } else if (t.category === 'Direct') {
+        label = t.description || 'Direct payment'
+      } else {
+        label = labelForCategory(t.category)
+      }
+      const entry = grouped.get(label) ?? { total: 0, count: 0 }
+      entry.total += t.amount ?? 0
+      entry.count += 1
+      grouped.set(label, entry)
+    }
+    return Array.from(grouped.entries())
+      .map(([category, { total, count }]) => ({ category, total_amount: total, txn_count: count }))
+      .sort((a, b) => b.total_amount - a.total_amount)
+  }, [expenseTxns, driveNameById])
 
   const { data: corpus } = useQuery({
     queryKey: ['corpus'],
@@ -187,6 +274,37 @@ export default function ReportPage() {
       triggerDownload(blob, `Lilac_Monthly_Report_${month}.pdf`)
     } finally {
       setGeneratingPdf(false)
+    }
+  }
+
+  async function handleCashbookPdf() {
+    setGeneratingCashbookPdf(true)
+    try {
+      const [{ pdf }, { CashbookDoc }] = await Promise.all([
+        import('@react-pdf/renderer'),
+        import('@/components/reports/AgmPdfDocs'),
+      ])
+      const generated = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+      const blob = await pdf(
+        <CashbookDoc
+          month={month}
+          openingBalance={cashbook.openingBalance}
+          closingBalance={cashbook.closingBalance}
+          pettyCashOpening={cashbook.pcOpening}
+          pettyCashClosing={cashbook.pcClosing}
+          receipts={cashbook.crSplitup}
+          payments={cashbook.drSplitup}
+          dues={[
+            { label: 'Current FY Pending',    amount: cashbook.pendingTotal,     flats: cashbook.pendingRows.length },
+            { label: 'Arrears (prior years)', amount: cashbook.arrearsTotal,     flats: cashbook.arrearsRows.length },
+            { label: 'Total Outstanding',     amount: cashbook.outstandingTotal, flats: cashbook.outstandingRows.length },
+          ]}
+          generated={generated}
+        />
+      ).toBlob()
+      triggerDownload(blob, `Lilac_Cashbook_${month}.pdf`)
+    } finally {
+      setGeneratingCashbookPdf(false)
     }
   }
 
@@ -277,6 +395,13 @@ export default function ReportPage() {
               {generatingPdf
                 ? <><Loader2 size={15} className="animate-spin" /> Generating…</>
                 : <><FileText size={15} /> Download PDF</>
+              }
+            </button>
+            <button onClick={handleCashbookPdf} disabled={generatingCashbookPdf || cashbook.isLoading}
+              className="btn-secondary flex items-center gap-2 disabled:opacity-50">
+              {generatingCashbookPdf
+                ? <><Loader2 size={15} className="animate-spin" /> Generating…</>
+                : <><FileText size={15} /> Download Cash Book PDF</>
               }
             </button>
           </div>
@@ -608,13 +733,15 @@ function AGMReportsTab() {
       .sort((a, b) => b.amount - a.amount)
   }, [incomeTxns])
 
+  const { data: driveNameById } = useContributionDriveNames()
+
   // Receipts & Payments: all CR transactions by category + expenses by category
   const { data: allCrTxns } = useQuery({
     queryKey: ['agm-cr-txns', selectedFyYear],
     queryFn: async () => {
       const { data } = await supabase
         .from('transactions')
-        .select('category, amount')
+        .select('category, amount, drive_id')
         .eq('cr_dr', 'CR')
         .neq('row_type', 'VOIDED')
         .gte('value_date', selectedFy.start)
@@ -623,16 +750,40 @@ function AGMReportsTab() {
     },
   })
 
-  const receipts = useMemo(() => {
-    const grouped = new Map<string, number>()
-    for (const t of allCrTxns ?? []) {
-      const cat = (t as any).category ?? 'Other'
-      grouped.set(cat, (grouped.get(cat) ?? 0) + ((t as any).amount ?? 0))
-    }
-    return Array.from(grouped.entries())
-      .map(([category, amount]) => ({ category, amount }))
-      .sort((a, b) => b.amount - a.amount)
-  }, [allCrTxns])
+  const receipts = useMemo(
+    () => groupReceiptsByCategory((allCrTxns ?? []) as any[], driveNameById ?? new Map()),
+    [allCrTxns, driveNameById],
+  )
+
+  // Contribution-drive disbursements (DR, category='Contribution') never go through the
+  // `expenses` table, so `expenditure` above misses them entirely — merge them in for Payments.
+  const { data: contributionDisbursements } = useQuery({
+    queryKey: ['agm-contribution-disbursements', selectedFyYear, driveNameById],
+    enabled: !!driveNameById,
+    queryFn: () => fetchContributionDisbursements(selectedFy.start, selectedFy.end, driveNameById ?? new Map()),
+  })
+
+  const payments = useMemo(
+    () => [...(expenditure ?? []), ...(contributionDisbursements ?? [])].sort((a, b) => b.amount - a.amount),
+    [expenditure, contributionDisbursements],
+  )
+
+  // Direct payments (owner pays a vendor directly, bypassing the bank) are already counted
+  // inside their expense category above — this is purely a transparency note on who was paid.
+  const { data: directPayments } = useQuery({
+    queryKey: ['agm-direct-payments', selectedFyYear],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('transactions')
+        .select('description, amount')
+        .eq('cr_dr', 'DR')
+        .eq('category', 'Direct')
+        .neq('row_type', 'VOIDED')
+        .gte('value_date', selectedFy.start)
+        .lte('value_date', selectedFy.end)
+      return (data ?? []) as { description: string; amount: number }[]
+    },
+  })
 
   // Build CorpusPlanSummary[] for the PDF
   const corpusPlans = useMemo(() => {
@@ -733,7 +884,8 @@ function AGMReportsTab() {
       const blob = await pdf(
         <ReceiptsPaymentsDoc
           receipts={receipts}
-          payments={expenditure ?? []}
+          payments={payments}
+          directPayments={directPayments ?? []}
           fyLabel={selectedFy.label}
           generated={generated}
         />
@@ -2155,10 +2307,34 @@ function resolvePayeeCandidate(e: PayeeCandidate): string | null {
   return e.payee_name_raw ?? null
 }
 
-function CashbookTab() {
-  const [month, setMonth] = useState(currentFiscalLabel)
+// Contribution-drive disbursements are plain DR transactions, never routed through `expenses` —
+// itemized the same way as expense line items so they show up in the Cash Book's Payments side.
+async function fetchContributionDisbursementItems(
+  start: string, end: string, driveNameById: Map<string, string>,
+): Promise<DrCategoryGroup[]> {
+  const { data } = await supabase
+    .from('transactions')
+    .select('value_date, amount, description, drive_id')
+    .eq('cr_dr', 'DR')
+    .eq('category', 'Contribution')
+    .neq('row_type', 'VOIDED')
+    .gte('value_date', start)
+    .lte('value_date', end)
+  const grouped = new Map<string, DrItemRow[]>()
+  for (const t of (data ?? []) as any[]) {
+    const cat = `Contribution: ${(t.drive_id && driveNameById.get(t.drive_id)) || 'Other'} (disbursed)`
+    if (!grouped.has(cat)) grouped.set(cat, [])
+    grouped.get(cat)!.push({ date: t.value_date, label: t.description, qty: '', amount: t.amount ?? 0 })
+  }
+  return Array.from(grouped.entries()).map(([category, items]) => ({
+    category, total: items.reduce((s, it) => s + it.amount, 0), items,
+  }))
+}
+
+// Shared by CashbookTab and the Monthly Statement tab (which offers the same month's Cash
+// Book as a download) — one place for the opening/closing balances, receipts, and payments.
+function useCashbookData(month: string) {
   const { start, end, prevEnd } = monthLabelToRange(month)
-  const [generating, setGenerating] = useState(false)
   const asOfDate = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
 
   const { data: openingBalance = 0 } = useQuery({
@@ -2196,28 +2372,27 @@ function CashbookTab() {
     },
   })
 
-  const { data: crSplitup } = useQuery({
+  const { data: driveNameById } = useContributionDriveNames()
+
+  const { data: crTxns } = useQuery({
     queryKey: ['cashbook-cr', start, end],
     queryFn: async () => {
       const { data } = await supabase
         .from('transactions')
-        .select('category, amount')
+        .select('category, amount, drive_id')
         .eq('cr_dr', 'CR')
         .neq('row_type', 'VOIDED')
         .gte('value_date', start)
         .lte('value_date', end)
-      const grouped = new Map<string, number>()
-      for (const t of data ?? []) {
-        const cat = (t as any).category ?? 'Other'
-        grouped.set(cat, (grouped.get(cat) ?? 0) + ((t as any).amount ?? 0))
-      }
-      return Array.from(grouped.entries())
-        .map(([category, amount]) => ({ category, amount }))
-        .sort((a, b) => b.amount - a.amount) as CrCategoryRow[]
+      return (data ?? []) as any[]
     },
   })
+  const crSplitup = useMemo(
+    () => groupReceiptsByCategory(crTxns ?? [], driveNameById ?? new Map()) as CrCategoryRow[],
+    [crTxns, driveNameById],
+  )
 
-  const { data: drSplitup } = useQuery({
+  const { data: drExpenseGroups } = useQuery({
     queryKey: ['cashbook-dr', start, end],
     queryFn: async () => {
       const { data: headers } = await applyReportableFilter(supabase
@@ -2312,6 +2487,18 @@ function CashbookTab() {
     },
   })
 
+  // Contribution-drive disbursements never go through `expenses` — merge them in separately.
+  const { data: drContributionGroups } = useQuery({
+    queryKey: ['cashbook-dr-contribution', start, end, driveNameById],
+    enabled: !!driveNameById,
+    queryFn: () => fetchContributionDisbursementItems(start, end, driveNameById ?? new Map()),
+  })
+
+  const drSplitup = useMemo(
+    () => [...(drExpenseGroups ?? []), ...(drContributionGroups ?? [])].sort((a, b) => b.total - a.total),
+    [drExpenseGroups, drContributionGroups],
+  )
+
   const { data: duesRows } = useQuery({
     queryKey: ['cashbook-dues'],
     queryFn: async () => {
@@ -2322,10 +2509,10 @@ function CashbookTab() {
     },
   })
 
-  const totalReceipts = (crSplitup ?? []).reduce((s, r) => s + r.amount, 0)
-  const totalPayments = (drSplitup ?? []).reduce((s, r) => s + r.total, 0)
+  const totalReceipts = crSplitup.reduce((s, r) => s + r.amount, 0)
+  const totalPayments = drSplitup.reduce((s, r) => s + r.total, 0)
 
-  const isLoading = crSplitup === undefined || drSplitup === undefined || duesRows === undefined
+  const isLoading = crTxns === undefined || drExpenseGroups === undefined || duesRows === undefined
 
   const pendingRows     = (duesRows ?? []).filter(r => r.pending > 0)
   const arrearsRows     = (duesRows ?? []).filter(r => r.arrears_maintenance > 0)
@@ -2333,6 +2520,22 @@ function CashbookTab() {
   const pendingTotal     = pendingRows.reduce((s, r) => s + r.pending, 0)
   const arrearsTotal     = arrearsRows.reduce((s, r) => s + r.arrears_maintenance, 0)
   const outstandingTotal = outstandingRows.reduce((s, r) => s + r.total_outstanding, 0)
+
+  return {
+    asOfDate, openingBalance, closingBalance, pcOpening, pcClosing, crSplitup, drSplitup,
+    totalReceipts, totalPayments, isLoading,
+    pendingRows, arrearsRows, outstandingRows, pendingTotal, arrearsTotal, outstandingTotal,
+  }
+}
+
+function CashbookTab() {
+  const [month, setMonth] = useState(currentFiscalLabel)
+  const [generating, setGenerating] = useState(false)
+  const {
+    asOfDate, openingBalance, closingBalance, pcOpening, pcClosing, crSplitup, drSplitup,
+    totalReceipts, totalPayments, isLoading,
+    pendingRows, arrearsRows, outstandingRows, pendingTotal, arrearsTotal, outstandingTotal,
+  } = useCashbookData(month)
 
   function handleExcelExport() {
     const wb = XLSX.utils.book_new()
@@ -2596,6 +2799,23 @@ function RPStatementTab() {
         .select('amount')
         .eq('cr_dr', 'CR')
         .eq('corpus', 'NO')
+        // Contribution-drive money isn't Maintenance — it's tracked (and shown) separately below.
+        .neq('category', 'Contribution')
+        .neq('row_type', 'VOIDED')
+        .gte('value_date', selectedFy.start)
+        .lte('value_date', selectedFy.end)
+      return (data ?? []).reduce((s: number, r: any) => s + (r.amount ?? 0), 0)
+    },
+  })
+
+  const { data: contributionCR } = useQuery({
+    queryKey: ['rp-contribution-cr', selectedFyYear],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('transactions')
+        .select('amount')
+        .eq('cr_dr', 'CR')
+        .eq('category', 'Contribution')
         .neq('row_type', 'VOIDED')
         .gte('value_date', selectedFy.start)
         .lte('value_date', selectedFy.end)
@@ -2634,7 +2854,9 @@ function RPStatementTab() {
     },
   })
 
-  const { data: paymentRows } = useQuery({
+  const { data: driveNameById } = useContributionDriveNames()
+
+  const { data: expensePayments } = useQuery({
     queryKey: ['rp-payments', selectedFyYear],
     queryFn: async () => {
       const [{ data: exps }, { data: cats }] = await Promise.all([
@@ -2656,11 +2878,24 @@ function RPStatementTab() {
     },
   })
 
+  // Contribution-drive disbursements never go through the `expenses` table — merge them in.
+  const { data: contributionDisbursements } = useQuery({
+    queryKey: ['rp-contribution-disbursements', selectedFyYear, driveNameById],
+    enabled: !!driveNameById,
+    queryFn: () => fetchContributionDisbursements(selectedFy.start, selectedFy.end, driveNameById ?? new Map()),
+  })
+
+  const paymentRows = useMemo(
+    () => [...(expensePayments ?? []), ...(contributionDisbursements ?? [])].sort((a, b) => b.amount - a.amount),
+    [expensePayments, contributionDisbursements],
+  )
+
   const mCR         = maintenanceCR ?? 0
   const cCR         = corpusCR ?? 0
+  const contCR      = contributionCR ?? 0
   const fdInt       = fdInterest ?? 0
-  const totalReceipts = openingBalance + mCR + cCR + fdInt
-  const totalPayments = (paymentRows ?? []).reduce((s, r) => s + r.amount, 0)
+  const totalReceipts = openingBalance + mCR + cCR + contCR + fdInt
+  const totalPayments = paymentRows.reduce((s, r) => s + r.amount, 0)
   const closingBalance = totalReceipts - totalPayments
 
   async function handlePdf() {
@@ -2677,10 +2912,11 @@ function RPStatementTab() {
           openingBalance={openingBalance}
           maintenanceCR={mCR}
           corpusCR={cCR}
+          contributionCR={contCR}
           fdInterest={fdInt}
           pettyCashOpening={rpPcOpening}
           pettyCashClosing={rpPcClosing}
-          payments={paymentRows ?? []}
+          payments={paymentRows}
           generated={generated}
         />
       ).toBlob()
@@ -2723,6 +2959,7 @@ function RPStatementTab() {
           { label: 'Opening balance (brought forward)', amount: openingBalance },
           { label: 'Maintenance collected',             amount: mCR },
           { label: 'Corpus collected',                  amount: cCR },
+          { label: 'Contribution collected',            amount: contCR },
           { label: 'FD interest received',              amount: fdInt },
         ].map(({ label, amount }) => (
           <div key={label} className="flex justify-between items-center px-5 py-3 border-b hairline text-sm">
@@ -2821,6 +3058,20 @@ function BalanceSheetTab() {
     },
   })
 
+  // v_corpus_tracker.collected is a lifetime fundraising total — it's never netted against
+  // what's actually been spent from corpus (via bank or a flat's direct payment to a vendor,
+  // both linked through expenses.corpus_plan_id). Only the remainder is still sitting in Bank
+  // balance today; the gross collected figure can be many times larger than the cash on hand.
+  const { data: corpusSpent } = useQuery({
+    queryKey: ['bs-corpus-spent'],
+    queryFn: async () => {
+      const { data } = await applyReportableFilter(
+        supabase.from('expenses').select('amount, corpus_plan_id')
+      ).not('corpus_plan_id', 'is', null)
+      return (data ?? []).reduce((s: number, r: any) => s + (r.amount ?? 0), 0)
+    },
+  })
+
   const { data: pendingDues } = useQuery({
     queryKey: ['bs-pending-dues', selectedFyYear],
     queryFn: async () => {
@@ -2846,13 +3097,20 @@ function BalanceSheetTab() {
 
   const bankBalance = bankBalanceData
   const fdTotal     = activeFDs ?? 0
-  const corpColl    = corpusCollected ?? 0
   const cashInHand  = cashInHandData
-  const totalAssets = bankBalance + fdTotal + corpColl + cashInHand
+  // Corpus money sits in the same commingled bank account as everything else — it's already
+  // inside Bank balance, not a separate pool. Listing the full lifetime "collected" figure again
+  // as an Asset would double-count it; only what's left after corpus spend belongs on the
+  // Liabilities side, as the portion of Bank balance that's ring-fenced and not free to spend.
+  const corpHeld    = Math.max((corpusCollected ?? 0) - (corpusSpent ?? 0), 0)
+  const totalAssets = bankBalance + fdTotal + cashInHand
 
   const pendDues    = pendingDues ?? 0
+  // 'Corpus yet to collect' is a fundraising target not yet raised — not something currently
+  // owed. It's shown as a memo line only and excluded from Total Liabilities / Net Position,
+  // which should reflect real current assets vs. real current obligations.
   const corpBal     = corpusBalance ?? 0
-  const totalLiab   = pendDues + corpBal
+  const totalLiab   = pendDues + corpHeld
 
   const netPosition = totalAssets - totalLiab
 
@@ -2870,7 +3128,7 @@ function BalanceSheetTab() {
           asAtDate={`31 March ${selectedFyYear + 1}`}
           bankBalance={bankBalance}
           fdTotal={fdTotal}
-          corpusCollected={corpColl}
+          corpusHeld={corpHeld}
           cashInHand={cashInHand}
           totalAssets={totalAssets}
           pendingDues={pendDues}
@@ -2923,9 +3181,8 @@ function BalanceSheetTab() {
               <p className="text-xs text-blue-600">as at 31 March {selectedFyYear + 1}</p>
             </div>
             {[
-              { label: 'Bank balance',           amount: bankBalance, note: 'Cumulative CRs − DRs through this date (audit-derived)' },
+              { label: 'Bank balance',           amount: bankBalance, note: 'Cumulative CRs − DRs through this date (audit-derived) — includes corpus money on deposit' },
               { label: 'Fixed deposits (active)', amount: fdTotal,    note: 'Sum of active FD principals' },
-              { label: 'Corpus fund collected',   amount: corpColl,   note: 'All plans combined' },
               { label: 'Cash in hand',            amount: cashInHand, note: 'Petty cash balance held by caretaker' },
             ].map(({ label, amount, note }) => (
               <div key={label} className="flex justify-between items-start px-5 py-3 border-b hairline text-sm">
@@ -2949,7 +3206,7 @@ function BalanceSheetTab() {
             </div>
             {[
               { label: 'Pending maintenance dues', amount: pendDues, note: 'Flats with outstanding dues' },
-              { label: 'Corpus yet to collect',    amount: corpBal,  note: 'Target minus collected (all plans)' },
+              { label: 'Corpus fund (still held)', amount: corpHeld, note: 'Ring-fenced within Bank balance — lifetime collected minus lifetime spent, all plans' },
             ].map(({ label, amount, note }) => (
               <div key={label} className="flex justify-between items-start px-5 py-3 border-b hairline text-sm">
                 <div>
@@ -2962,6 +3219,15 @@ function BalanceSheetTab() {
             <div className="flex justify-between items-center px-5 py-3 font-bold text-sm border-t-2 hairline text-rose-700" style={{ background: 'var(--bad-bg)' }}>
               <span>Total Liabilities</span>
               <span>{formatINR(totalLiab)}</span>
+            </div>
+            <div className="flex justify-between items-start px-5 py-3 text-sm" style={{ background: 'var(--ink-50)' }}>
+              <div>
+                <p style={{ color: 'var(--ink-500)' }}>Memo: Corpus yet to collect</p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--ink-400)' }}>
+                  Target minus collected (all plans) — a future funding goal, not a current obligation. Not included in Total Liabilities.
+                </p>
+              </div>
+              <span className="ml-4 shrink-0" style={{ color: 'var(--ink-500)' }}>{formatINR(corpBal)}</span>
             </div>
           </div>
         </div>
@@ -2982,7 +3248,8 @@ function BalanceSheetTab() {
 
       <p className="text-xs text-center" style={{ color: 'var(--ink-400)' }}>
         Note: Bank balance = opening balance (set in Settings) + all bank CRs − all bank DRs for {selectedFy.label}.
-        Corpus collected is shown as an asset (ring-fenced fund).
+        Corpus fund (still held) is shown as a Liability — lifetime corpus collected minus lifetime corpus spend
+        (bank-paid or paid directly by a flat-owner) — since it's ring-fenced within Bank balance, not free cash.
       </p>
     </div>
   )
