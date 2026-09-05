@@ -261,24 +261,79 @@ function DashboardContent() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
+      {/* Mobile: compact row list — the hero-card layout below eats 3 screens of scroll on a phone */}
+      <div className="sm:hidden surface !p-0 overflow-hidden divide-rows">
+        <button onClick={() => navigate('/expenses?filter=maintenance')} className="w-full flex items-center gap-3 px-4 py-3 text-left active:bg-[var(--ink-50)]">
+          <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ background: 'var(--brand-100)', color: 'var(--brand-600)' }}>
+            <IndianRupee size={16} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] font-semibold" style={{ color: 'var(--ink-700)' }}>Net Available Cash</p>
+            <p className="text-[11px] truncate" style={{ color: 'var(--ink-400)' }}>
+              Maintenance + Corpus{contributionAvailable > 0 ? ' + Contributions' : ''}{pettyCashBalance > 0 ? ` · +${formatINR(pettyCashBalance)} cash` : ''}
+            </p>
+          </div>
+          <p className="text-[16px] font-extrabold tnum shrink-0" style={{ color: 'var(--brand-700)' }}>{formatINR(netAvailableCash)}</p>
+        </button>
+
+        <button onClick={() => navigate('/finance')} className="w-full flex items-center gap-3 px-4 py-3 text-left active:bg-[var(--ink-50)]">
+          <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ background: '#ede9fe', color: '#7c3aed' }}>
+            <TrendingUp size={16} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] font-semibold" style={{ color: 'var(--ink-700)' }}>Fixed Deposits</p>
+            <p className="text-[11px] truncate" style={{ color: 'var(--ink-400)' }}>
+              {deposits.length} active{nextFD ? ` · matures ${parseLocalDate(nextFD.maturity_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}` : ''}
+            </p>
+          </div>
+          <p className="text-[16px] font-extrabold tnum shrink-0" style={{ color: '#5b21b6' }}>{formatINR(fdTotal)}</p>
+        </button>
+
+        <button onClick={() => navigate('/dues')} className="w-full flex items-center gap-3 px-4 py-3 text-left active:bg-[var(--ink-50)]">
+          <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
+            style={pendingActionsCount > 0
+              ? { background: 'rgba(239,68,68,.15)', color: 'var(--bad)' }
+              : { background: 'rgba(34,197,94,.15)', color: 'var(--ok)' }}>
+            <AlertTriangle size={16} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] font-semibold" style={{ color: 'var(--ink-700)' }}>Pending Actions</p>
+            <p className="text-[11px] truncate" style={{ color: 'var(--ink-400)' }}>
+              {pendingActionsCount === 0
+                ? 'All clear'
+                : [
+                    overdueFlatCount > 0 && `${overdueFlatCount} overdue`,
+                    unreconciledCount > 0 && `${unreconciledCount} unreconciled`,
+                    fdMaturingSoon.length > 0 && `${fdMaturingSoon.length} FD maturing`,
+                  ].filter(Boolean).join(' · ')
+              }
+            </p>
+          </div>
+          <p className="text-[16px] font-extrabold tnum shrink-0" style={{ color: pendingActionsCount > 0 ? 'var(--bad)' : 'var(--ok)' }}>
+            {pendingActionsCount}
+          </p>
+        </button>
+      </div>
+
+      {/* sm+: original hero cards */}
+      <div className="hidden sm:grid sm:grid-cols-3 gap-3">
         <button
           onClick={() => navigate('/expenses?filter=maintenance')}
-          className="surface !p-3.5 sm:!p-4 text-left hover:shadow-md transition-shadow"
+          className="surface !p-4 text-left hover:shadow-md transition-shadow"
           style={{ background: 'var(--brand-50)', borderColor: 'var(--brand-200)' }}
         >
-          <div className="flex items-center gap-2 mb-1.5 sm:mb-2">
-            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-[9px] flex items-center justify-center shrink-0" style={{ background: 'var(--brand-100)', color: 'var(--brand-600)' }}>
-              <IndianRupee size={15} />
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-8 h-8 rounded-[9px] flex items-center justify-center shrink-0" style={{ background: 'var(--brand-100)', color: 'var(--brand-600)' }}>
+              <IndianRupee size={16} />
             </div>
-            <p className="text-[11.5px] sm:text-[12px] font-semibold uppercase tracking-wide" style={{ color: 'var(--brand-600)' }}>Net Available Cash</p>
+            <p className="text-[12px] font-semibold uppercase tracking-wide" style={{ color: 'var(--brand-600)' }}>Net Available Cash</p>
           </div>
-          <p className="text-[22px] sm:text-[28px] font-extrabold tnum leading-tight" style={{ color: 'var(--brand-700)' }}>{formatINR(netAvailableCash)}</p>
-          <p className="text-[11px] sm:text-[11.5px] mt-1" style={{ color: 'var(--brand-500)' }}>
+          <p className="text-[28px] font-extrabold tnum leading-tight" style={{ color: 'var(--brand-700)' }}>{formatINR(netAvailableCash)}</p>
+          <p className="text-[11.5px] mt-1" style={{ color: 'var(--brand-500)' }}>
             Maintenance + Corpus{contributionAvailable > 0 ? ' + Contributions' : ''} available
           </p>
           {pettyCashBalance > 0 && (
-            <p className="text-[10px] sm:text-[10.5px] mt-0.5" style={{ color: 'var(--brand-400)' }}>
+            <p className="text-[10.5px] mt-0.5" style={{ color: 'var(--brand-400)' }}>
               + {formatINR(pettyCashBalance)} cash in hand
             </p>
           )}
@@ -286,17 +341,17 @@ function DashboardContent() {
 
         <button
           onClick={() => navigate('/finance')}
-          className="surface !p-3.5 sm:!p-4 text-left hover:shadow-md transition-shadow"
+          className="surface !p-4 text-left hover:shadow-md transition-shadow"
           style={{ background: '#f5f3ff', borderColor: '#c4b5fd' }}
         >
-          <div className="flex items-center gap-2 mb-1.5 sm:mb-2">
-            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-[9px] flex items-center justify-center shrink-0" style={{ background: '#ede9fe', color: '#7c3aed' }}>
-              <TrendingUp size={15} />
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-8 h-8 rounded-[9px] flex items-center justify-center shrink-0" style={{ background: '#ede9fe', color: '#7c3aed' }}>
+              <TrendingUp size={16} />
             </div>
-            <p className="text-[11.5px] sm:text-[12px] font-semibold uppercase tracking-wide" style={{ color: '#7c3aed' }}>Fixed Deposits</p>
+            <p className="text-[12px] font-semibold uppercase tracking-wide" style={{ color: '#7c3aed' }}>Fixed Deposits</p>
           </div>
-          <p className="text-[22px] sm:text-[28px] font-extrabold tnum leading-tight" style={{ color: '#5b21b6' }}>{formatINR(fdTotal)}</p>
-          <p className="text-[11px] sm:text-[11.5px] mt-1" style={{ color: '#8b5cf6' }}>
+          <p className="text-[28px] font-extrabold tnum leading-tight" style={{ color: '#5b21b6' }}>{formatINR(fdTotal)}</p>
+          <p className="text-[11.5px] mt-1" style={{ color: '#8b5cf6' }}>
             {deposits.length} active FD{deposits.length !== 1 ? 's' : ''}
             {nextFD ? ` · next maturity ${parseLocalDate(nextFD.maturity_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}` : ''}
           </p>
@@ -304,28 +359,28 @@ function DashboardContent() {
 
         <button
           onClick={() => navigate('/dues')}
-          className="surface !p-3.5 sm:!p-4 text-left hover:shadow-md transition-shadow"
+          className="surface !p-4 text-left hover:shadow-md transition-shadow"
           style={pendingActionsCount > 0
             ? { background: 'var(--bad-bg)', borderColor: 'var(--bad-bd)' }
             : { background: 'var(--ok-bg)', borderColor: 'var(--ok-bd)' }}
         >
-          <div className="flex items-center gap-2 mb-1.5 sm:mb-2">
-            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-[9px] flex items-center justify-center shrink-0"
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-8 h-8 rounded-[9px] flex items-center justify-center shrink-0"
               style={pendingActionsCount > 0
                 ? { background: 'rgba(239,68,68,.15)', color: 'var(--bad)' }
                 : { background: 'rgba(34,197,94,.15)', color: 'var(--ok)' }}>
-              <AlertTriangle size={15} />
+              <AlertTriangle size={16} />
             </div>
-            <p className="text-[11.5px] sm:text-[12px] font-semibold uppercase tracking-wide"
+            <p className="text-[12px] font-semibold uppercase tracking-wide"
               style={{ color: pendingActionsCount > 0 ? 'var(--bad)' : 'var(--ok)' }}>
               Pending Actions
             </p>
           </div>
-          <p className="text-[22px] sm:text-[28px] font-extrabold tnum leading-tight"
+          <p className="text-[28px] font-extrabold tnum leading-tight"
             style={{ color: pendingActionsCount > 0 ? 'var(--bad)' : 'var(--ok)' }}>
             {pendingActionsCount}
           </p>
-          <p className="text-[11px] sm:text-[11.5px] mt-1" style={{ color: pendingActionsCount > 0 ? 'var(--bad)' : 'var(--ok)' }}>
+          <p className="text-[11.5px] mt-1" style={{ color: pendingActionsCount > 0 ? 'var(--bad)' : 'var(--ok)' }}>
             {pendingActionsCount === 0
               ? 'All clear'
               : [
@@ -347,14 +402,19 @@ function DashboardContent() {
               Lifetime
             </Badge>
           </div>
-          <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
-            <div className="rounded-xl p-2.5 sm:p-3" style={{ background: 'var(--brand-100)' }}>
-              <p className="text-[10.5px] sm:text-[11px] font-medium mb-0.5 sm:mb-1" style={{ color: 'var(--brand-600)' }}>Bank CRs</p>
-              <p className="text-[17px] sm:text-[20px] font-bold tnum" style={{ color: 'var(--brand-800)' }}>{formatINR(maintCollected)}</p>
+          <div className="sm:hidden flex items-center gap-1.5 text-[12px]" style={{ color: 'var(--brand-600)' }}>
+            <span>Bank CRs <span className="font-bold tnum" style={{ color: 'var(--brand-800)' }}>{formatINR(maintCollected)}</span></span>
+            <span style={{ color: 'var(--brand-300)' }}>·</span>
+            <span>Bank DRs <span className="font-bold tnum" style={{ color: 'var(--brand-800)' }}>{formatINR(maintSpent)}</span></span>
+          </div>
+          <div className="hidden sm:grid sm:grid-cols-2 gap-3">
+            <div className="rounded-xl p-3" style={{ background: 'var(--brand-100)' }}>
+              <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--brand-600)' }}>Bank CRs</p>
+              <p className="text-[20px] font-bold tnum" style={{ color: 'var(--brand-800)' }}>{formatINR(maintCollected)}</p>
             </div>
-            <div className="rounded-xl p-2.5 sm:p-3" style={{ background: 'var(--brand-100)' }}>
-              <p className="text-[10.5px] sm:text-[11px] font-medium mb-0.5 sm:mb-1" style={{ color: 'var(--brand-600)' }}>Bank DRs</p>
-              <p className="text-[17px] sm:text-[20px] font-bold tnum" style={{ color: 'var(--brand-800)' }}>{formatINR(maintSpent)}</p>
+            <div className="rounded-xl p-3" style={{ background: 'var(--brand-100)' }}>
+              <p className="text-[11px] font-medium mb-1" style={{ color: 'var(--brand-600)' }}>Bank DRs</p>
+              <p className="text-[20px] font-bold tnum" style={{ color: 'var(--brand-800)' }}>{formatINR(maintSpent)}</p>
             </div>
           </div>
           <div className="flex items-center justify-between rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3" style={{ background: 'white' }}>
@@ -390,14 +450,19 @@ function DashboardContent() {
               {activePlans.length} active plan{activePlans.length !== 1 ? 's' : ''}
             </Badge>
           </div>
-          <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
-            <div className="rounded-xl p-2.5 sm:p-3" style={{ background: '#ede9fe' }}>
-              <p className="text-[10.5px] sm:text-[11px] font-medium mb-0.5 sm:mb-1" style={{ color: '#7c3aed' }}>Collected</p>
-              <p className="text-[17px] sm:text-[20px] font-bold tnum" style={{ color: '#5b21b6' }}>{formatINR(corpusCollected)}</p>
+          <div className="sm:hidden flex items-center gap-1.5 text-[12px]" style={{ color: '#7c3aed' }}>
+            <span>Collected <span className="font-bold tnum" style={{ color: '#5b21b6' }}>{formatINR(corpusCollected)}</span></span>
+            <span style={{ color: '#c4b5fd' }}>·</span>
+            <span>Spent <span className="font-bold tnum" style={{ color: '#5b21b6' }}>{formatINR(corpusSpent)}</span></span>
+          </div>
+          <div className="hidden sm:grid sm:grid-cols-2 gap-3">
+            <div className="rounded-xl p-3" style={{ background: '#ede9fe' }}>
+              <p className="text-[11px] font-medium mb-1" style={{ color: '#7c3aed' }}>Collected</p>
+              <p className="text-[20px] font-bold tnum" style={{ color: '#5b21b6' }}>{formatINR(corpusCollected)}</p>
             </div>
-            <div className="rounded-xl p-2.5 sm:p-3" style={{ background: '#ede9fe' }}>
-              <p className="text-[10.5px] sm:text-[11px] font-medium mb-0.5 sm:mb-1" style={{ color: '#7c3aed' }}>Spent</p>
-              <p className="text-[17px] sm:text-[20px] font-bold tnum" style={{ color: '#5b21b6' }}>{formatINR(corpusSpent)}</p>
+            <div className="rounded-xl p-3" style={{ background: '#ede9fe' }}>
+              <p className="text-[11px] font-medium mb-1" style={{ color: '#7c3aed' }}>Spent</p>
+              <p className="text-[20px] font-bold tnum" style={{ color: '#5b21b6' }}>{formatINR(corpusSpent)}</p>
             </div>
           </div>
           <div className="flex items-center justify-between rounded-xl px-3.5 py-2.5 sm:px-4 sm:py-3" style={{ background: 'white' }}>
