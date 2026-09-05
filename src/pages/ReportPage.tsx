@@ -205,12 +205,12 @@ export default function ReportPage() {
       {/* Tab bar */}
       <div className="flex gap-1 rounded-xl p-1 overflow-x-auto" style={{ background: 'var(--ink-100)' }}>
         {([
+          { key: 'cashbook',      label: 'Cashbook' },
           { key: 'flat',        label: 'Flat statement' },
           { key: 'aging',       label: 'Dues aging' },
           { key: 'agm',         label: 'AGM reports' },
           { key: 'utility',       label: 'Utilities' },
           { key: 'expenditure',   label: 'Expenditure' },
-          { key: 'cashbook',      label: 'Cashbook' },
           { key: 'rp',            label: 'R&P Statement' },
           { key: 'balance-sheet', label: 'Balance Sheet' },
         ] as { key: ReportTab; label: string }[]).map(({ key, label }) => (
@@ -2065,6 +2065,24 @@ async function fetchContributionDisbursementItems(
   }))
 }
 
+// Money moved into a Fixed Deposit ('FD' category, see TransactionsPage's EXPENSE_CATS) is a
+// real DR transaction reducing the bank balance, but it's not an `expenses` row — Cashbook's
+// Payments side (drSplitup, sourced from `expenses`) would otherwise never show it, leaving an
+// unexplained gap between Total Payments and the bank-balance-derived Closing − Opening delta.
+async function fetchFdPlacements(start: string, end: string): Promise<DrCategoryGroup[]> {
+  const { data } = await supabase
+    .from('transactions')
+    .select('value_date, amount, description')
+    .eq('cr_dr', 'DR')
+    .eq('category', 'FD')
+    .neq('row_type', 'VOIDED')
+    .gte('value_date', start)
+    .lte('value_date', end)
+  const items = (data ?? []).map((t: any) => ({ date: t.value_date, label: t.description, qty: '', amount: t.amount ?? 0 }))
+  if (items.length === 0) return []
+  return [{ category: 'Fixed Deposit (placed)', total: items.reduce((s, it) => s + it.amount, 0), items }]
+}
+
 function useCashbookData(month: string) {
   const { start, end, prevEnd } = monthLabelToRange(month)
   // Dues are "as of" the selected month's last day, not today — see the duesRows query below.
@@ -2227,9 +2245,15 @@ function useCashbookData(month: string) {
     queryFn: () => fetchContributionDisbursementItems(start, end, driveNameById ?? new Map()),
   })
 
+  // Same gap as contribution disbursements — FD placements aren't `expenses` rows either.
+  const { data: fdPayments } = useQuery({
+    queryKey: ['cashbook-dr-fd', start, end],
+    queryFn: () => fetchFdPlacements(start, end),
+  })
+
   const drSplitup = useMemo(
-    () => [...(drExpenseGroups ?? []), ...(drContributionGroups ?? [])].sort((a, b) => b.total - a.total),
-    [drExpenseGroups, drContributionGroups],
+    () => [...(drExpenseGroups ?? []), ...(drContributionGroups ?? []), ...(fdPayments ?? [])].sort((a, b) => b.total - a.total),
+    [drExpenseGroups, drContributionGroups, fdPayments],
   )
 
   // Dues as they stood at the end of the selected month, not "as of today" — so a report

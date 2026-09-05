@@ -72,10 +72,10 @@ const OWNER_NAV = [
 const OWNER_BLOCKED = ['/transactions', '/dues', '/corpus', '/contributions', '/finance', '/expenses', '/flats', '/reports', '/activity', '/users']
 
 const BOTTOM_NAV = [
-  { to: '/dashboard',     icon: LayoutDashboard, label: 'Home' },
-  { to: '/dues',          icon: IndianRupee,     label: 'Dues' },
-  { to: '/expenses',      icon: Receipt,         label: 'Expenses' },
-  { to: '/announcements', icon: Megaphone,       label: 'Notices' },
+  { to: '/dashboard', icon: LayoutDashboard, label: 'Home' },
+  { to: '/dues',      icon: IndianRupee,     label: 'Dues' },
+  { to: '/expenses',  icon: Receipt,         label: 'Expenses' },
+  { to: '/reports',   icon: FileText,        label: 'Reports' },
 ]
 
 function Avatar({ name, size = 36 }: { name: string; size?: number }) {
