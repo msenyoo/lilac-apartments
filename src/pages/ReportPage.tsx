@@ -188,196 +188,23 @@ const BLOCK_COLORS: Record<string, string> = {
   'Common':  '#64748b',
 }
 
-type ReportTab = 'monthly' | 'flat' | 'aging' | 'agm' | 'utility' | 'expenditure' | 'cashbook' | 'rp' | 'balance-sheet'
+type ReportTab = 'flat' | 'aging' | 'agm' | 'utility' | 'expenditure' | 'cashbook' | 'rp' | 'balance-sheet'
 
 export default function ReportPage() {
-  const [tab, setTab] = useState<ReportTab>('monthly')
-  const [month, setMonth] = useState(currentFiscalLabel)
-  const [generatingPdf, setGeneratingPdf] = useState(false)
-  const [generatingCashbookPdf, setGeneratingCashbookPdf] = useState(false)
-  const cashbook = useCashbookData(month)
-
-  const { data: summary } = useQuery({
-    queryKey: ['monthly-summary', month],
-    queryFn: async () => {
-      const { data } = await supabase.from('v_monthly_summary').select('*').eq('fiscal_label', month).single()
-      return data
-    },
-  })
-
-  const { data: flatsData } = useQuery({
-    queryKey: ['report-flats', month],
-    queryFn: async () => {
-      const { data } = await supabase.from('v_monthly_collection').select('*').eq('fiscal_label', month).order('flat_code')
-      return data ?? []
-    },
-  })
-
-  const { data: expenseTxns } = useQuery({
-    queryKey: ['expense-txns', month],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('transactions')
-        .select('category, amount, description, drive_id')
-        .eq('fiscal_label', month)
-        .eq('cr_dr', 'DR')
-        .neq('row_type', 'VOIDED')
-      return data ?? []
-    },
-  })
-
-  const { data: driveNameById } = useContributionDriveNames()
-
-  // Raw category codes ('EB') and shared literals ('Contribution', 'Direct') read as jargon or
-  // hide who the money actually went to — expand them into readable, specific lines here.
-  const expenses = useMemo(() => {
-    const grouped = new Map<string, { total: number; count: number }>()
-    for (const t of (expenseTxns ?? []) as any[]) {
-      let label: string
-      if (t.category === 'Contribution') {
-        label = `Contribution: ${(t.drive_id && driveNameById?.get(t.drive_id)) || 'Other'}`
-      } else if (t.category === 'Direct') {
-        label = t.description || 'Direct payment'
-      } else {
-        label = labelForCategory(t.category)
-      }
-      const entry = grouped.get(label) ?? { total: 0, count: 0 }
-      entry.total += t.amount ?? 0
-      entry.count += 1
-      grouped.set(label, entry)
-    }
-    return Array.from(grouped.entries())
-      .map(([category, { total, count }]) => ({ category, total_amount: total, txn_count: count }))
-      .sort((a, b) => b.total_amount - a.total_amount)
-  }, [expenseTxns, driveNameById])
-
-  const { data: corpus } = useQuery({
-    queryKey: ['corpus'],
-    queryFn: async () => {
-      const { data } = await supabase.from('v_corpus_tracker').select('*')
-      return data ?? []
-    },
-  })
-
-  const { data: duesData } = useQuery({
-    queryKey: ['report-dues'],
-    queryFn: async () => {
-      const { data } = await supabase.from('v_dues_tracker').select('*').order('flat_code')
-      return (data ?? []) as DuesEntry[]
-    },
-  })
-
-  const totalCorpusCollected = corpus?.reduce((s, c) => s + (c.collected ?? 0), 0) ?? 0
-  const totalCorpusTarget    = corpus?.reduce((s, c) => s + (c.corpus_target ?? 0), 0) ?? 0
-  // A payment made in advance lands in an earlier month's collections, so
-  // "no money this month" ≠ "due" — only total outstanding decides that.
-  const outstandingFlats = (duesData ?? []).filter(d => d.total_outstanding > 0)
-  const duesByFlat = new Map((duesData ?? []).map(d => [d.flat_code, d]))
-  // Collections settle oldest month first, so zero outstanding today means
-  // every month up to today (incl. the selected one) is covered
-  const isCovered = (f: any) => f.collected <= 0 && (duesByFlat.get(f.flat_code)?.total_outstanding ?? 1) <= 0
-
-  async function handleMonthlyPdf() {
-    setGeneratingPdf(true)
-    try {
-      const [{ pdf }, { MonthlyReportDoc }] = await Promise.all([
-        import('@react-pdf/renderer'),
-        import('@/components/reports/AgmPdfDocs'),
-      ])
-      const generated = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-      const blob = await pdf(
-        <MonthlyReportDoc
-          month={month}
-          maintenanceCollected={summary?.maintenance_collected ?? 0}
-          flatsPaid={summary?.flats_paid ?? 0}
-          totalFlats={44}
-          totalExpenses={summary?.total_expenses ?? 0}
-          corpusCollected={totalCorpusCollected}
-          corpusTarget={totalCorpusTarget}
-          flats={(flatsData ?? []).map((f: any) => ({ flat_code: f.flat_code, maintenance_amt: f.maintenance_amt, collected: f.collected }))}
-          expenses={(expenses ?? []).map((e: any) => ({ category: e.category, total_amount: e.total_amount }))}
-          generated={generated}
-        />
-      ).toBlob()
-      triggerDownload(blob, `Lilac_Monthly_Report_${month}.pdf`)
-    } finally {
-      setGeneratingPdf(false)
-    }
-  }
-
-  async function handleCashbookPdf() {
-    setGeneratingCashbookPdf(true)
-    try {
-      const [{ pdf }, { CashbookDoc }] = await Promise.all([
-        import('@react-pdf/renderer'),
-        import('@/components/reports/AgmPdfDocs'),
-      ])
-      const generated = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-      const blob = await pdf(
-        <CashbookDoc
-          month={month}
-          openingBalance={cashbook.openingBalance}
-          closingBalance={cashbook.closingBalance}
-          pettyCashOpening={cashbook.pcOpening}
-          pettyCashClosing={cashbook.pcClosing}
-          receipts={cashbook.crSplitup}
-          payments={cashbook.drSplitup}
-          dues={[
-            { label: 'Current FY Pending',    amount: cashbook.pendingTotal,     flats: cashbook.pendingRows.length },
-            { label: 'Arrears (prior years)', amount: cashbook.arrearsTotal,     flats: cashbook.arrearsRows.length },
-            { label: 'Total Outstanding',     amount: cashbook.outstandingTotal, flats: cashbook.outstandingRows.length },
-          ]}
-          generated={generated}
-        />
-      ).toBlob()
-      triggerDownload(blob, `Lilac_Cashbook_${month}.pdf`)
-    } finally {
-      setGeneratingCashbookPdf(false)
-    }
-  }
-
-  function handleExcelExport() {
-    const wb = XLSX.utils.book_new()
-
-    const summaryRows = [
-      ['Lilac Apartment Association — Monthly Report', month],
-      [],
-      ['Metric', 'Value'],
-      ['Maintenance collected', summary?.maintenance_collected ?? 0],
-      ['Flats paid', `${summary?.flats_paid ?? 0} of 44`],
-      ['Total expenses', summary?.total_expenses ?? 0],
-      ['Corpus collected (total)', totalCorpusCollected],
-      ['Corpus target (total)', totalCorpusTarget],
-    ]
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryRows), 'Summary')
-
-    const collRows = [['Flat', 'Maintenance Rate', 'Collected (this month)', 'Total Outstanding', 'Status']]
-    ;(flatsData ?? []).forEach((f: any) => {
-      const status = f.collected > 0 ? 'Received' : isCovered(f) ? 'Paid in advance' : 'Due'
-      collRows.push([f.flat_code, f.maintenance_amt, f.collected, duesByFlat.get(f.flat_code)?.total_outstanding ?? 0, status])
-    })
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(collRows), 'Collections')
-
-    const expRows = [['Category', 'Amount', 'Transactions']]
-    ;(expenses ?? []).forEach((e: any) => expRows.push([e.category, e.total_amount, e.txn_count]))
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(expRows), 'Expenses')
-
-    XLSX.writeFile(wb, `Lilac_Report_${month}.xlsx`)
-  }
+  const [tab, setTab] = useState<ReportTab>('cashbook')
 
   return (
     <div className="flex flex-col gap-5 fade-in">
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-[24px] font-extrabold">Reports</h1>
-          <p className="text-[13.5px] mt-1" style={{ color: 'var(--ink-500)' }}>Monthly summaries, flat statements &amp; AGM reports</p>
+          <p className="text-[13.5px] mt-1" style={{ color: 'var(--ink-500)' }}>Cash book, flat statements &amp; AGM reports</p>
         </div>
       </div>
 
       {/* Tab bar */}
       <div className="flex gap-1 rounded-xl p-1 overflow-x-auto" style={{ background: 'var(--ink-100)' }}>
         {([
-          { key: 'monthly',     label: 'Monthly summary' },
           { key: 'flat',        label: 'Flat statement' },
           { key: 'aging',       label: 'Dues aging' },
           { key: 'agm',         label: 'AGM reports' },
@@ -404,113 +231,6 @@ export default function ReportPage() {
       {tab === 'cashbook'      && <CashbookTab />}
       {tab === 'rp'            && <RPStatementTab />}
       {tab === 'balance-sheet' && <BalanceSheetTab />}
-      {tab === 'monthly' && (
-        <div className="flex flex-col gap-4 max-w-3xl">
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <p className="text-sm" style={{ color: 'var(--ink-500)' }}>Summary for committee &amp; residents</p>
-            <select value={month} onChange={e => setMonth(e.target.value)}
-              className="ds-field">
-              {FISCAL_MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
-            </select>
-          </div>
-
-          {/* Action buttons */}
-          <div className="flex gap-2 flex-wrap">
-            <button onClick={handleExcelExport} className="btn-secondary flex items-center gap-2">
-              <Download size={15} /> Export Excel
-            </button>
-            <button onClick={handleMonthlyPdf} disabled={generatingPdf} className="btn-primary flex items-center gap-2 disabled:opacity-50">
-              {generatingPdf
-                ? <><Loader2 size={15} className="animate-spin" /> Generating…</>
-                : <><FileText size={15} /> Download PDF</>
-              }
-            </button>
-            <button onClick={handleCashbookPdf} disabled={generatingCashbookPdf || cashbook.isLoading}
-              className="btn-secondary flex items-center gap-2 disabled:opacity-50">
-              {generatingCashbookPdf
-                ? <><Loader2 size={15} className="animate-spin" /> Generating…</>
-                : <><FileText size={15} /> Download Cash Book PDF</>
-              }
-            </button>
-          </div>
-
-          {/* Summary card */}
-          <div className="surface !p-0 overflow-hidden">
-            <div className="px-5 py-4 text-white" style={{ background: 'linear-gradient(160deg, var(--brand-700), var(--brand-500))' }}>
-              <p className="text-[11px] opacity-80 uppercase tracking-widest font-medium">The Lilac Apartment Association</p>
-              <p className="font-bold text-lg mt-0.5">Monthly Statement — {month}</p>
-            </div>
-            <div className="divide-rows">
-              {[
-                { label: 'Maintenance collected', value: formatINR(summary?.maintenance_collected ?? 0) },
-                { label: 'Flats paid',            value: `${summary?.flats_paid ?? 0} of 44` },
-                { label: 'Total expenses',         value: formatINR(summary?.total_expenses ?? 0) },
-                { label: 'Corpus collected (total)', value: formatINR(totalCorpusCollected) },
-                { label: 'Corpus target (total)',  value: formatINR(totalCorpusTarget) },
-              ].map(({ label, value }) => (
-                <div key={label} className="flex justify-between px-5 py-3 text-sm">
-                  <span style={{ color: 'var(--ink-500)' }}>{label}</span>
-                  <span className="font-semibold" style={{ color: 'var(--ink-800)' }}>{value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Expenses */}
-          {expenses && expenses.length > 0 && (
-            <div className="surface !p-0">
-              <div className="px-5 py-3 border-b hairline">
-                <h3 className="font-semibold text-sm">Expenses — {month}</h3>
-              </div>
-              {expenses.map((e: any) => (
-                <div key={e.category} className="flex justify-between px-5 py-2.5 border-b hairline text-sm">
-                  <span style={{ color: 'var(--ink-600)' }}>{e.category}</span>
-                  <span className="font-semibold">{formatINR(e.total_amount)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Collections by flat */}
-          <div className="surface !p-0">
-            <div className="px-5 py-3 border-b hairline">
-              <h3 className="font-semibold text-sm">Collections by flat — {month}</h3>
-            </div>
-            <div className="divide-rows max-h-64 overflow-y-auto">
-              {(flatsData ?? []).map((f: any) => (
-                <div key={f.flat_code} className="flex justify-between items-center px-5 py-2 text-sm">
-                  <span className="font-medium w-12">{f.flat_code}</span>
-                  <span className="flex-1 px-2" style={{ color: 'var(--ink-500)' }}>{formatINR(f.maintenance_amt)}</span>
-                  {f.collected > 0 ? (
-                    <span className="font-semibold text-green-700">{formatINR(f.collected)}</span>
-                  ) : isCovered(f) ? (
-                    <span className="text-green-700 text-xs font-medium">Paid in advance ✓</span>
-                  ) : (
-                    <span className="text-slate-300">—</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Outstanding dues */}
-          {outstandingFlats.length > 0 && (
-            <div className="surface !p-0">
-              <div className="px-5 py-3 border-b hairline flex items-center gap-2">
-                <AlertTriangle size={15} className="text-amber-500" />
-                <h3 className="font-semibold text-sm">Outstanding dues — as of today</h3>
-              </div>
-              {outstandingFlats.map(f => (
-                <div key={f.flat_code} className="flex justify-between px-5 py-2.5 border-b hairline text-sm">
-                  <span className="font-medium">{f.flat_code}</span>
-                  <span className="text-red-600 font-semibold">{formatINR(f.total_outstanding)} due</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-        </div>
-      )}
     </div>
   )
 }
@@ -2345,11 +2065,10 @@ async function fetchContributionDisbursementItems(
   }))
 }
 
-// Shared by CashbookTab and the Monthly Statement tab (which offers the same month's Cash
-// Book as a download) — one place for the opening/closing balances, receipts, and payments.
 function useCashbookData(month: string) {
   const { start, end, prevEnd } = monthLabelToRange(month)
-  const asOfDate = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+  // Dues are "as of" the selected month's last day, not today — see the duesRows query below.
+  const asOfDate = new Date(end).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
 
   const { data: openingBalance = 0 } = useQuery({
     queryKey: ['cashbook-opening', prevEnd],
@@ -2513,12 +2232,13 @@ function useCashbookData(month: string) {
     [drExpenseGroups, drContributionGroups],
   )
 
+  // Dues as they stood at the end of the selected month, not "as of today" — so a report
+  // downloaded well after the month closes still reflects that month, not later payments.
   const { data: duesRows } = useQuery({
-    queryKey: ['cashbook-dues'],
+    queryKey: ['cashbook-dues', end],
     queryFn: async () => {
-      const { data } = await supabase
-        .from('v_dues_tracker')
-        .select('pending, arrears_maintenance, total_outstanding')
+      const { data, error } = await supabase.rpc('fn_dues_outstanding_as_of', { p_date: end })
+      if (error) throw error
       return (data ?? []) as { pending: number; arrears_maintenance: number; total_outstanding: number }[]
     },
   })
@@ -2614,6 +2334,7 @@ function CashbookTab() {
             { label: 'Arrears (prior years)', amount: arrearsTotal,     flats: arrearsRows.length },
             { label: 'Total Outstanding',     amount: outstandingTotal, flats: outstandingRows.length },
           ]}
+          duesAsOf={asOfDate}
           generated={generated}
         />
       ).toBlob()
