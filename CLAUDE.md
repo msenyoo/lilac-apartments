@@ -39,12 +39,15 @@ npm run build        # Production build
 npx tsc --noEmit     # TypeScript check (run before committing)
 
 # E2e tests (requires dev server running or reuseExistingServer=true)
-node scripts/seed-e2e-advance-payer.js       # Seed dev-DB fixtures (idempotent, re-run monthly)
-node scripts/seed-e2e-residents.js           # Seed synthetic residents fixtures (idempotent, re-run before suite)
 npx playwright test --project=setup          # Auth once → saves to e2e/.auth/user.json
 npx playwright test --project="Desktop Chrome"
 npx playwright test --project="Mobile Chrome"
 ```
+
+> There is no dev Supabase project anymore (it's been retired). `scripts/seed-e2e-advance-payer.js`
+> and `scripts/seed-e2e-residents.js` refuse to run unless `.env.dev.local` points at the old dev
+> project ref, so they no longer work as-is — e2e fixture seeding needs a rework (point at a fresh
+> project, or seed against prod in an isolated/throwaway way) before those tests can run again.
 
 ---
 
@@ -144,15 +147,15 @@ const { isAdmin, canWrite, canApprove } = useRoleCtx()
 
 ## Migrations — Apply Order
 
-All migrations through 041 are applied to production and dev.
+All migrations through 051 are applied to production. There is no dev Supabase project —
+prod (`aulttcsvxzcwyceezzpz`) is the only environment.
 
 `supabase db push --linked` may report old migrations (017+) as pending even though they're
 already live — the remote migration-history ledger has drifted from actual schema state, for
 reasons predating this instruction. Don't blindly `db push` a batch. For a single new
 migration, apply its SQL directly via the Management API instead:
-`POST https://api.supabase.com/v1/projects/<ref>/database/query` with `{"query": "<sql>"}`,
-Bearer `SUPABASE_ACCESS_TOKEN`. Apply to both prod (`aulttcsvxzcwyceezzpz`) and dev
-(`qcoezjcwrsqchulqgydm`).
+`POST https://api.supabase.com/v1/projects/aulttcsvxzcwyceezzpz/database/query` with
+`{"query": "<sql>"}`, Bearer `SUPABASE_ACCESS_TOKEN`.
 
 ---
 
@@ -201,6 +204,5 @@ etc.) the project can still pause. To check and fix:
 curl -s https://api.supabase.com/v1/projects -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN"
 
 # Resume it (polls until healthy, ~3 min)
-SUPABASE_ACCESS_TOKEN=sbp_... node scripts/resume-supabase.js         # prod
-SUPABASE_ACCESS_TOKEN=sbp_... node scripts/resume-supabase.js dev     # dev DB
+SUPABASE_ACCESS_TOKEN=sbp_... node scripts/resume-supabase.js         # prod (the only project)
 ```
