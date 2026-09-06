@@ -81,8 +81,8 @@ export const HELP_SECTIONS: HelpSection[] = [
       },
       {
         id: 'roles',
-        title: 'The Three Roles',
-        summary: 'Admin has full access, Committee can approve and read, Auditor is read-only.',
+        title: 'The Four Roles',
+        summary: 'Admin has full access, Committee and Auditor are read-only across committee pages, and Owner is a separate resident self-service login.',
         examples: [
           {
             label: 'Admin (Treasurer)',
@@ -90,7 +90,7 @@ export const HELP_SECTIONS: HelpSection[] = [
           },
           {
             label: 'Committee',
-            description: 'Read access to all pages. Can approve expenses. Cannot add, edit, or delete records. Ideal for committee members who review but don\'t manage data.',
+            description: 'Read access to all committee-facing pages. Cannot add, edit, or delete records anywhere in the app today — see Approval Status for a known gap between this and the intended design (Committee approving expenses).',
           },
           {
             label: 'Auditor',
@@ -106,7 +106,7 @@ export const HELP_SECTIONS: HelpSection[] = [
           'The sidebar shows only the actions available to your role — buttons that require a higher role are hidden or greyed out.',
           'The Owner role gets an entirely different, simplified navigation menu rather than a restricted version of the committee menu.',
         ],
-        relatedIds: ['users-roles', 'users-add'],
+        relatedIds: ['users-roles', 'users-add', 'expenses-approval'],
       },
       {
         id: 'navigation',
@@ -178,75 +178,81 @@ export const HELP_SECTIONS: HelpSection[] = [
     route: '/dashboard',
     items: [
       {
-        id: 'dashboard-kpis',
-        title: 'KPI Cards',
-        summary: 'Four cards at the top: total pending dues, corpus pool collected, this month\'s expenses, and unreconciled transactions.',
+        id: 'dashboard-cards',
+        title: 'Hero Cards',
+        summary: 'Three cards at the top: Net Available Cash, Fixed Deposits, and Pending Actions.',
         examples: [
           {
-            label: 'Total Pending Dues',
-            description: 'Sum of all outstanding maintenance dues across all flats for the current fiscal year. Click to go to the Dues page.',
+            label: 'Net Available Cash',
+            description: 'The combined balance of the Maintenance, Corpus, and Contributions funds (bank receipts minus payments for each, summed). Also shows petty cash in hand as a sub-line when it\'s above zero. Click through to Expenses filtered to Maintenance.',
           },
           {
-            label: 'Corpus Pool',
-            description: 'Total corpus fund collected across all active plans. Shows how much has been received vs the overall target.',
+            label: 'Fixed Deposits',
+            description: 'Total principal currently locked in active FDs, how many are active, and the next upcoming maturity date. Click through to the Fixed Deposits page.',
           },
           {
-            label: 'This Month Expenses',
-            description: 'Total expenses recorded with a date falling in the current calendar month.',
-          },
-          {
-            label: 'Unreconciled Transactions',
-            description: 'Number of bank statement debits that have been imported but not yet matched to an expense record.',
+            label: 'Pending Actions',
+            description: 'A single count combining overdue flats, unreconciled expenses, and FDs maturing within 30 days — with a sub-line breaking down each component (or "All clear" when there\'s nothing outstanding). Click through to the Dues page.',
           },
         ],
         tips: [
-          'KPI cards update in real time as data is added or changed.',
-          'Click a KPI card to navigate directly to the underlying page.',
+          'These replaced an older 4-KPI layout (pending dues / corpus pool / month\'s expenses / unreconciled count) — the same underlying figures are now folded into these cards and the fund panels below, not shown as four separate tiles.',
+          'Cards update in real time as data is added or changed.',
         ],
-        relatedIds: ['dashboard-alerts', 'dashboard-charts'],
+        relatedIds: ['dashboard-fund-panels', 'dashboard-lists', 'dashboard-chart'],
       },
       {
-        id: 'dashboard-alerts',
-        title: 'Alert Strip',
-        summary: 'Coloured banners at the top that flag items requiring your attention.',
+        id: 'dashboard-fund-panels',
+        title: 'Maintenance & Corpus Fund Panels',
+        summary: 'Two side-by-side panels breaking down each fund\'s bank activity and current position.',
         examples: [
           {
-            label: 'Transactions need tagging',
-            description: 'N credit (CR) rows in the bank statement have not been assigned to a flat and payment type. Click the alert to go directly to the Transactions Review tab.',
+            label: 'Maintenance Fund panel',
+            description: 'Bank credits received, bank debits paid out, the resulting available balance (shown as a deficit in red if maintenance has spent more than it has collected, i.e. effectively funded by corpus), and total outstanding dues across overdue flats. Links to Expenses (Maintenance filter) and Dues.',
           },
           {
-            label: 'Unreconciled expenses',
-            description: 'Expenses recorded as bank transfers that have not been matched to a corresponding bank debit row. Reconcile before month-end.',
-          },
-          {
-            label: 'Flats with overdue dues',
-            description: 'One or more flats have dues unpaid for 2+ months. Click to open the Dues page filtered to overdue flats.',
+            label: 'Corpus Fund panel',
+            description: 'Total collected and spent across all corpus plans, the available balance, and a list of each active plan with its % of target collected. Links to the Corpus page.',
           },
         ],
         tips: [
-          'Alerts disappear automatically once the underlying issue is resolved.',
-          'Aim to have zero alerts before the end of each month.',
+          'A negative Maintenance balance is a real signal — it means maintenance collections have fallen behind what\'s been spent, and the shortfall is effectively being covered by other funds.',
         ],
-        relatedIds: ['txn-review', 'expenses-reconcile', 'dues-statuses'],
+        relatedIds: ['dashboard-cards', 'dues-statuses', 'corpus-progress'],
       },
       {
-        id: 'dashboard-charts',
-        title: 'Charts',
-        summary: 'Monthly collection vs expenditure bar chart, and a dues status donut chart.',
+        id: 'dashboard-contributions-strip',
+        title: 'Active Contributions Strip',
+        summary: 'A strip listing any open contribution drives, with their collected/disbursed amounts and running balance — only shown when at least one drive is open.',
+        tips: [
+          'This section disappears entirely once all contribution drives are closed — no open drives means no strip, not an empty one.',
+        ],
+        relatedIds: ['contributions-what', 'contributions-tagging'],
+      },
+      {
+        id: 'dashboard-chart',
+        title: '12-Month Cash Flow Chart',
+        summary: 'One combined chart: stacked bars for Maintenance + Corpus collections each month, with a line overlay for total expenses — not a separate bar chart and donut chart.',
+        tips: [
+          'The fiscal year runs April–March. The chart always shows the last 12 fiscal months of data.',
+          'A healthy month has the collection bars taller than the expense line sitting on top of them.',
+        ],
+      },
+      {
+        id: 'dashboard-lists',
+        title: 'Aging Receivables & Corpus Plans Lists',
+        summary: 'Two lists below the chart: the top flats by amount overdue, and every corpus plan with its collection progress.',
         examples: [
           {
-            label: 'Monthly Bar Chart',
-            description: 'Plots maintenance collections (green), corpus collections (violet), and expenses (red/amber) side by side for each of the last 12 fiscal months. Hover a bar for the exact amount.',
+            label: 'Aging Receivables',
+            description: 'The top 8 flats by outstanding amount, each with block, amount due, and a status badge. A "+N more" link opens the full Dues page when there are more than 8.',
           },
           {
-            label: 'Dues Status Donut',
-            description: 'Shows the proportion of flats in Clear, Partial, and Due status for the current fiscal year. Hover a segment for the count and percentage.',
+            label: 'Corpus Plans',
+            description: 'Every corpus plan with a progress bar (% of target collected), target/collected figures, and available balance. Click a plan to open it directly on the Corpus page.',
           },
         ],
-        tips: [
-          'The fiscal year runs April–March. The bar chart always shows the last 12 fiscal months.',
-          'A healthy month has green bars (collections) taller than red bars (expenses).',
-        ],
+        relatedIds: ['dues-statuses', 'corpus-progress'],
       },
     ],
   },
@@ -258,104 +264,142 @@ export const HELP_SECTIONS: HelpSection[] = [
     items: [
       {
         id: 'dues-statuses',
-        title: 'Dues Status Badges',
-        summary: 'Each flat shows Due, Partial, or Clear based on how much has been collected vs. what is owed.',
+        title: 'Dues Tabs & Status Badges',
+        summary: 'Six tabs — Due, 30d+, 60d+, 90d+, Partial, and Clear — filter the same flat list by how overdue they are.',
         examples: [
           {
-            label: 'Due (red)',
-            description: 'Zero payments received. Example: flat owes ₹27,000 for the year, ₹0 collected.',
+            label: 'Due',
+            description: 'Every flat with any amount currently outstanding (pending + arrears), regardless of how much.',
           },
           {
-            label: 'Partial (amber)',
-            description: 'Some payments received but not the full amount owed. Example: ₹27,000 owed, ₹10,000 collected.',
+            label: '30d+ / 60d+ / 90d+',
+            description: 'Overdue-severity buckets — a flat lands here when its pending amount exceeds 1, 2, or 3 months\' worth of its own maintenance rate. This is a rate-multiple check, not an actual day-count since the last payment.',
+          },
+          {
+            label: 'Partial',
+            description: 'Something is outstanding, but at least some payment has been made this fiscal year.',
           },
           {
             label: 'Clear (green)',
-            description: 'All dues for the fiscal year are fully paid. Example: ₹27,000 owed, ₹27,000 collected.',
+            description: 'Nothing outstanding — pending and arrears both fully settled (a flat can go negative/into credit and still show Clear).',
           },
         ],
         tips: [
-          'A flat can be "Clear" mid-year if they paid in advance for remaining months.',
-          'The status resets at the start of each new fiscal year (April 1).',
+          'Four summary cards at the top (Total outstanding, Overdue 1 mo+, Partial, Clear) are clickable shortcuts to the matching tab.',
+          'There is no fiscal-year dropdown on this page itself — the tracked range comes from Settings → General\'s "Carry-forward from" setting, which decides how far back unpaid dues are still being followed.',
+          'Use the "Open any flat…" dropdown above the grid to jump straight to a specific flat\'s detail panel without scrolling or filtering.',
         ],
-        relatedIds: ['dues-calc', 'dues-panel'],
+        relatedIds: ['dues-calc', 'dues-panel', 'settings-general'],
       },
       {
         id: 'dues-calc',
         title: 'How Dues Are Calculated',
-        summary: 'Rate × months elapsed in the fiscal year, plus any carry-forward from the previous FY.',
+        summary: 'Rate × months elapsed in the tracked range, plus arrears carried forward, minus what\'s been collected and any advance credit.',
         steps: [
           {
             text: 'The system looks up the maintenance rate history for each flat.',
             detail: 'If the rate changed mid-year, each month uses the rate that was active on the 1st of that month.',
           },
           {
-            text: 'It sums up the expected amount for each month from April to the current month.',
-            detail: 'Example: ₹1,800/mo × 3 months (Apr–Jun) = ₹5,400 expected so far.',
+            text: 'It sums up the expected amount for each month from the tracked start date to the current month.',
           },
           {
-            text: 'Any unpaid balance carried forward from the previous fiscal year is added on top.',
+            text: 'Any arrears carried forward from earlier (see Arrears & Advance Credits) are added on top; any advance credit is subtracted.',
           },
           {
-            text: 'Total collected (tagged bank CRs) is subtracted to get the pending amount.',
+            text: 'Total collected (tagged bank CRs) is subtracted to arrive at the pending amount, and pending + arrears together give Total Outstanding.',
           },
         ],
         tips: [
-          'Dues are calculated on demand — the system always uses live data from the transactions and rate history tables.',
-          'Annual dues (full year) are shown as a reference even mid-year.',
+          'Dues are calculated on demand — the system always uses live data from the transactions, rate history, and arrears tables, never a stored snapshot.',
         ],
-        relatedIds: ['flats-rate-change', 'dues-statuses'],
+        relatedIds: ['flats-rate-change', 'dues-statuses', 'dues-arrears'],
       },
       {
         id: 'dues-panel',
         title: 'Flat Drill-Down Panel',
-        summary: 'Click any flat row to open a detail panel with month-by-month payments, rate history, and pending amount.',
+        summary: 'Click any flat row to open a detail panel with rate, arrears, collected/pending figures, and full payment history.',
         steps: [
-          { text: 'Click any flat row in the Dues table to open the detail side panel.' },
-          { text: 'The top section shows the current rate, annual target, total collected, and pending amount.' },
+          { text: 'Click any flat row in the Dues table to open the detail panel.' },
+          { text: 'The top section shows: Rate/mo, Previous arrears (if any), Annual due, Collected, Pending, Advance credit (if any), and Total outstanding — with a progress bar underneath.' },
           {
-            text: 'The payment history table lists every tagged bank credit with its date and amount.',
-            detail: 'Payments are shown in chronological order. Each payment shows the transaction reference.',
+            text: 'The payment history list on the right shows every tagged bank credit for this flat, most recent first, each with a downloadable receipt.',
           },
-          { text: 'The rate history section shows every rate that applied during the fiscal year with the date range.' },
         ],
         tips: [
-          'Use the WhatsApp reminder button inside the panel to quickly send a payment reminder.',
+          'Use the WhatsApp reminder button inside the panel to send a payment reminder to this one flat — see WhatsApp Reminder below.',
+          'Admins see a "+ Arrears" button next to the flat name here to record a carried-forward due or an advance payment — see Arrears & Advance Credits.',
         ],
-        relatedIds: ['dues-whatsapp', 'flats-rate-history'],
+        relatedIds: ['dues-whatsapp', 'dues-arrears'],
+      },
+      {
+        id: 'dues-arrears',
+        title: 'Arrears & Advance Credits',
+        summary: 'Admin-only tool to record a carried-forward due or an advance payment against a flat, tracked separately from the current fiscal year\'s rate-based dues.',
+        writeRoles: ['admin'],
+        steps: [
+          { text: 'Open a flat\'s detail panel and click "+ Arrears" next to its name (Admin only).' },
+          { text: 'Choose the type: a carried-forward due (maintenance arrears) or an advance credit.' },
+          { text: 'Enter a label for the period it relates to (e.g. "FY 2024-25"), the amount, and optional notes, then save.' },
+          { text: 'Existing entries are listed under "Carried forward dues" / "Advance paid" — edit or delete any of them from the same panel.' },
+        ],
+        examples: [
+          {
+            label: 'Oldest-first settlement',
+            description: 'When a flat pays, collections are applied against arrears entries in the order they were created, oldest first. A fully settled entry shows with a strikethrough; a partially settled one shows the remaining balance against its original amount.',
+          },
+        ],
+        tips: [
+          'Arrears entries aren\'t only created manually — advancing the tracked fiscal year in Settings → General automatically converts every flat\'s then-outstanding pending amount into a new arrears entry, so nothing is lost when the tracked range rolls forward.',
+        ],
+        relatedIds: ['dues-calc', 'settings-advance-fy'],
       },
       {
         id: 'dues-whatsapp',
-        title: 'WhatsApp Reminder',
-        summary: 'Copy a pre-filled payment reminder message for a flat owner, including UPI ID and pending amount.',
+        title: 'WhatsApp Reminder (Single Flat)',
+        summary: 'Send (or copy) a pre-filled payment reminder for one flat, including UPI ID, bank details, and the exact pending amount.',
         steps: [
           { text: 'Click on a flat row in the Dues table to open the detail panel.' },
-          { text: 'Click "Copy WhatsApp reminder" at the top of the panel.' },
-          { text: 'Open WhatsApp on your phone and paste into the flat owner\'s chat.' },
+          { text: 'If the flat has a resident with a phone number on file, a "Send" button opens WhatsApp directly with the message pre-filled.' },
+          { text: 'If no phone number is on file, a "Copy" button is shown instead — copy the text and paste it into WhatsApp yourself.' },
         ],
         examples: [
           {
             label: 'What the message contains',
-            description: 'Dear [Owner Name], your maintenance dues for [Flat No] for FY [year] are pending: ₹[amount]. Please pay via UPI to [UPI ID] / Bank transfer to [account details]. Thank you.',
+            description: 'The flat\'s outstanding maintenance dues for the fiscal year, a breakdown of prior arrears and current-FY pending where relevant, and the society\'s UPI ID / bank details from Settings → General.',
           },
         ],
         tips: [
-          'The UPI ID in the reminder comes from Settings → General. Make sure it is up to date.',
-          'Owner phone numbers are stored in the Flats → Residents tab.',
+          'The UPI ID and bank details come from Settings → General — keep them up to date.',
+          'Resident phone numbers are managed on the Flats & Residents page.',
         ],
-        relatedIds: ['settings-general', 'flats-residents'],
+        relatedIds: ['settings-general', 'flats-residents', 'dues-broadcast'],
+      },
+      {
+        id: 'dues-broadcast',
+        title: 'Broadcast Reminder (All Overdue Flats)',
+        summary: 'A single combined message listing every flat with an outstanding balance, meant for posting to the residents\' WhatsApp group — not a per-contact bulk send.',
+        steps: [
+          { text: 'Click "Broadcast" at the top of the Dues page.' },
+          { text: 'The message text (every overdue flat with its amount, plus a grand total and count) is copied to your clipboard and WhatsApp opens with it pre-filled.' },
+          { text: 'Paste/send it into the residents\' WhatsApp group, or wherever the committee shares collective updates.' },
+        ],
+        warnings: [
+          'This does not message each flat individually — it\'s one shared message for a group. Use the per-flat "Send" button in a flat\'s detail panel to message a specific resident directly.',
+        ],
+        relatedIds: ['dues-whatsapp'],
       },
       {
         id: 'dues-export',
         title: 'Export Dues List',
-        summary: 'Download the full dues list for the selected fiscal year as an Excel file.',
+        summary: 'Download the dues list as an Excel file, respecting whichever tab and filters are currently applied.',
         steps: [
-          { text: 'Select the fiscal year from the dropdown at the top of the Dues page.' },
-          { text: 'Click the Export button (spreadsheet icon) in the top-right toolbar.' },
-          { text: 'An Excel file downloads with all flats, their annual target, collected amount, and pending balance.' },
+          { text: 'Switch to the tab you want (Due, 30d+, 60d+, 90d+, Partial, or Clear) and apply any column filters.' },
+          { text: 'Click the Export button in the top-right toolbar.' },
+          { text: 'An Excel file downloads with flat, block, BHK, rate, dues, collected, pending, arrears, total outstanding, and status for the visible rows.' },
         ],
         tips: [
-          'The export respects the current filter — if you have searched or filtered by block, only those rows are exported.',
+          'The export respects the current tab and any column filters/sort — only the rows currently visible in the grid are exported.',
         ],
       },
     ],
@@ -367,20 +411,41 @@ export const HELP_SECTIONS: HelpSection[] = [
     route: '/transactions',
     items: [
       {
+        id: 'txn-tabs',
+        title: 'Upload / Review / All Transactions',
+        summary: 'Three tabs, not more — there\'s no separate "Tagged" or "Voided" tab. Voided rows just appear greyed-out inside All Transactions.',
+        examples: [
+          {
+            label: 'Upload',
+            description: 'Admin-only. Where bank statement files are imported (see Upload Bank Statement).',
+          },
+          {
+            label: 'Review',
+            description: 'Untagged credits waiting to be assigned to a flat. Its tab label shows a live count, and the same count drives the red badge on the "Bank Statement" sidebar item.',
+          },
+          {
+            label: 'All Transactions',
+            description: 'Every transaction, tagged or not, with column filters, a date-range picker, export, and — for Admin — click-to-edit on any row.',
+          },
+        ],
+        tips: [
+          'Only Admin can write here — Committee and Auditor get read-only access (no Upload tab, no tagging, no click-to-edit; Review shows as a plain read-only list).',
+        ],
+        relatedIds: ['txn-upload', 'txn-review', 'txn-edit'],
+      },
+      {
         id: 'txn-upload',
         title: 'Upload Bank Statement',
-        summary: 'Import a bank statement CSV or PSV file. The app auto-detects column layout and validates rows before importing.',
+        summary: 'Import a bank statement CSV or PSV file. The app auto-detects column layout and shows an editable preview before committing.',
         roles: ['admin'],
         writeRoles: ['admin'],
         steps: [
-          { text: 'Click "Import Statement" on the Transactions page.' },
+          { text: 'Go to the Upload tab (Admin only) and drop or select your bank statement file (.csv, .psv, or .txt).' },
           {
-            text: 'Select your bank statement file (CSV or PSV — pipe-separated).',
-            detail: 'Required columns: Date, Description/Narration, Credit amount, Debit amount. Column headers are auto-detected.',
+            text: 'The app auto-detects the format and columns and shows an editable preview grid — rows it\'s unsure about are highlighted; fix the Flat or Category cell directly in the preview if needed.',
           },
-          { text: 'The app shows a preview of the detected rows. Verify the column mapping looks correct.' },
-          { text: 'Click "Import" to load all valid rows. Duplicate rows (same date + amount + narration) are skipped automatically.' },
-          { text: 'Imported credits (CR) appear in the Review tab awaiting tagging.' },
+          { text: 'Click Import to commit all valid rows.' },
+          { text: 'If any rows still need review after import, you\'re taken straight to the Review tab; otherwise you stay on an "Import complete" summary.' },
         ],
         diagram: {
           nodes: [
@@ -399,18 +464,21 @@ export const HELP_SECTIONS: HelpSection[] = [
         },
         tips: [
           'Both comma-separated (CSV) and pipe-separated (PSV) formats are supported and auto-detected.',
-          'Re-importing the same file is safe — duplicates are detected by date + narration + amount.',
+          'A collapsed "Show import history" link on this tab shows recent imports without leaving the page — the same information also appears in Settings → Import History.',
         ],
-        relatedIds: ['txn-review', 'faq-upload-format'],
+        warnings: [
+          'Duplicate detection relies on a transaction ID/reference number column in the file. A generic bank export with no such column (just date/description/amount) can\'t be checked for duplicates at all — re-importing it would add every row again. Prefer a statement format that includes a reference or cheque number column when your bank offers one.',
+        ],
+        relatedIds: ['txn-review', 'faq-upload-format', 'settings-import-history'],
       },
       {
         id: 'txn-review',
-        title: 'Review Untagged Transactions',
+        title: 'Reviewing Untagged Transactions',
         summary: 'The Review tab shows untagged credit rows. Assign each to a flat and payment type.',
         writeRoles: ['admin'],
         steps: [
           { text: 'Go to Transactions → Review tab. All untagged credits (CRs) appear here.' },
-          { text: 'Click a row to open the tagging panel on the right.' },
+          { text: 'Click a row to open the tagging panel.' },
           {
             text: 'Select the Flat from the dropdown.',
             detail: 'Start typing the flat number or owner name to filter the list.',
@@ -422,39 +490,56 @@ export const HELP_SECTIONS: HelpSection[] = [
             text: 'If the type is Corpus, choose which corpus plan the payment belongs to.',
             detail: 'This only appears as a choice when 2 or more corpus plans are Active or Draft at the same time. With a single plan, it\'s assigned automatically.',
           },
-          { text: 'Click "Tag" to save. The row moves to the Tagged tab and updates the flat\'s dues/corpus records.' },
+          { text: 'Click "Tag" to save. The row moves out of Review and updates the flat\'s dues/corpus records.' },
         ],
         tips: [
           'If a transfer covers multiple flats (combined payment), use the Split function instead.',
           'Tagging a credit as Maintenance automatically credits that flat\'s dues for the fiscal year.',
+          'Optionally save the sender\'s UPI ID/token against the resident while tagging, so future imports from the same sender auto-tag without landing in Review again.',
         ],
-        relatedIds: ['txn-split', 'txn-void', 'corpus-statuses'],
+        relatedIds: ['txn-split', 'txn-bulk-record', 'txn-void', 'corpus-statuses'],
+      },
+      {
+        id: 'txn-bulk-record',
+        title: 'Bulk Record (Maintenance Payments)',
+        summary: 'A separate admin-only tool on the Review tab for quickly tagging a batch of unmatched maintenance credits at once, without opening each one individually.',
+        roles: ['admin'],
+        writeRoles: ['admin'],
+        steps: [
+          { text: 'Click "Bulk Record" on the Review tab.' },
+          { text: 'For each listed credit, pick the flat it belongs to (and adjust the fiscal month if the auto-guess is wrong).' },
+          { text: 'Click "Record N payments" to tag them all as Maintenance in one go.' },
+        ],
+        tips: [
+          'This is maintenance-only — it doesn\'t handle Corpus or Contribution tagging, and it\'s a different tool from the per-row Split/Tag flow.',
+        ],
+        relatedIds: ['txn-review'],
       },
       {
         id: 'txn-edit',
         title: 'Edit a Transaction',
-        summary: 'Change the flat assignment or payment type of an already-tagged transaction.',
+        summary: 'Change the flat assignment or payment type of an already-tagged transaction, from the All Transactions tab.',
         writeRoles: ['admin'],
         steps: [
-          { text: 'Go to the Tagged tab and find the transaction you need to correct.' },
-          { text: 'Click the Edit (pencil) icon on the row.' },
-          { text: 'Change the flat, payment type, or corpus plan as needed.' },
+          { text: 'Go to All Transactions and click the row you need to correct.' },
+          { text: 'This opens the same detail/edit panel used for tagging — change the flat, payment type, or corpus plan as needed.' },
           { text: 'Click Save. The change is recorded in the audit log with the previous and new values.' },
         ],
         warnings: [
           'Editing a tagged transaction affects the flat\'s dues balance immediately. Double-check before saving.',
+          'A row created by a Direct (owner-paid) expense can\'t be edited here — it\'s managed from that expense on the Expenses page instead.',
         ],
         relatedIds: ['txn-void', 'activity-what'],
       },
       {
         id: 'txn-void',
         title: 'Void a Transaction',
-        summary: 'Void marks a transaction as invalid without deleting it. The audit trail is fully preserved.',
+        summary: 'Void marks a transaction as invalid without deleting it, from inside the same edit panel. The audit trail is fully preserved.',
+        roles: ['admin'],
         writeRoles: ['admin'],
         steps: [
-          { text: 'Find the transaction in the Tagged or All tab.' },
-          { text: 'Click the Void button (or the actions menu → Void).' },
-          { text: 'Confirm the void. The row is marked VOIDED and excluded from all calculations.' },
+          { text: 'Open the transaction from All Transactions (click its row).' },
+          { text: 'Click Void, then confirm.' },
         ],
         examples: [
           {
@@ -462,11 +547,14 @@ export const HELP_SECTIONS: HelpSection[] = [
             description: 'Wrong import file imported by mistake, test rows added during setup, or a duplicate entry that slipped past deduplication.',
           },
         ],
-        warnings: [
-          'Void does NOT delete the row. The row remains in the database with a VOIDED status for audit purposes.',
-          'A voided transaction cannot be un-voided. Create a fresh import if needed.',
+        tips: [
+          'Voided rows show at reduced opacity with strikethrough text in All Transactions, and a VOIDED badge — they\'re never deleted from the database.',
         ],
-        relatedIds: ['faq-void-vs-delete', 'txn-edit'],
+        warnings: [
+          'Void does NOT delete the row, and there\'s no "un-void" button for a plain void — it\'s one-way. The one exception is a row created by a Split: an "Undo split" action can reverse that specific split back to its original un-split transaction.',
+          'A row created by a Direct (owner-paid) expense can\'t be voided here — it\'s managed from that expense on the Expenses page.',
+        ],
+        relatedIds: ['faq-void-vs-delete', 'txn-edit', 'txn-split'],
       },
       {
         id: 'txn-split',
@@ -477,28 +565,29 @@ export const HELP_SECTIONS: HelpSection[] = [
           { text: 'In the Review tab, click on the combined credit row.' },
           { text: 'Click "Split" instead of "Tag".' },
           {
-            text: 'Add a split entry for each flat: select the flat, payment type, and amount.',
+            text: 'Add a split entry for each flat: select the flat, payment type, and amount (and a corpus plan too, if that row is Corpus and more than one plan is in play).',
             detail: 'Example: ₹6,000 CR → Flat A1 ₹3,000 (Maintenance) + Flat B2 ₹3,000 (Maintenance).',
           },
           { text: 'The total of all splits must equal the original transaction amount. A running balance shows how much remains to be allocated.' },
-          { text: 'Click "Save Split" to confirm. Each flat\'s dues record is updated accordingly.' },
+          { text: 'Save to confirm. Each flat\'s dues/corpus record is updated accordingly.' },
         ],
         tips: [
           'Splits are common when a family pays dues for multiple flats in one transfer.',
+          'A split can be reversed with "Undo split" (from the original transaction\'s row in All Transactions) if it needs redoing — this is the one case where a void-like action is reversible.',
         ],
         relatedIds: ['txn-review', 'txn-edit'],
       },
       {
         id: 'txn-export',
         title: 'Export Transactions',
-        summary: 'Download filtered transactions to an Excel file for external reporting or reconciliation.',
+        summary: 'Download the currently filtered/sorted All Transactions view to an Excel file.',
         steps: [
-          { text: 'Apply any filters you need: date range, status (Tagged/Untagged/Voided), type (CR/DR).' },
+          { text: 'On the All Transactions tab, pick a date range mode (current fiscal year, a custom range, or all-time) and apply any column filters/sort you want.' },
           { text: 'Click the Export button in the toolbar.' },
-          { text: 'An Excel file downloads with all visible rows and their current tagging details.' },
+          { text: 'An Excel file downloads with exactly the rows currently visible, in their current sort order.' },
         ],
         tips: [
-          'Export works on any tab — Tagged, Review, or All.',
+          '"All time" is capped at 2,000 rows — for a full historical export beyond that, narrow the date range and export in batches.',
         ],
       },
     ],
@@ -516,94 +605,161 @@ export const HELP_SECTIONS: HelpSection[] = [
         examples: [
           {
             label: 'Corpus vs Maintenance',
-            description: 'Maintenance is ₹1,800/month recurring to cover day-to-day running costs (security, sweeping, EB, water). Corpus is a separate one-time collection for a specific capital project, spread over installments.',
+            description: 'Maintenance is a recurring monthly amount covering day-to-day running costs (security, sweeping, EB, water). Corpus is a separate one-time collection for a specific capital project, spread over installments.',
           },
           {
             label: 'Typical corpus plans',
-            description: 'Exterior painting plan (₹5,000/flat, 2 installments), Solar panel installation (₹15,000/flat, 3 installments), Electrical rewiring (₹8,000/flat).',
+            description: 'Exterior painting plan (2 installments), Solar panel installation (3 installments), Electrical rewiring (1 installment).',
           },
         ],
         tips: [
-          'Each corpus plan has its own target per flat. Different flat types (2BHK vs 3BHK) can have different targets.',
+          'A plan sets one flat-rate default target for every flat (based on its installment amounts), which an Admin can then override per flat when creating the plan — it\'s not automatically calculated from BHK type, sqft, or UDS.',
           'Corpus collections are tracked separately from maintenance and have their own reports.',
         ],
-        relatedIds: ['faq-corpus-vs-maintenance', 'corpus-statuses'],
+        relatedIds: ['faq-corpus-vs-maintenance', 'corpus-statuses', 'corpus-create'],
+      },
+      {
+        id: 'corpus-create',
+        title: 'Creating a Corpus Plan',
+        summary: 'A 4-step wizard: plan details, installments, per-flat amounts, and review — ending in Save as Draft or Create & Activate.',
+        writeRoles: ['admin'],
+        steps: [
+          { text: 'Click "New plan" on the Corpus page.' },
+          { text: 'Step 1 — Plan details: name, optional description, and a Start/End fiscal year picked from a fixed range.' },
+          { text: 'Step 2 — Installments: add as many installment rows as you like, each with a label, optional due date, and amount. Their sum becomes the default per-flat target.' },
+          {
+            text: 'Step 3 — Per-flat amounts: every flat starts with that same default target — override any flat\'s target or pre-payment (money collected before this plan existed) individually if needed.',
+            detail: 'If any flats have an unpaid balance carried over from a previous closed plan, a checkbox here (checked by default) offers to carry it forward into this plan\'s targets.',
+          },
+          { text: 'Step 4 — Review the totals, then click "Save as Draft" or "Create & Activate".' },
+        ],
+        tips: [
+          'Draft and Active behave identically for collecting payments — the only real difference is which action button appears next (Activate vs Close) and a green vs amber dot in the plan selector. See Corpus Plan Statuses.',
+          'There\'s no bulk "set by BHK type" tool — the wizard applies one flat-rate default and expects manual overrides for exceptions.',
+        ],
+        relatedIds: ['corpus-statuses', 'corpus-what'],
       },
       {
         id: 'corpus-statuses',
         title: 'Corpus Plan Statuses',
-        summary: 'Plans move through Draft → Active → Completed or Cancelled.',
+        summary: 'Draft and Active both actively collect payments; Active can be Closed to Completed. There is no Cancel action in the app today.',
         examples: [
           {
             label: 'Draft',
-            description: 'Plan created and per-flat targets configured, but collection hasn\'t been formally announced yet. Bank credits CAN still be tagged to a Draft plan — it counts toward corpus tracking exactly like an Active plan — so pre-payments made before launch aren\'t lost.',
+            description: 'Plan created and per-flat targets configured, but not yet formally activated. Bank credits CAN still be tagged to a Draft plan — it counts toward corpus tracking exactly like an Active plan — so pre-payments made before launch aren\'t lost. The only action available on a Draft plan is "Activate".',
           },
           {
             label: 'Active',
-            description: 'Collection is formally in progress. Bank credits can be tagged as corpus contributions against this plan.',
+            description: 'The plan has been formally activated. The only action available is "Close plan", which moves it to Completed.',
           },
           {
             label: 'Completed',
-            description: 'All flats have paid in full (or the plan is manually marked complete). No further collections expected.',
+            description: 'Closed by an Admin. Any flat still owing a balance at close time gets that balance recorded as an unpaid amount, automatically offered as carry-forward the next time a plan is created. A completed plan drops out of live tracking — you can still see its name in the "Closed plans" list, but not drill into its flat-by-flat detail from this page.',
           },
           {
             label: 'Cancelled',
-            description: 'Plan abandoned. All associated payments remain in the audit trail but the plan is excluded from active dashboards.',
+            description: 'A status value the database supports, but there is no button anywhere in the app to set it — in practice you\'ll only ever see Draft, Active, and Completed plans.',
           },
         ],
         warnings: [
-          'Only Admin can change a plan\'s status. Once Completed or Cancelled, the plan cannot be reopened.',
+          'Only Admin can change a plan\'s status, and there\'s no way back: Draft → Active → Completed is one-directional, with no "reopen" or "revert to draft".',
+          'Be careful with the word "active" on this page — the plan selector, the multi-plan banners, and the collection totals all treat Draft and Active as one "active" bucket, but the Collection Calendar tab and the multi-plan overlap warning only look at plans whose status is literally Active (excluding Draft).',
         ],
-        relatedIds: ['corpus-what', 'corpus-progress'],
+        relatedIds: ['corpus-what', 'corpus-create', 'corpus-progress', 'corpus-multi-plan'],
       },
       {
         id: 'corpus-progress',
-        title: 'Reading Progress Bars',
-        summary: 'Each plan shows a progress bar for overall collection and, separately, spending from corpus funds.',
+        title: 'KPIs & Progress Bars',
+        summary: 'A KPI strip (Target, Collected, Spent, Allowed to spend) plus an overall collection progress bar for the selected plan (or all plans combined).',
         examples: [
           {
-            label: 'Collection progress',
-            description: 'Green bar: total collected ÷ total target across all flats. Example: ₹1,20,000 collected of ₹2,00,000 target = 60%.',
+            label: 'Allowed to spend',
+            description: 'Cash already in hand from this fund plus whatever is still expected to be collected — a working ceiling for what the committee can commit to spending.',
           },
           {
-            label: 'Expenditure progress',
-            description: 'Violet bar: amount spent from this corpus plan (via linked expenses) ÷ total collected. Shows what proportion of collected funds has been deployed.',
+            label: 'Collection progress bar',
+            description: 'Collected ÷ Target across all flats in the plan. If collections exceed the target, a separate "Surplus" banner appears instead of an over-100% bar.',
           },
         ],
         tips: [
-          'A healthy corpus plan has collection progress ahead of expenditure progress.',
-          'Hover over a progress bar to see the exact amounts.',
+          'These figures are scoped to whichever plan is selected — pick "All active plans" from the plan dropdown to see them combined across every Draft/Active plan at once.',
+          'The Dashboard shows a similar but fund-wide Corpus card, plus its own list of plans with individual progress bars, both linking back here.',
         ],
-        relatedIds: ['corpus-expenditure', 'corpus-byfat'],
+        relatedIds: ['corpus-expenditure', 'corpus-byfat', 'corpus-multi-plan'],
       },
       {
         id: 'corpus-byfat',
         title: 'By Flat Tab',
-        summary: 'View per-flat installment breakdown: target, paid, and remaining for each flat in the selected plan.',
+        summary: 'Per-flat breakdown: target, collected, balance, % paid, and status for the selected plan (or all plans, tagged by plan name).',
         steps: [
-          { text: 'Select a corpus plan from the dropdown.' },
+          { text: 'Select a corpus plan from the dropdown (or leave it on "All active plans").' },
           { text: 'Click the "By Flat" tab.' },
-          { text: 'Each row shows: Flat, Target amount, Amount paid, Remaining balance, and payment dates.' },
-          { text: 'Click any flat row to see the full installment payment history with dates and amounts.' },
+          { text: 'Click any flat row to open its detail panel: target, carry-forward and pre-payment (if any), collected, balance, a progress bar, and the full payment history with receipts.' },
+          { text: 'From the same detail panel, send or copy a WhatsApp reminder for that flat\'s corpus balance.' },
         ],
         tips: [
-          'Flats with a pre-payment (paid before the plan was activated) show the pre-payment amount in a separate column.',
+          'Export downloads the currently filtered/sorted grid to Excel.',
         ],
-        relatedIds: ['corpus-progress', 'corpus-statuses'],
+        warnings: [
+          'A flat\'s target, pre-payment, or carry-forward amount can only be set when the plan is created — there\'s no edit action for them afterward on this page.',
+        ],
+        relatedIds: ['corpus-progress', 'corpus-statuses', 'corpus-broadcast'],
       },
       {
         id: 'corpus-expenditure',
-        title: 'Corpus Expenditure Tab',
-        summary: 'See which expenses have been charged to this corpus plan and how much of the collected fund has been deployed.',
+        title: 'Expenditure Tab',
+        summary: 'A read-only view of expenses charged to this corpus plan — the actual linking happens on the Expenses page, not here.',
         steps: [
           { text: 'Select a corpus plan and click the "Expenditure" tab.' },
-          { text: 'Each row lists an expense (with voucher number, payee, date, and amount) linked to this corpus plan.' },
-          { text: 'The summary shows total collected vs. total spent, and the remaining corpus balance.' },
+          { text: 'A KPI strip shows Total budget, Spent so far, and Remaining budget.' },
+          { text: 'Below it, every expense linked to this plan is listed with voucher number, payee, date, and amount.' },
         ],
         tips: [
-          'An expense is linked to a corpus plan by selecting the plan in the expense\'s "Corpus plan" field when adding the expense.',
+          'An expense gets linked to a plan by choosing it in that expense\'s "Corpus plan" field on the Expenses page — there\'s no "link expense" action on this tab itself.',
+          'The Budget column is populated from a per-plan budget that the plan-creation wizard doesn\'t currently set — so unless it\'s been filled in separately, expect this to show as unbudgeted even for plans with real spending.',
         ],
         relatedIds: ['expenses-add', 'corpus-progress'],
+      },
+      {
+        id: 'corpus-calendar',
+        title: 'Collection Calendar Tab',
+        summary: 'A grid of installments × flats across truly-Active plans, colour-coded Paid / Partial / Overdue / Not-due.',
+        tips: [
+          'This view only includes plans with status Active (not Draft) — a plan still in Draft won\'t appear here even though it\'s already collecting payments.',
+        ],
+        relatedIds: ['corpus-statuses'],
+      },
+      {
+        id: 'corpus-broadcast',
+        title: 'WhatsApp Reminders (Corpus)',
+        summary: 'A "Broadcast" button for a combined message covering every flat with an outstanding corpus balance, plus a per-flat reminder inside each flat\'s detail panel.',
+        steps: [
+          { text: 'Click "Broadcast" at the top of the Corpus page for one shareable message covering every flat still owing on the selected plan.' },
+          { text: 'Or open a specific flat\'s detail panel (By Flat tab) and use its own Send/Copy reminder button for just that flat.' },
+        ],
+        tips: [
+          'Unlike most write actions on this page, sending a reminder isn\'t Admin-only — any role that can view the Corpus page can trigger one.',
+        ],
+        relatedIds: ['corpus-byfat', 'dues-broadcast'],
+      },
+      {
+        id: 'corpus-multi-plan',
+        title: 'Running More Than One Plan at Once',
+        summary: 'The app supports several corpus plans in flight simultaneously, and flags it clearly — but a payment not explicitly tagged to a plan can be misattributed if two plans overlap.',
+        examples: [
+          {
+            label: 'Parallel plan warning',
+            description: 'Shown when 2+ plans are truly Active (not Draft) at once, naming them so you know a payment tagged as "Corpus" (without picking a specific plan) could land against the wrong one.',
+          },
+          {
+            label: 'Consolidated view',
+            description: 'Selecting "All active plans" shows a banner listing each Draft/Active plan with its own collected/target and balance, so nothing is hidden by only viewing one at a time.',
+          },
+        ],
+        tips: [
+          'When tagging a bank credit as Corpus on the Transactions page, a plan picker only appears if 2+ plans are Draft/Active at that moment — with just one, it\'s assigned automatically. See Transactions → Reviewing Untagged Transactions.',
+        ],
+        relatedIds: ['txn-review', 'corpus-statuses'],
       },
     ],
   },
@@ -695,7 +851,7 @@ export const HELP_SECTIONS: HelpSection[] = [
           'Expenses flow out of the society\'s bank account. Dues flow in. They are tracked separately.',
           'Every expense gets a voucher number (EXP-YYYY-NNNN) auto-assigned by the system.',
         ],
-        relatedIds: ['expenses-hub-spoke', 'expenses-add', 'expenses-pending', 'expenses-voucher'],
+        relatedIds: ['expenses-hub-spoke', 'expenses-add', 'expenses-pending', 'expenses-petty-cash', 'expenses-voucher'],
       },
       {
         id: 'expenses-hub-spoke',
@@ -740,28 +896,24 @@ export const HELP_SECTIONS: HelpSection[] = [
         summary: 'Step-by-step guide to recording a new expense with header fields and line items.',
         writeRoles: ['admin'],
         steps: [
-          { text: 'Click "+ Add Expense" on the Expenses → Day Book tab.' },
+          { text: 'Click "+ Add Expense" (available from any tab on the Expenses page).' },
           {
-            text: 'Fill in the header fields: Date, Total Amount, Payee type (Vendor / Staff / Other), Vendor / Staff name (dropdown), Payment mode (Bank transfer / Cash / Cheque), Reference/UTR number.',
+            text: 'Fill in the header fields: Date, Amount, Description, Payee type (Staff / Vendor / Intermediary / Municipal / Other), the matching payee picker, Payment mode (Cash / Online / Bank Transfer / Cheque / Direct), and Reference/UTR or Cheque number if relevant.',
           },
           {
-            text: 'Select the Category (e.g. Security, EB, Maintenance, Corpus works).',
-            detail: 'Categories are configured in Settings → Categories. Mark a category as "Utility" if it should appear in utility reports.',
+            text: 'Select the Category and, if it applies, the Corpus plan.',
+            detail: 'The Corpus plan dropdown only appears when at least one plan is Active or Draft. Categories are configured in Settings → Expense Categories.',
           },
+          { text: 'Add optional Notes for context (e.g. "June salary, includes overtime").' },
           {
-            text: 'If this is a capital expense, select the Corpus plan from the dropdown.',
-            detail: 'Linking an expense to a corpus plan deducts from that plan\'s remaining balance.',
-          },
-          { text: 'Add optional Notes for any context (e.g. "June salary, includes overtime").' },
-          {
-            text: 'Add line items: for each line, enter Description, Amount, Category, Cost centre (Block-A/B/C/D/E, Common, Municipal, All), Payee type, and optional Period from/to.',
-            detail: 'The running total at the bottom of the line items shows how much remains to allocate. It turns green when all amounts sum to the header.',
+            text: 'Add line items: for each line, Description, Amount, Category, Cost centre (Block-A/B/C/D/E, Common, Municipal, All), Payee type, and optional Quantity/Unit/Rate (which auto-computes the amount).',
+            detail: 'A running total above the line items shows how far off you are from the header amount — the Save button stays disabled until they match exactly.',
           },
           { text: 'Click Save. The voucher number (EXP-YYYY-NNNN) is auto-assigned.' },
         ],
         diagram: {
           nodes: [
-            { id: 'header', label: 'Header', sublabel: 'Bank transfer details', type: 'start' },
+            { id: 'header', label: 'Header', sublabel: 'Payee, date, amount, mode', type: 'start' },
             { id: 'lines', label: 'Line Items', sublabel: 'Invoice breakdown', type: 'action' },
             { id: 'voucher', label: 'Voucher', sublabel: 'EXP-YYYY-NNNN', type: 'end' },
           ],
@@ -771,30 +923,50 @@ export const HELP_SECTIONS: HelpSection[] = [
           ],
         },
         tips: [
-          'Use the "Cash" payment mode for petty cash expenses — these won\'t appear in the bank statement and don\'t need reconciliation.',
-          'If the payee is a new vendor, you can add them on the fly from the Vendors tab before creating the expense.',
+          'Choosing a Vendor payee shows a TDS warning banner once that vendor\'s payments cross ₹30,000 for the fiscal year.',
+          'Selecting "Cash" mode shows how much petty cash is actually available, and blocks saving if the amount would exceed it.',
+          '"Add from pending" pulls in waiting Pending Items as line items directly — but only ones tagged to the same corpus plan (or Maintenance) as this expense\'s header.',
+          'If the payee is a new vendor or staff member, add them from the Vendors/Staff tab first.',
         ],
         warnings: [
-          'Line item amounts must add up exactly to the header amount. You cannot save until they balance.',
+          'Line item amounts must add up exactly to the header amount — you cannot save until they balance.',
+          'A new expense saved through this dialog is auto-approved immediately (see Approval Status) — this is different from a bundled Pending Items expense, which starts pending review.',
         ],
-        relatedIds: ['expenses-hub-spoke', 'expenses-statuses', 'expenses-vendors'],
+        relatedIds: ['expenses-hub-spoke', 'expenses-statuses', 'expenses-approval', 'expenses-vendors', 'expenses-direct'],
+      },
+      {
+        id: 'expenses-direct',
+        title: 'Direct Contributions (Owner-Paid Expenses)',
+        summary: 'Record one or more flat owners paying a vendor directly, instead of the payment going through the society\'s bank account.',
+        writeRoles: ['admin'],
+        steps: [
+          { text: 'On the Add/Edit Expense dialog, use the "Direct contributions" section (shown regardless of the chosen payment mode).' },
+          { text: 'Add a row per contributing flat: the flat, the amount they paid directly, and optionally which corpus plan it counts toward.' },
+          { text: 'Each row creates a matching credit (to that flat\'s dues or corpus) and debit (against the expense) — net zero to the bank, since no money actually moved through the society account for that portion.' },
+          { text: 'Any remaining amount the society itself paid (if the total doesn\'t come entirely from direct contributions) reconciles normally against the bank statement at that smaller, net figure.' },
+        ],
+        warnings: [
+          'The total of all direct contributions can\'t exceed the expense amount — saving is blocked if it would.',
+          'To remove a contribution after saving, use the row\'s remove action rather than editing the amount directly, so the paired credit/debit stay in sync.',
+        ],
+        relatedIds: ['expenses-add', 'expenses-statuses'],
       },
       {
         id: 'expenses-statuses',
-        title: 'Expense Statuses',
-        summary: 'Cash, Direct, Unreconciled, and Reconciled — indicating how the expense relates to the bank statement.',
+        title: 'Payment Status (Cash / Direct / Unreconciled / Reconciled)',
+        summary: 'A derived status showing how each expense relates to the bank statement — separate from its approval status.',
         examples: [
           {
             label: 'Cash',
             description: 'Petty cash expense paid from the cash box. Saving a Cash-mode expense automatically records a disbursement against the petty cash balance, and it will never be matched to a bank statement row — so only use Cash when the money genuinely left the physical cash box, never as a default for "not sure yet".',
           },
           {
-            label: 'Direct (owner paid)',
-            description: 'The vendor was paid directly by one or more flat owners rather than from the society\'s bank account. Each contributing flat gets a credit and a matching debit (net zero to the bank), and any remaining balance the society itself paid reconciles normally at that net amount.',
+            label: 'Direct',
+            description: 'The expense is fully covered by owner direct-contributions (see Direct Contributions) — nothing further needs to reconcile against the bank.',
           },
           {
             label: 'Unreconciled',
-            description: 'Bank transfer recorded in the system but not yet matched to a corresponding bank statement debit row. The transfer happened but the bank statement import hasn\'t been matched yet.',
+            description: 'Paid Online/Bank Transfer/Cheque, recorded in the system, but not yet matched to a corresponding bank statement debit row.',
           },
           {
             label: 'Reconciled',
@@ -804,11 +976,43 @@ export const HELP_SECTIONS: HelpSection[] = [
         tips: [
           'Reconcile all bank-transfer expenses before month-end to ensure your books match the bank statement.',
           'New expenses default to "Online" payment mode, not Cash — this is deliberate: an incorrect Online default just fails to auto-match in reconciliation (a visible, fixable gap), while an incorrect Cash default silently misstates the petty cash balance. Only switch to Cash when you\'re sure.',
+          'This status is entirely separate from Approval Status (Pending/Approved/Rejected) — an expense can be Reconciled and still Pending approval, or Approved and still Unreconciled.',
         ],
         warnings: [
           'Don\'t leave a bundled or pending-item expense on "Cash" out of habit — if it was actually paid by UPI or bank transfer, it will wrongly reduce the petty cash balance and can never be reconciled against the real bank debit.',
         ],
-        relatedIds: ['expenses-reconcile', 'expenses-pending', 'faq-reconciliation'],
+        relatedIds: ['expenses-reconcile', 'expenses-pending', 'expenses-approval', 'expenses-petty-cash', 'faq-reconciliation'],
+      },
+      {
+        id: 'expenses-approval',
+        title: 'Approval Status',
+        summary: 'Pending, Approved, or Rejected — every expense saved through Add Expense is auto-approved immediately; only a bundled Pending Items expense starts out Pending.',
+        roles: ['admin'],
+        examples: [
+          {
+            label: 'Approved (the default)',
+            description: 'Saving a new expense through the normal Add Expense dialog approves it automatically — there\'s no separate "submit for approval" step for it.',
+          },
+          {
+            label: 'Pending',
+            description: 'Only happens when several Pending Items are bundled into one expense — that bundled expense starts in a Pending state and needs an Admin to approve or reject it before it counts toward reports.',
+          },
+          {
+            label: 'Rejected',
+            description: 'An Admin declined a pending expense with a reason, which stays visible on the expense afterward.',
+          },
+        ],
+        steps: [
+          { text: 'Open a Pending expense from the Day Book (or filter to "Show pending").' },
+          { text: 'Click Approve, or Reject and give a reason.' },
+        ],
+        tips: [
+          'A Pending or Rejected expense stays visible in the Day Book, but is excluded from Reports totals until it\'s Approved.',
+        ],
+        warnings: [
+          'Approve/Reject is currently Admin-only in the app, even though Committee is generally expected to review and approve expenses — if you\'re Committee and expected to approve expenses, check with your Admin about this.',
+        ],
+        relatedIds: ['expenses-pending', 'expenses-statuses'],
       },
       {
         id: 'expenses-pending',
@@ -819,43 +1023,47 @@ export const HELP_SECTIONS: HelpSection[] = [
           { text: 'Go to Expenses → Pending Items tab.' },
           { text: 'Click "Add" to log a single small payment as it happens — date, amount, description, category, cost centre, and payment mode.' },
           {
-            text: 'For several payments at once, use "Bulk add" — a spreadsheet-style grid where you can type or paste rows straight from Excel (Date, Description, Amount, Category).',
+            text: 'For several payments at once, use "Bulk add" — a spreadsheet-style grid where you can type or paste rows straight from Excel (Date, Description, Amount, Category, and more).',
           },
-          { text: 'Select several pending items with the same funding source (all Maintenance, or all belonging to the same corpus plan) and click "Bundle".' },
+          { text: 'Select several pending items that all belong to the same funding source (all Maintenance, or all the same corpus plan) and click "Bundle".' },
           {
-            text: 'Review the bundle header — expense date, description, and payment mode default to the majority mode of the selected items — then adjust if needed and save.',
-            detail: 'Saving creates one Day Book expense (with its own voucher number) made up of the bundled items as line items.',
+            text: 'Review the bundle header — expense date defaults to the latest paid date among the selected items, and payment mode defaults to whichever mode is most common among them — then adjust if needed and save.',
+            detail: 'Saving creates one Day Book expense (with its own voucher number) made up of the bundled items as line items, and removes them from the Pending Items list.',
           },
           { text: 'Later, editing that bundled expense lets you tag each line item individually with its own paid date, vendor/staff payee, payment mode, and reference number.' },
         ],
         tips: [
           'Attach a receipt photo when capturing a pending item — a paper-clip icon shows on items with attachments, and the photo carries over into the bundled expense.',
           'Inside "Add Expense", "Add from pending" pulls waiting pending items directly into the form as line items instead of bundling them separately.',
+          'The Pending Items list has no search, date filter, or category filter of its own — it\'s always shown newest-paid-first, so bundle in reasonably small batches to keep it manageable.',
         ],
         warnings: [
-          'You cannot mix maintenance items and corpus items (or items from two different corpus plans) in one bundle.',
-          'Double-check the bundle\'s suggested payment mode before saving — see Expense Statuses for why an incorrect "Cash" default is risky.',
+          'You cannot mix maintenance items and corpus items (or items from two different corpus plans) in one bundle — the app blocks it both in the dialog and again on save.',
+          'A bundled expense always starts in Pending approval status, unlike a normal Add Expense entry (see Approval Status) — it needs an Admin to approve it before it counts in reports.',
+          'Double-check the bundle\'s suggested payment mode before saving — see Payment Status for why an incorrect "Cash" default is risky.',
         ],
-        relatedIds: ['expenses-add', 'expenses-statuses', 'expenses-hub-spoke'],
+        relatedIds: ['expenses-add', 'expenses-statuses', 'expenses-approval', 'expenses-hub-spoke'],
       },
       {
         id: 'expenses-reconcile',
         title: 'Reconciliation',
-        summary: 'Match unreconciled expenses to their corresponding bank statement debit rows side-by-side.',
+        summary: 'Match unreconciled expenses to their corresponding bank statement debit rows side-by-side, with smart match suggestions.',
         writeRoles: ['admin'],
         steps: [
-          { text: 'Go to Expenses → Reconciliation tab.' },
+          { text: 'Go to Expenses → Reconcile tab.' },
           {
-            text: 'The left panel lists all Unreconciled expenses (bank transfers recorded but not matched).',
-            detail: 'Each row shows: voucher number, payee, date, amount.',
+            text: 'The left panel lists Unreconciled expenses (Online/Bank Transfer/Cheque, not yet matched — an expense fully covered by Direct contributions never appears here).',
           },
           {
-            text: 'The right panel lists all unmatched bank debit (DR) rows from the imported bank statement.',
+            text: 'The right panel lists unmatched bank debit (DR) rows from imported bank statements.',
           },
           {
-            text: 'Click an expense on the left, then click the matching bank DR on the right. Both will highlight.',
+            text: 'Click an expense on the left — matching DRs on the right highlight green (exact amount) or amber (close: within 5%/₹500 and 7 days of the expense date) to help you spot the right one.',
           },
-          { text: 'Click "Link" to confirm the match. The expense status changes to Reconciled.' },
+          { text: 'Click the matching DR, then click "Match" to confirm.' },
+          {
+            text: 'If the amounts don\'t match exactly, you\'ll be asked to confirm "Match anyway" — after matching, you can optionally post the difference to Petty Cash as a top-up or shortfall.',
+          },
         ],
         diagram: {
           nodes: [
@@ -871,10 +1079,48 @@ export const HELP_SECTIONS: HelpSection[] = [
           ],
         },
         tips: [
-          'Sort both panels by amount to quickly find matching pairs.',
-          'If amounts differ slightly (e.g. bank charges), you can override the match with a note.',
+          'Selecting a bank DR with no expense chosen offers a "Mark as Deposit" shortcut straight to the Fixed Deposits page — useful when the unmatched debit turns out to be an FD placement, not an expense at all.',
+          'A contribution drive\'s payout debit reconciles from the Contributions page, not here — it won\'t show up in this tab\'s unmatched list.',
         ],
-        relatedIds: ['expenses-statuses', 'faq-reconciliation'],
+        relatedIds: ['expenses-statuses', 'expenses-petty-cash', 'faq-reconciliation'],
+      },
+      {
+        id: 'expenses-petty-cash',
+        title: 'Petty Cash',
+        summary: 'Its own tab tracking the physical cash-box balance — opening amount, top-ups, and disbursements, most of which are posted automatically by other actions.',
+        steps: [
+          { text: 'Go to Expenses → Petty Cash tab to see the current balance and full transaction history.' },
+          { text: 'Use "Add Entry" (Admin) for anything not tied to a specific expense — the literal cash-box opening balance, or an ad-hoc top-up/withdrawal.' },
+          { text: 'Most other entries are posted automatically: saving a Cash-mode expense, voiding one, un-reconciling one, or resolving a reconciliation amount difference.' },
+        ],
+        examples: [
+          {
+            label: 'What posts automatically',
+            description: 'A Cash-mode expense posts a Disbursement when saved (and removes it if voided or un-reconciled). Reconciling an expense against a bank row with a slightly different amount offers to post the difference as a top-up or shortfall.',
+          },
+        ],
+        tips: [
+          'The current balance also shows on the Dashboard\'s cash position card, so there\'s no need to visit this tab just to check the number.',
+        ],
+        warnings: [
+          'Saving a Cash-mode expense that would exceed the current balance is blocked — this is the main safeguard against silently misstating petty cash, but it only applies to expense/reconciliation flows, not the manual "Add Entry" form, which can push the balance negative if used carelessly.',
+        ],
+        relatedIds: ['expenses-statuses', 'expenses-reconcile'],
+      },
+      {
+        id: 'expenses-recurring',
+        title: 'Recurring Expenses (Reference List Only)',
+        summary: 'A checklist of regular commitments (security contract, lift AMC, etc.) for the committee\'s own reference — it does not generate expenses automatically.',
+        writeRoles: ['admin'],
+        steps: [
+          { text: 'Go to Expenses → Recurring tab.' },
+          { text: 'Add a template: name, description, vendor, category, amount, payment mode, and frequency (Monthly/Quarterly/Annual).' },
+          { text: 'Pause or reactivate a template when a commitment is temporarily on hold, or delete it if it no longer applies.' },
+        ],
+        warnings: [
+          'This is a reminder list, not an automation — nothing here creates an actual expense or pending item on its own. Each time a recurring payment is due, you still need to Add Expense (or capture it as a Pending Item) yourself, referencing the same details as the template.',
+        ],
+        relatedIds: ['expenses-add', 'expenses-pending'],
       },
       {
         id: 'expenses-vendors',
@@ -885,33 +1131,33 @@ export const HELP_SECTIONS: HelpSection[] = [
           { text: 'Go to Expenses → Vendors tab.' },
           { text: 'Click "Add Vendor" to create a new vendor.' },
           {
-            text: 'Enter: Name, Vendor type (Contractor / Service provider / Utility / Other), Phone, PAN number (for TDS tracking), and optional notes.',
+            text: 'Enter: Name, Vendor type (Contractor / Supplier / Utility / Service / Other), Phone, PAN number (for TDS tracking), and optional notes.',
           },
           { text: 'Click Save. The vendor now appears in the Payee dropdown when adding expenses.' },
         ],
         tips: [
-          'PAN numbers are required for vendors subject to TDS (typically contractors paid above ₹30,000 per year).',
-          'You can edit vendor details at any time without affecting past expense records.',
+          'PAN numbers matter for vendors likely to be paid above ₹30,000 in a fiscal year, which is when the TDS warning kicks in on the Add Expense form.',
+          'Mark a vendor Inactive instead of deleting once they\'re no longer used — deleting is blocked anyway if they have any linked expenses.',
         ],
         relatedIds: ['expenses-add', 'expenses-staff'],
       },
       {
         id: 'expenses-staff',
         title: 'Staff',
-        summary: 'Staff master with salary history and effective dates, used in payroll-type expenses.',
+        summary: 'Staff master used as a payee option in expenses — name, role, assigned area, phone, and joining date.',
         writeRoles: ['admin'],
         steps: [
           { text: 'Go to Expenses → Staff tab.' },
           { text: 'Click "Add Staff" to create a new staff member.' },
-          { text: 'Enter: Name, Role (Security Guard / Sweeper / Other), Phone, and current monthly salary.' },
-          {
-            text: 'To record a salary change, click the staff row → "Change Salary" → enter the new amount and effective date.',
-            detail: 'Historical salary rates are preserved. The system uses the rate in effect on the expense date.',
-          },
+          { text: 'Enter: Name, Role (Security / Sweeper / Gardener / Plumber / Electrician / Lift Operator / Other), assigned area, Phone, and joining date.' },
+          { text: 'Optionally record a starting monthly salary at the time you add them.' },
+          { text: '"Mark as left" (with a "Reactivate" to undo it) retires a staff member without losing their history.' },
         ],
         tips: [
           'Staff records are separate from residents — they do not have login access.',
-          'Salary history is used in the Staff salary report to show per-person cost trends.',
+        ],
+        warnings: [
+          'A starting salary can only be set when a staff member is first added — there\'s currently no way to record a later salary revision, and nothing in the app looks up a staff member\'s salary automatically. Expense line item amounts for staff payments are always entered manually.',
         ],
         relatedIds: ['expenses-hub-spoke', 'expenses-add'],
       },
@@ -1054,7 +1300,7 @@ export const HELP_SECTIONS: HelpSection[] = [
           'AG Grid allows you to resize columns by dragging the column header border.',
           'Corpus Target and Corpus Balance are computed live from the current corpus plan(s) — they show "—" for a flat with no active or draft corpus plan, not zero.',
         ],
-        relatedIds: ['flats-rate-change', 'flats-residents', 'flats-dues-whatsapp', 'corpus-statuses'],
+        relatedIds: ['flats-rate-change', 'flats-area-details', 'flats-residents', 'flats-dues-whatsapp', 'flats-sender-mappings', 'corpus-statuses'],
       },
       {
         id: 'flats-rate-change',
@@ -1102,20 +1348,95 @@ export const HELP_SECTIONS: HelpSection[] = [
         relatedIds: ['flats-rate-change', 'activity-what'],
       },
       {
-        id: 'flats-residents',
-        title: 'Residents Tab',
-        summary: 'Owner vs tenant details including contact phone and UPI ID used in payment reminders.',
+        id: 'flats-area-details',
+        title: 'Area Details',
+        summary: 'Carpet, plinth, common, saleable, and P.O.T. area, plus U.D.S total, per flat — usually sourced from the sale deed.',
+        writeRoles: ['admin'],
         steps: [
-          { text: 'Click a flat row → Residents tab (if not already visible).' },
-          { text: 'The Owner row shows: name, phone, email, UPI ID, and move-in date.' },
-          { text: 'If a tenant lives in the flat, a Tenant row appears below the owner with their contact details.' },
-          { text: 'Click Edit to update any resident details. Changes are recorded in the audit log.' },
+          { text: 'Click a flat row to open its detail panel.' },
+          { text: 'In the "Area details" card, click "Add area details" (or "Edit area details" if already filled in).' },
+          { text: 'Enter carpet area, plinth area, common area, saleable area, and P.O.T. (proportionate to other) area, plus the U.D.S (undivided share) total — all in sq.ft.' },
+          { text: 'Click Save.' },
         ],
         tips: [
-          'The UPI ID stored here appears in the WhatsApp reminder message generated from the Dues page or from a flat\'s own detail panel.',
-          'Keep phone numbers up to date — they are the primary contact for payment reminders, and only visible to Admin and Committee roles.',
+          'A flat with no area details yet shows a "Pending" badge on the card and "—" for each field. This is informational only — it doesn\'t block anything else in the app.',
+          'These figures typically come from each owner\'s sale deed or the builder\'s area statement, so it\'s normal for this to be filled in gradually over time rather than all at once.',
         ],
-        relatedIds: ['dues-whatsapp', 'flats-grid', 'flats-dues-whatsapp'],
+        relatedIds: ['flats-grid'],
+      },
+      {
+        id: 'flats-residents',
+        title: 'People Card (on a Flat\'s Detail Panel)',
+        summary: 'The owner(s) and tenant(s) currently linked to one specific flat, with contact phone and UPI IDs used in payment reminders.',
+        steps: [
+          { text: 'Click a flat row to open its detail panel — the "People" card lists everyone linked to that flat, grouped as Owner and Tenant.' },
+          { text: 'Each row shows the person\'s name, their relation (Self, Co-owner, Spouse, Parent, Child, Guardian, Other), and — for Admin/Committee — their phone number as a tap-to-call link.' },
+          { text: 'Admins also see any UPI IDs saved against that person, used for auto-matching bank payments.' },
+          { text: '"Past residents" is collapsed by default — expand it to see anyone who has moved out of this flat, with their stay dates.' },
+        ],
+        tips: [
+          'The UPI ID stored here appears in the WhatsApp reminder message generated from the Dues page or from this flat\'s own detail panel.',
+          'Phone numbers are only visible to Admin and Committee roles — Auditors see names and relations but not contact details.',
+          'To add, edit, move out, or delete a person, use the separate top-level Residents tab — see "Managing Residents" below.',
+        ],
+        relatedIds: ['dues-whatsapp', 'flats-grid', 'flats-dues-whatsapp', 'flats-residents-manage'],
+      },
+      {
+        id: 'flats-residents-manage',
+        title: 'Managing Residents (Residents Tab)',
+        summary: 'A separate top-level tab listing every resident across every flat — add, edit, move out, reactivate, or delete a person from here.',
+        writeRoles: ['admin'],
+        steps: [
+          { text: 'Go to Flats & Residents → Residents tab (next to the Flats tab at the top of the page).' },
+          { text: 'Click "Add resident" to add a new owner or tenant — pick their flat, name, type (Owner/Tenant), relation, phone, email, and UPI IDs.' },
+          {
+            text: 'On supported phones, "Pick from contacts" fills in the name, phone, and email directly from your phone\'s contact list.',
+          },
+          { text: 'Click the pencil icon on a row to edit that resident, or the trash icon to permanently delete their record.' },
+          {
+            text: 'Click "Move out" to mark someone as no longer resident — pick the move-out date; if they share the flat with others of the same type (e.g. a spouse also listed as Self), you can move the whole household out together in one step.',
+          },
+          { text: 'A moved-out resident shows as "Inactive" and can be brought back with "Reactivate" if it turns out they never actually left.' },
+        ],
+        tips: [
+          'Prefer "Move out" over "Delete" for someone who genuinely lived there and left — it preserves their occupancy history, which Delete does not.',
+          'UPI IDs entered here are what auto-matches future bank payments to this resident — see Sender Mappings for cleaning up payments that couldn\'t be auto-matched.',
+        ],
+        warnings: [
+          'Delete permanently removes the resident record. Only use it for a mistaken entry, not for someone who actually lived in the flat.',
+        ],
+        relatedIds: ['flats-residents', 'flats-sender-mappings'],
+      },
+      {
+        id: 'flats-sender-mappings',
+        title: 'Sender Mappings',
+        summary: 'Admin-only tab for confirming which resident a bank sender ID (UPI handle or transfer narration token) actually belongs to.',
+        roles: ['admin'],
+        writeRoles: ['admin'],
+        steps: [
+          { text: 'Go to Flats & Residents → Sender Mappings tab (Admin only).' },
+          {
+            text: 'The "Legacy mappings to review" list shows sender tokens carried over from an old hardcoded list that haven\'t yet been assigned to a resident record.',
+            detail: 'For each one, pick the flat, then the specific resident it belongs to, and click Confirm — this saves the token as one of that resident\'s UPI IDs.',
+          },
+          {
+            text: 'If a legacy entry doesn\'t apply anymore (e.g. a one-off sender that shouldn\'t be permanently mapped), click the trash icon to dismiss it — this just hides it from the backlog, it doesn\'t save anything.',
+          },
+          {
+            text: 'The "All flats" section below lists every resident who already has UPI IDs saved, grouped by flat — click a token to see every transaction that has matched it, or the small trash icon next to a token to remove that mapping.',
+          },
+          { text: 'Use the search box to filter either list by flat, phone, or sender ID.' },
+        ],
+        examples: [
+          {
+            label: 'Why this matters',
+            description: 'When a bank credit\'s narration contains a UPI ID or token that matches a saved mapping, future imports can be tagged to the right flat automatically instead of landing in the Transactions Review queue every time.',
+          },
+        ],
+        warnings: [
+          'Confirming a mapping checks for conflicts — if that sender ID is already saved against a different resident, it blocks the save so you don\'t silently overwrite an existing mapping.',
+        ],
+        relatedIds: ['flats-residents-manage', 'txn-review'],
       },
       {
         id: 'flats-dues-whatsapp',
@@ -1178,103 +1499,147 @@ export const HELP_SECTIONS: HelpSection[] = [
     route: '/reports',
     items: [
       {
-        id: 'reports-collection',
-        title: 'Collection Reports',
-        summary: 'Monthly collection totals, flat-wise payment history, dues aging, and defaulters list.',
+        id: 'reports-cashbook',
+        title: 'Cashbook',
+        summary: 'A single fiscal month\'s opening/closing bank and petty cash balances, receipts, and payments — the day-to-day treasury view.',
         steps: [
-          { text: 'Go to Reports → Collection tab.' },
-          { text: 'Select the fiscal year from the dropdown.' },
-          { text: 'Choose a report type: Cash Book, Flat-wise history, Dues aging, or Defaulters list.' },
-          { text: 'Click Generate / Download PDF to produce the report.' },
+          { text: 'Go to Reports → Cashbook tab.' },
+          { text: 'Pick a fiscal month from the dropdown.' },
+          { text: 'Review opening/closing bank balance, opening/closing petty cash, receipts by category, and payments by category (with line-level detail).' },
+          { text: 'Export Excel (full itemized detail) or Download PDF.' },
         ],
-        examples: [
-          {
-            label: 'Defaulters List',
-            description: 'All flats with outstanding dues as of today, sorted by pending amount (largest first). Required for AGM.',
-          },
-          {
-            label: 'Dues Aging',
-            description: 'Flats grouped by how many months they have been in arrears: 1 month, 2–3 months, 4–6 months, 6+ months.',
-          },
+        tips: [
+          'Pending dues shown here are as of that month\'s end, not today — useful for a month-end close, not a live snapshot.',
+          'Contribution-drive disbursements and Fixed Deposit placements are folded into Payments here even though neither is a normal expense record.',
+        ],
+        relatedIds: ['reports-rp', 'expenses-petty-cash'],
+      },
+      {
+        id: 'reports-flat',
+        title: 'Flat Statement',
+        summary: 'A single flat\'s full transaction and dues/corpus history for a chosen period, with WhatsApp reminder and Excel/PDF export.',
+        steps: [
+          { text: 'Go to Reports → Flat statement tab and pick a flat.' },
+          { text: 'Choose a date mode: current fiscal year, a custom range, or all-time.' },
+          { text: 'Review the summary cards (rate, maintenance collected, outstanding, corpus collected/target/balance) and the transaction list below.' },
+          { text: 'Use the export popover for a PDF or Excel copy, or Send/Copy a WhatsApp payment reminder directly from this tab.' },
+        ],
+        tips: [
+          'This combines maintenance and corpus into one view per flat — useful for handling an individual owner\'s query without pulling data from two different pages.',
+        ],
+        relatedIds: ['dues-whatsapp', 'flats-dues-whatsapp'],
+      },
+      {
+        id: 'reports-defaulters',
+        title: 'Dues Aging (Defaulters List)',
+        summary: 'Despite the tab name, this is the Defaulters List — every flat with an outstanding balance for the selected fiscal year — not a month-bucket aging report.',
+        steps: [
+          { text: 'Go to Reports → Dues aging tab.' },
+          { text: 'Select the fiscal year.' },
+          { text: 'Review the list (flat, block, annual due, collected, pending, arrears, total outstanding, status) or export it.' },
+        ],
+        tips: [
+          'The same list, in a different sort order, is also one of the four AGM Reports as "Defaulters List".',
         ],
         relatedIds: ['reports-agm', 'dues-statuses'],
       },
       {
-        id: 'reports-corpus',
-        title: 'Corpus Fund Statement',
-        summary: 'Per-plan, per-flat progress report showing collections and expenditure. Required for AGM.',
-        steps: [
-          { text: 'Go to Reports → Corpus tab.' },
-          { text: 'Select the corpus plan from the dropdown.' },
-          { text: 'Click "Download PDF" to generate the AGM-ready statement.' },
-        ],
-        tips: [
-          'The Corpus Fund Statement is a required document for the AGM. Generate it before the meeting.',
-        ],
-        relatedIds: ['corpus-what', 'reports-agm'],
-      },
-      {
         id: 'reports-agm',
         title: 'AGM Reports (PDF)',
-        summary: 'Income & Expenditure Statement, Receipts & Payments, Defaulters List, and Corpus Fund Statement — all in-browser PDF preview before download.',
+        summary: 'Four PDFs generated in one click each — Defaulters List, Income & Expenditure Statement, Corpus Fund Statement, and Receipts & Payments Account.',
         steps: [
-          { text: 'Go to Reports → AGM tab.' },
-          { text: 'Select the fiscal year.' },
-          { text: 'Click any report to open an in-browser PDF preview.' },
-          { text: 'Click "Download PDF" in the preview toolbar to save the file.' },
+          { text: 'Go to Reports → AGM reports tab.' },
+          { text: 'Select the fiscal year (the Corpus Fund Statement ignores this and always covers all active/completed plans).' },
+          { text: 'Click "Download PDF" on any of the four cards — it downloads immediately, there\'s no in-browser preview step first.' },
         ],
         examples: [
           {
             label: 'Income & Expenditure Statement',
-            description: 'Summary of all income (maintenance + corpus + other) vs. all expenses for the fiscal year. Required for statutory audit.',
+            description: 'Income by category vs. expenditure by category for the fiscal year, with the resulting surplus or deficit.',
           },
           {
-            label: 'Receipts & Payments',
-            description: 'Cash-flow view: opening balance, all receipts, all payments, closing balance.',
+            label: 'Receipts & Payments Account',
+            description: 'All receipts and all payments for the year (including contribution drives and owner-direct payments), with the closing balance.',
           },
         ],
         tips: [
-          'PDF generation happens in the browser — no server call required. Works offline once the page has loaded.',
-          'Generate all four AGM reports and send them to the statutory auditor at least 15 days before the AGM.',
+          'PDF generation happens in the browser — no server call required.',
+          'Generate all four AGM reports and send them to the statutory auditor well before the AGM.',
         ],
-        relatedIds: ['reports-collection', 'reports-corpus'],
+        warnings: [
+          'Double-check the "Total Payments" figure on the Receipts & Payments Account PDF against the itemized payments list above it before circulating — cross-check it rather than taking the printed total at face value.',
+        ],
+        relatedIds: ['reports-defaulters', 'reports-rp', 'corpus-statuses'],
+      },
+      {
+        id: 'reports-rp',
+        title: 'R&P Statement',
+        summary: 'A more detailed Receipts & Payments report than the one inside AGM Reports — includes an opening bank balance and FD interest earned.',
+        steps: [
+          { text: 'Go to Reports → R&P Statement tab.' },
+          { text: 'Select the fiscal year.' },
+          { text: 'Review Receipts (opening balance, maintenance/corpus/contribution collections, FD interest received) and Payments (expenditure by category plus contribution disbursements), and the resulting closing balance.' },
+          { text: 'Download PDF (there\'s no Excel export on this tab).' },
+        ],
+        tips: [
+          'This is a separate, richer report from the "Receipts & Payments Account" found under AGM Reports — use this one when you need the opening-balance and FD-interest detail.',
+        ],
+        relatedIds: ['reports-agm', 'reports-balance-sheet'],
+      },
+      {
+        id: 'reports-balance-sheet',
+        title: 'Balance Sheet',
+        summary: 'A point-in-time snapshot as at 31 March of a chosen year: total assets (bank + FDs + petty cash) vs. liabilities (pending dues + corpus still held).',
+        steps: [
+          { text: 'Go to Reports → Balance Sheet tab.' },
+          { text: 'Pick the "as at 31 March" year.' },
+          { text: 'Review Assets, Liabilities, and the resulting Net Position, or Download PDF.' },
+        ],
+        tips: [
+          '"Corpus yet to collect" (target minus collected) is shown as a memo line for context — it isn\'t included in the totals since it hasn\'t been received yet.',
+        ],
+        relatedIds: ['reports-rp'],
       },
       {
         id: 'reports-expenditure',
         title: 'Expenditure Reports',
-        summary: 'Category-wise expenses, vendor payment history, salary summary, and EB units per block.',
+        summary: 'Four sub-tabs — By category, By vendor, Monthly trend, and TDS Register — with a Fund filter (All/Maintenance/Corpus) and FY selector applied across all of them.',
         examples: [
           {
-            label: 'Category-wise',
-            description: 'Total spending per category (Security, EB, Water, Maintenance works, etc.) for the selected period.',
+            label: 'By category',
+            description: 'Bar chart plus table of spend per category, correctly split for vouchers that mix categories across their line items. Click a row to drill into every expense/line item in that category.',
           },
           {
-            label: 'Vendor payments',
-            description: 'All payments made to a specific vendor in the fiscal year — useful for TDS calculations.',
+            label: 'By vendor',
+            description: 'Total paid per vendor, flagging anyone paid over ₹30,000 in the year as TDS-required.',
           },
           {
-            label: 'Salary history',
-            description: 'Month-by-month salary payments per staff member, including any mid-year salary changes.',
+            label: 'Monthly trend',
+            description: 'Total expenditure by month across the fiscal year (Apr→Mar).',
           },
+          {
+            label: 'TDS Register',
+            description: 'A compliance register: vendor, PAN, total paid, the ₹30,000 threshold, amount over it, and the TDS due at 10%.',
+          },
+        ],
+        tips: [
+          'There\'s no separate staff salary report — salary-related spend only shows up as ordinary expense line items under whatever category they were recorded with.',
         ],
         relatedIds: ['expenses-vendors', 'expenses-staff'],
       },
       {
         id: 'reports-utility',
         title: 'Utility Reports',
-        summary: 'EB consumption by block, sewage tanker log, and year-over-year comparison.',
-        examples: [
-          {
-            label: 'EB by block',
-            description: 'Monthly electricity consumption (units) and cost split by Block-A through Block-E and Common area. Data comes from expenses tagged with Utility categories and cost centres.',
-          },
-          {
-            label: 'Year-over-year',
-            description: 'Compare EB spend this fiscal year vs. the previous year to identify trends.',
-          },
+        summary: 'One tab per category marked "Utility" in Settings — not a fixed EB/sewage layout. Whatever utility categories exist show up here automatically.',
+        steps: [
+          { text: 'Go to Reports → Utilities tab.' },
+          { text: 'Pick one of the category tabs (e.g. Electricity, Water) — categories beyond the first several are tucked under a "More" menu.' },
+          { text: 'Select the fiscal year and review the summary cards, the by-block/cost-centre monthly chart, and the line-item detail table.' },
+          { text: 'Export Excel (there\'s no PDF export on this tab).' },
         ],
         tips: [
-          'Utility data is only available if expenses are recorded with a Utility category (configured in Settings → Categories).',
+          'A category only appears here once it\'s marked "Utility" in Settings → Expense Categories, with a unit label if you want per-unit tracking (e.g. kWh).',
+          'There\'s no built-in year-over-year comparison — switch the fiscal year dropdown manually to compare two years.',
         ],
         relatedIds: ['settings-categories', 'reports-expenditure'],
       },
@@ -1289,56 +1654,78 @@ export const HELP_SECTIONS: HelpSection[] = [
       {
         id: 'settings-general',
         title: 'General Settings',
-        summary: 'UPI ID, bank transfer details, society name, and carry-forward fiscal year selector.',
+        summary: 'The carry-forward fiscal year, the society\'s UPI/bank collection details used in reminders, and an About block.',
         writeRoles: ['admin'],
         steps: [
           { text: 'Go to Settings → General tab.' },
-          { text: 'Update the UPI ID — this appears in all WhatsApp payment reminders.' },
-          { text: 'Update bank account details (account number, IFSC, bank name) — also appear in reminders.' },
-          { text: 'Set the "Carry-forward FY" to control which previous year\'s unpaid dues are brought forward.' },
+          {
+            text: 'Under "Dues configuration", set "Carry-forward from" to the fiscal year dues tracking should start from.',
+            detail: 'This is what actually drives the Dues page\'s tracked range — the Dues page itself has no FY selector.',
+          },
+          { text: 'Under "Collection payment details", update the UPI ID and bank transfer details — these populate every WhatsApp payment reminder across the app.' },
           { text: 'Click Save.' },
         ],
         tips: [
-          'The society name shown here appears in the header of all generated PDF reports.',
+          'The "About" block on this tab (society name, flat/block count, tech info) is static reference text — it isn\'t an editable field here.',
           'Double-check the UPI ID whenever you change bank accounts — a wrong UPI causes residents to pay the wrong account.',
+          'Non-admins can view this tab but the fields are read-only for them.',
         ],
-        relatedIds: ['dues-whatsapp', 'settings-categories'],
+        relatedIds: ['dues-whatsapp', 'settings-advance-fy', 'settings-categories'],
+      },
+      {
+        id: 'settings-advance-fy',
+        title: 'Advance Fiscal Year',
+        summary: 'Roll the tracked dues range forward to the next fiscal year, converting every flat\'s current pending balance into an arrears record so nothing is lost.',
+        writeRoles: ['admin'],
+        steps: [
+          { text: 'On Settings → General, click "Preview & Advance to FY [next]".' },
+          { text: 'Review the preview list — every flat with an outstanding pending amount, and the arrears entry it will become.' },
+          { text: 'Confirm to advance. The carry-forward fiscal year moves forward, and each listed flat gets a new arrears record instead of losing that unpaid balance.' },
+        ],
+        warnings: [
+          'This is a one-way operation for the fiscal-year setting — review the preview carefully before confirming.',
+        ],
+        relatedIds: ['dues-arrears', 'dues-calc'],
       },
       {
         id: 'settings-categories',
         title: 'Expense Categories',
-        summary: 'Add and edit expense categories. Mark as Utility to enable per-block tracking in Utility reports.',
+        summary: 'Add and edit expense categories. Mark as Utility (with a unit label) to give it its own tab in Utility reports.',
         writeRoles: ['admin'],
         steps: [
-          { text: 'Go to Settings → Categories tab.' },
-          { text: 'Click "Add Category" to create a new category.' },
+          { text: 'Go to Settings → Expense Categories tab.' },
+          { text: 'Click "Add Category" to create a new one.' },
           {
-            text: 'Enter: Name, Budget type (Maintenance or Corpus), and check "Utility" if this category should appear in Utility reports with per-block tracking.',
+            text: 'Enter: Name, Budget type (Maintenance or Corpus), sort order, and check "Utility" if this category should get its own tab in Reports → Utilities.',
+            detail: 'A Utility category can also have a unit label (e.g. kWh, KL, trips) — this becomes the quantity column header when entering expense line items for it.',
           },
-          { text: 'Click Save. The category is immediately available in the Add Expense form.' },
+          { text: 'Click Save. The category is immediately available when adding an expense.' },
         ],
         examples: [
           {
             label: 'Utility category example',
-            description: '"EB — Block A" with Utility flag set. Expenses in this category will appear in the EB consumption report broken down by block.',
+            description: '"Electricity" with the Utility flag set and unit label "kWh". Expenses in this category get their own tab in Reports → Utilities, tracked per block/cost centre with a units column.',
           },
         ],
         tips: [
-          'Cannot delete a category that is already used in expenses. Instead, rename it or mark it inactive.',
+          'A category can be toggled active/inactive instead of deleted — inactive categories no longer appear when adding new expenses but past expenses keep their existing category.',
+          'Cannot delete a category that\'s already used on any expense or line item — mark it inactive instead.',
         ],
         relatedIds: ['expenses-add', 'reports-utility'],
       },
       {
         id: 'settings-rates',
-        title: 'Maintenance Rates Overview',
-        summary: 'Read-only summary of all current maintenance rates across all flats.',
+        title: 'Maintenance Rates (Bulk Rate Changes)',
+        summary: 'View every flat\'s current rate, past rate history, and apply a rate change to one or many flats at once.',
+        writeRoles: ['admin'],
         steps: [
-          { text: 'Go to Settings → Rates tab.' },
-          { text: 'The table shows each flat\'s current rate and the date it took effect.' },
-          { text: 'To change a rate, go to the Flats page → click the flat → Change maintenance rate.' },
+          { text: 'Go to Settings → Maintenance Rates tab.' },
+          { text: 'The main table shows each flat\'s current rate, filterable by block. "Rate change history" below lists past (closed) rate periods.' },
+          { text: 'Click "Add Rate Change" to open the bulk dialog: enter the new monthly rate, an effective-from date, optional notes, then select which flats it applies to — with a per-block "select all" toggle for raising a whole block at once.' },
+          { text: 'Saving automatically closes each selected flat\'s prior rate period and starts the new one from the effective date.' },
         ],
         tips: [
-          'This view is a quick reference. All rate changes must be made from the Flats page.',
+          'This is the same underlying rate-history mechanism as "Change maintenance rate" on a single flat\'s detail panel (Flats & Residents page) — this tab is just the bulk, multi-flat version of it.',
         ],
         relatedIds: ['flats-rate-change', 'flats-rate-history'],
       },
@@ -1351,6 +1738,7 @@ export const HELP_SECTIONS: HelpSection[] = [
           { text: 'Each row shows: import date/time, filename, rows imported, rows skipped (duplicates), and the importing user.' },
         ],
         tips: [
+          'A lighter version of the same history also appears directly on the Transactions page\'s Upload tab, behind a "Show import history" link — useful when you\'re already there and just want a quick check.',
           'Use Import History to confirm whether a specific bank statement month has been imported.',
           'If you accidentally imported a wrong file, contact admin to void the affected transactions.',
         ],
@@ -1367,7 +1755,7 @@ export const HELP_SECTIONS: HelpSection[] = [
       {
         id: 'users-roles',
         title: 'Role Permissions Matrix',
-        summary: 'Admin has full access, Committee can read and approve, Auditor is read-only.',
+        summary: 'Admin has full read/write access everywhere. Committee and Auditor are read-only by default, but exactly what they can see is fine-tunable on the Permissions tab.',
         roles: ['admin', 'committee', 'auditor'],
         examples: [
           {
@@ -1376,7 +1764,7 @@ export const HELP_SECTIONS: HelpSection[] = [
           },
           {
             label: 'Committee',
-            description: 'View all data on every page. Approve expenses. Generate and download reports. Cannot add, edit, or delete records. Cannot manage users or change rates.',
+            description: 'View all data on every page. Generate and download reports. Cannot add, edit, or delete records anywhere today, and cannot approve/reject expenses in the current build even though that\'s the intended design — see Expenses → Approval Status.',
           },
           {
             label: 'Auditor',
@@ -1391,7 +1779,7 @@ export const HELP_SECTIONS: HelpSection[] = [
           'Role badges are shown in the top-right of the app and in the sidebar footer.',
           'Action buttons (Add, Edit, Delete) are hidden from Committee and Auditor users, not just disabled.',
         ],
-        relatedIds: ['users-add', 'users-edit'],
+        relatedIds: ['users-add', 'users-edit', 'users-permissions'],
       },
       {
         id: 'users-add',
@@ -1459,6 +1847,22 @@ export const HELP_SECTIONS: HelpSection[] = [
           'Share passwords securely (in person or via an encrypted channel). Do not send passwords over SMS or unencrypted chat.',
         ],
         relatedIds: ['users-add', 'login'],
+      },
+      {
+        id: 'users-permissions',
+        title: 'Permissions Tab',
+        summary: 'A matrix for fine-tuning exactly which resources (Transactions, Dues, Corpus, Expenses, Reports, Flats, Settings, Announcements, Activity, Users) Committee and Auditor can see.',
+        roles: ['admin'],
+        writeRoles: ['admin'],
+        steps: [
+          { text: 'Go to the Users page → Permissions tab.' },
+          { text: 'Toggle a checkbox to grant or revoke a role\'s visibility into a specific resource.' },
+        ],
+        tips: [
+          'Admin\'s row is always fully checked and locked — it can\'t be reduced from here.',
+          'User Management itself is always locked to Admin only, for both Committee and Auditor.',
+        ],
+        relatedIds: ['users-roles'],
       },
     ],
   },
