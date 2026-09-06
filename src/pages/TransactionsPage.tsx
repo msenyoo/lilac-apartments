@@ -188,7 +188,7 @@ function UploadTab({ onImported }: { onImported: () => void }) {
       const uploadId = uploadRecord?.id ?? null
 
       const reviewCount = rows.filter(r => r._confidence === 'REVIEW').length
-      const { data: activePlans } = await supabase.from('corpus_plans').select('id').eq('status', 'active')
+      const { data: activePlans } = await supabase.from('corpus_plans').select('id').in('status', ['active', 'draft'])
       const soleActivePlanId = activePlans?.length === 1 ? activePlans[0].id : null
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const toInsert = rows.map(({ _confidence, ...r }) => ({
@@ -881,7 +881,7 @@ function ReviewItem({ item, flats, residents, onSaved }: {
       const { data } = await supabase
         .from('corpus_plans')
         .select('id, name')
-        .eq('status', 'active')
+        .in('status', ['active', 'draft'])
         .order('name')
       return (data ?? []) as { id: string; name: string }[]
     },
@@ -1263,7 +1263,7 @@ function EditModal({ txn, flats, residents, onClose, onSaved, onSplit, onVoided 
       const { data } = await supabase
         .from('corpus_plans')
         .select('id, name')
-        .eq('status', 'active')
+        .in('status', ['active', 'draft'])
         .order('name')
       return (data ?? []) as { id: string; name: string }[]
     },
@@ -1577,7 +1577,7 @@ function SplitModal({ txn, onClose, onSaved, flats, residents }: {
       const { data } = await supabase
         .from('corpus_plans')
         .select('id, name')
-        .eq('status', 'active')
+        .in('status', ['active', 'draft'])
         .order('name')
       return (data ?? []) as { id: string; name: string }[]
     },

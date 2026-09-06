@@ -78,6 +78,26 @@ function FlatsTab() {
     },
   })
 
+  // Live per-flat corpus figures for the grid — flats.corpus_target itself is a stale
+  // legacy column (see the popup's corpusEntries query below for the same reasoning).
+  const { data: corpusByFlat } = useQuery({
+    queryKey: ['corpus-by-flat'],
+    queryFn: async () => {
+      const { data } = await supabase.from('v_corpus_tracker').select('flat_code, corpus_target, balance')
+      const map = new Map<string, { target: number; balance: number }>()
+      for (const row of data ?? []) {
+        const prev = map.get(row.flat_code) ?? { target: 0, balance: 0 }
+        map.set(row.flat_code, { target: prev.target + (row.corpus_target ?? 0), balance: prev.balance + (row.balance ?? 0) })
+      }
+      return map
+    },
+  })
+
+  const flatsForGrid = useMemo(() => (flats ?? []).map(f => {
+    const c = corpusByFlat?.get(f.code)
+    return { ...f, corpus_target_live: c?.target ?? null, corpus_balance_live: c?.balance ?? null }
+  }), [flats, corpusByFlat])
+
   const { data: rateHistory } = useQuery({
     queryKey: ['rate-history', selected?.id],
     queryFn: async () => {
@@ -201,8 +221,11 @@ function FlatsTab() {
     { field: 'maintenance_amt',     headerName: 'Rate/mo',      width: 110, type: 'numericColumn',
       valueFormatter: (p: any) => formatINR(p.value),
     },
-    { field: 'corpus_target',       headerName: 'Corpus Target', width: 130, type: 'numericColumn',
-      valueFormatter: (p: any) => formatINR(p.value),
+    { field: 'corpus_target_live',  headerName: 'Corpus Target', width: 130, type: 'numericColumn',
+      valueFormatter: (p: any) => p.value != null ? formatINR(p.value) : '—',
+    },
+    { field: 'corpus_balance_live', headerName: 'Corpus Balance', width: 130, type: 'numericColumn',
+      valueFormatter: (p: any) => p.value != null ? formatINR(p.value) : '—',
     },
     { field: 'saleable_area',       headerName: 'Area',         width: 110,
       cellRenderer: (p: any) => p.value
@@ -218,7 +241,7 @@ function FlatsTab() {
       ) : (
         <div className="overflow-hidden border hairline" style={{ borderRadius: 'var(--ds-radius)', height: 480 }}>
           <AgGridReact
-            rowData={flats ?? []}
+            rowData={flatsForGrid}
             columnDefs={colDefs}
             defaultColDef={{ sortable: true, resizable: true, filter: true, floatingFilter: true }}
             rowSelection={{ mode: 'singleRow' }}
@@ -245,9 +268,6 @@ function FlatsTab() {
                     <Detail label="Private terrace" value={selected.has_private_terrace ? 'Yes' : 'No'} />
                     <Detail label="Current rate" value={formatINR(selected.maintenance_amt) + '/mo'} />
                     <Detail label="Corpus target" value={hasActiveCorpusPlan ? formatINR(corpusTarget) : 'No active plan'} />
-                    {hasActiveCorpusPlan && (
-                      <Detail label="Corpus balance" value={corpusBalance > 0 ? formatINR(corpusBalance) : '✓ Clear'} />
-                    )}
                   </div>
                   {isAdmin && (
                     <button onClick={() => setEditRate(true)}
@@ -262,6 +282,15 @@ function FlatsTab() {
                   <h4 className="font-medium text-sm">Dues</h4>
                   <div className="space-y-1.5 text-sm">
                     <Detail label="Maintenance outstanding" value={duesOutstanding > 0 ? formatINR(duesOutstanding) : '✓ Clear'} />
+                    {hasActiveCorpusPlan && (
+                      <Detail label="Corpus outstanding" value={corpusBalance > 0 ? formatINR(corpusBalance) : '✓ Clear'} />
+                    )}
+                    {hasActiveCorpusPlan && combinedOutstanding > 0 && (
+                      <div className="flex justify-between border-t hairline pt-1.5">
+                        <span className="font-semibold" style={{ color: 'var(--ink-700)' }}>Total outstanding</span>
+                        <span className="font-bold" style={{ color: 'var(--bad)' }}>{formatINR(combinedOutstanding)}</span>
+                      </div>
+                    )}
                   </div>
                   {combinedOutstanding > 0 && (
                     <div className="flex gap-2">
