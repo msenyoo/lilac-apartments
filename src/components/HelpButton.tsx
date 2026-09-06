@@ -90,11 +90,65 @@ const HELP: Record<string, HelpPage> = {
   '/flats': {
     title: 'Flats & Residents',
     bullets: [
-      'Flat master list showing all units, owner names, and current occupancy status.',
-      'Click a flat to view owner details, contact information, and edit if needed.',
-      'UPI IDs stored here are used in WhatsApp payment reminder messages.',
+      'Flat master list showing all units, current maintenance rate, and live Corpus Target/Balance (computed from active/draft corpus plans — shows "—" if a flat has none).',
+      'Click a flat to view owner/tenant details, area details, and rate history — edit any of them if needed.',
+      'The same detail panel shows a "Dues" card with maintenance and corpus outstanding together, plus a one-tap WhatsApp reminder button (Admin/Committee only).',
     ],
-    howTo: 'Click any flat row to open its detail panel. Use the edit button to update owner name, phone number, or UPI ID.',
+    howTo: 'Click any flat row to open its detail panel. Use the edit buttons to update rate, area, or resident details, or tap "Send" in the Dues card to WhatsApp a payment reminder.',
+  },
+  '/finance': {
+    title: 'Fixed Deposits',
+    bullets: [
+      'Tracks the society\'s bank fixed deposits — principal, rate, maturity date, and interest earned.',
+      'KPI cards show total principal locked, nearest upcoming maturity, and cumulative interest earned.',
+      'Add a deposit when one is opened, and Mark Matured when it pays out — both can be linked to the matching bank transaction.',
+    ],
+    howTo: 'Click "Add Deposit" to record a new FD. When it matures, click "Mark Matured" on its row and enter the actual payout amount from the bank.',
+  },
+  '/announcements': {
+    title: 'Announcements',
+    bullets: [
+      'A notice board for residents — events, utility interruptions, maintenance and governance updates, tagged by type.',
+      'Pinned announcements always show at the top of the feed.',
+      'Everyone can read this page, including Owner-role residents — but only Admin can post, pin, or delete.',
+    ],
+    howTo: 'Click "New announcement", write the title and body, pick a tag, and optionally pin it — then post.',
+  },
+  '/activity': {
+    title: 'Activity Log',
+    bullets: [
+      'A read-only audit trail of every change made across the app, recorded automatically by database triggers.',
+      'Filter by table, action (Insert/Update/Delete), and date range. Expand a row to see the before/after values.',
+      'Visible to Admin, Committee, and Auditor — Owner-role residents cannot access this page.',
+    ],
+    howTo: 'Use the filters at the top to narrow down to a specific table, action, or date range, then click a row to see exactly what changed.',
+  },
+  '/users': {
+    title: 'Users & Access',
+    bullets: [
+      'Admin-only page — manage user accounts and, on the Permissions tab, fine-tune what Committee/Auditor can see.',
+      'Add User creates a login (mobile number → mobile@lilac.com) with an auto-generated password you can share via copy or WhatsApp.',
+      'Edit a user to change their role, flat assignment, or generate a new password for them — no need to delete and recreate.',
+    ],
+    howTo: 'Click "Add User" to create a login, or the edit (pencil) icon on an existing user to change their role or reset their password.',
+  },
+  '/profile': {
+    title: 'My Profile',
+    bullets: [
+      'Update your own display name and contact email — your mobile number (login ID) can\'t be changed here.',
+      'Change your own password anytime, without needing an admin — just enter and confirm a new one (8+ characters).',
+      'Available to every role — this is your personal account settings page.',
+    ],
+    howTo: 'Edit your name/email and save, or use the separate "Change password" form to set a new password.',
+  },
+  '/my-flat': {
+    title: 'My Flat',
+    bullets: [
+      'A read-only, single-flat summary — your maintenance dues status, corpus plan progress, and how corpus funds are being spent.',
+      'Shows the society\'s UPI/bank payment details and a suggested payment remark, plus your full payment history with receipt downloads.',
+      'The only action here is downloading a fiscal-year statement PDF — there\'s nothing to add or edit.',
+    ],
+    howTo: 'Scroll through your dues, corpus, and payment history, then click "Download Statement" for a PDF record of the fiscal year.',
   },
   '/settings': {
     title: 'Settings',

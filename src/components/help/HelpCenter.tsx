@@ -17,6 +17,10 @@ import {
   Lightbulb,
   AlertTriangle,
   ChevronRight,
+  HandHeart,
+  PiggyBank,
+  Megaphone,
+  Home,
 } from 'lucide-react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
@@ -37,6 +41,10 @@ const ICON_MAP: Record<string, React.FC<{ size?: number; className?: string }>> 
   Shield: Shield,
   History: History,
   HelpCircle: HelpCircle,
+  HandHeart: HandHeart,
+  PiggyBank: PiggyBank,
+  Megaphone: Megaphone,
+  Home: Home,
 }
 
 function roleBadgeClass(role: Role): string {

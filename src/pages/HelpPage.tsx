@@ -4,6 +4,7 @@ import {
   Rocket, LayoutDashboard, IndianRupee, Banknote,
   Building2, Receipt, Users, FileText, Settings,
   Shield, History, HelpCircle, Lightbulb, AlertTriangle, ChevronRight,
+  HandHeart, PiggyBank, Megaphone, Home,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { HELP_SECTIONS, HelpItem, Role } from '@/components/help/helpContent'
@@ -14,6 +15,7 @@ const ICON_MAP: Record<string, React.FC<{ size?: number; className?: string }>> 
   Rocket, LayoutDashboard, IndianRupee, Banknote,
   Building2, Receipt, Users, FileText, Settings,
   Shield, History, HelpCircle,
+  HandHeart, PiggyBank, Megaphone, Home,
 }
 
 function roleBadgeClass(role: Role): string {
