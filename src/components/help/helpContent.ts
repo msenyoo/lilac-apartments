@@ -77,7 +77,7 @@ export const HELP_SECTIONS: HelpSection[] = [
         warnings: [
           'There is no self-service password reset. Contact your admin if you are locked out.',
         ],
-        relatedIds: ['roles', 'users-password'],
+        relatedIds: ['roles', 'users-password', 'profile'],
       },
       {
         id: 'roles',
@@ -96,10 +96,15 @@ export const HELP_SECTIONS: HelpSection[] = [
             label: 'Auditor',
             description: 'Strictly read-only. Can view all data, generate reports, and export. Cannot modify anything. Suitable for the statutory auditor or external reviewer.',
           },
+          {
+            label: 'Owner (resident)',
+            description: 'A separate, simplified self-service view for individual flat owners — not a committee role. Sees a cut-down nav (My Flat, Notices, Payment Info, My Profile) scoped to their own flat: their own dues/corpus status, society announcements, payment/UPI details, and their own profile. Cannot see other flats\' data or any committee-only page.',
+          },
         ],
         tips: [
           'Your role badge is shown in the top-right corner of every page.',
           'The sidebar shows only the actions available to your role — buttons that require a higher role are hidden or greyed out.',
+          'The Owner role gets an entirely different, simplified navigation menu rather than a restricted version of the committee menu.',
         ],
         relatedIds: ['users-roles', 'users-add'],
       },
@@ -148,6 +153,21 @@ export const HELP_SECTIONS: HelpSection[] = [
         tips: [
           'The keyboard shortcut Ctrl+/ works even when a text field is not focused.',
         ],
+      },
+      {
+        id: 'profile',
+        title: 'My Profile & Changing Your Password',
+        summary: 'Every role can update their own display name and contact email, and change their own password, from My Profile.',
+        steps: [
+          { text: 'Click your name/avatar in the sidebar footer to open My Profile.' },
+          { text: 'Update your display name or contact email and save — your mobile number (login ID) is fixed and shown read-only.' },
+          { text: 'To change your password, use the separate "Change password" form: enter and confirm a new password (minimum 8 characters).' },
+        ],
+        tips: [
+          'This is genuine self-service — no admin involvement needed, as long as you\'re already logged in.',
+          'If you\'re locked out and can\'t log in at all, an Admin can generate a new password for you from the Users page.',
+        ],
+        relatedIds: ['login', 'users-password'],
       },
     ],
   },
@@ -398,14 +418,17 @@ export const HELP_SECTIONS: HelpSection[] = [
           {
             text: 'Select the Payment type: Maintenance dues or Corpus contribution.',
           },
-          { text: 'Optionally select the Corpus plan if the type is Corpus.' },
+          {
+            text: 'If the type is Corpus, choose which corpus plan the payment belongs to.',
+            detail: 'This only appears as a choice when 2 or more corpus plans are Active or Draft at the same time. With a single plan, it\'s assigned automatically.',
+          },
           { text: 'Click "Tag" to save. The row moves to the Tagged tab and updates the flat\'s dues/corpus records.' },
         ],
         tips: [
           'If a transfer covers multiple flats (combined payment), use the Split function instead.',
           'Tagging a credit as Maintenance automatically credits that flat\'s dues for the fiscal year.',
         ],
-        relatedIds: ['txn-split', 'txn-void'],
+        relatedIds: ['txn-split', 'txn-void', 'corpus-statuses'],
       },
       {
         id: 'txn-edit',
@@ -513,11 +536,11 @@ export const HELP_SECTIONS: HelpSection[] = [
         examples: [
           {
             label: 'Draft',
-            description: 'Plan created but not yet activated. Per-flat targets are being configured. Payments cannot be tagged to a Draft plan.',
+            description: 'Plan created and per-flat targets configured, but collection hasn\'t been formally announced yet. Bank credits CAN still be tagged to a Draft plan — it counts toward corpus tracking exactly like an Active plan — so pre-payments made before launch aren\'t lost.',
           },
           {
             label: 'Active',
-            description: 'Collection is in progress. Bank credits can be tagged as corpus contributions against this plan.',
+            description: 'Collection is formally in progress. Bank credits can be tagged as corpus contributions against this plan.',
           },
           {
             label: 'Completed',
@@ -585,6 +608,70 @@ export const HELP_SECTIONS: HelpSection[] = [
     ],
   },
   {
+    id: 'contributions',
+    title: 'Contributions',
+    icon: 'HandHeart',
+    route: '/contributions',
+    items: [
+      {
+        id: 'contributions-what',
+        title: 'What Is a Contribution Drive?',
+        summary: 'Voluntary, one-off collections — festival funds, welfare support for staff or their families — kept fully separate from Maintenance and Corpus.',
+        examples: [
+          {
+            label: 'Typical drives',
+            description: 'Diwali/Pongal staff bonus collection, a one-time welfare fund for a staff member\'s medical emergency, a festival decoration fund.',
+          },
+          {
+            label: 'Why keep it separate?',
+            description: 'These are voluntary and don\'t affect anyone\'s maintenance dues or corpus obligation — they need their own running balance so it\'s clear the money in matches what\'s been handed out.',
+          },
+        ],
+        tips: [
+          'Each drive has its own balance: money in (bank credits tagged to it) minus money out (the eventual disbursement, tagged as a bank debit).',
+        ],
+        relatedIds: ['contributions-tagging', 'contributions-close'],
+      },
+      {
+        id: 'contributions-tagging',
+        title: 'Creating a Drive and Tagging Payments',
+        summary: 'Start a drive, then tag matching bank transactions to it from the Transactions page.',
+        writeRoles: ['admin'],
+        steps: [
+          { text: 'Click "New drive" on the Contributions page.' },
+          { text: 'Give it a name and an optional description, then create it.' },
+          { text: 'Go to Transactions → Review (or All Transactions) to tag incoming payments to the drive.' },
+          {
+            text: 'Either pick the drive directly when tagging a credit, or pick the contributor\'s flat first and set the payment type to "Contribution".',
+          },
+          { text: 'When the collected amount is disbursed (e.g. handed to the recipient or withdrawn), tag that outgoing bank debit to the same drive too.' },
+        ],
+        tips: [
+          'A drive\'s card on the Contributions page shows the running balance at a glance — click it to expand the full list of tagged transactions.',
+          'Each drive can generate its own PDF statement (contributors, amounts, and disbursements) via "Export PDF" on its detail view.',
+        ],
+        relatedIds: ['contributions-what', 'txn-review'],
+      },
+      {
+        id: 'contributions-close',
+        title: 'Closing and Reopening a Drive',
+        summary: 'Close a drive once it\'s done — a small carry-forward balance is fine, just note why.',
+        writeRoles: ['admin'],
+        steps: [
+          { text: 'Open the drive\'s detail view and click "Close drive".' },
+          {
+            text: 'If there\'s a non-zero balance, the dialog tells you whether the drive is still holding money or was overpaid (the association funded more than it collected) — add a closing note explaining it.',
+          },
+          { text: 'A closed drive can be reopened later via "Reopen drive" if more transactions need to be tagged to it.' },
+        ],
+        tips: [
+          'Closing does not require a zero balance — a small leftover or shortfall is normal; the note is what matters for the audit trail.',
+        ],
+        relatedIds: ['contributions-what', 'contributions-tagging'],
+      },
+    ],
+  },
+  {
     id: 'expenses',
     title: 'Expenses',
     icon: 'Receipt',
@@ -608,7 +695,7 @@ export const HELP_SECTIONS: HelpSection[] = [
           'Expenses flow out of the society\'s bank account. Dues flow in. They are tracked separately.',
           'Every expense gets a voucher number (EXP-YYYY-NNNN) auto-assigned by the system.',
         ],
-        relatedIds: ['expenses-hub-spoke', 'expenses-add', 'expenses-voucher'],
+        relatedIds: ['expenses-hub-spoke', 'expenses-add', 'expenses-pending', 'expenses-voucher'],
       },
       {
         id: 'expenses-hub-spoke',
@@ -695,11 +782,15 @@ export const HELP_SECTIONS: HelpSection[] = [
       {
         id: 'expenses-statuses',
         title: 'Expense Statuses',
-        summary: 'Cash, Unreconciled, and Reconciled — indicating how the expense relates to the bank statement.',
+        summary: 'Cash, Direct, Unreconciled, and Reconciled — indicating how the expense relates to the bank statement.',
         examples: [
           {
             label: 'Cash',
-            description: 'Petty cash expense paid from the cash box. Will never appear as a bank debit. No reconciliation needed.',
+            description: 'Petty cash expense paid from the cash box. Saving a Cash-mode expense automatically records a disbursement against the petty cash balance, and it will never be matched to a bank statement row — so only use Cash when the money genuinely left the physical cash box, never as a default for "not sure yet".',
+          },
+          {
+            label: 'Direct (owner paid)',
+            description: 'The vendor was paid directly by one or more flat owners rather than from the society\'s bank account. Each contributing flat gets a credit and a matching debit (net zero to the bank), and any remaining balance the society itself paid reconciles normally at that net amount.',
           },
           {
             label: 'Unreconciled',
@@ -712,9 +803,40 @@ export const HELP_SECTIONS: HelpSection[] = [
         ],
         tips: [
           'Reconcile all bank-transfer expenses before month-end to ensure your books match the bank statement.',
-          'Cash expenses never need reconciliation — they are self-contained.',
+          'New expenses default to "Online" payment mode, not Cash — this is deliberate: an incorrect Online default just fails to auto-match in reconciliation (a visible, fixable gap), while an incorrect Cash default silently misstates the petty cash balance. Only switch to Cash when you\'re sure.',
         ],
-        relatedIds: ['expenses-reconcile', 'faq-reconciliation'],
+        warnings: [
+          'Don\'t leave a bundled or pending-item expense on "Cash" out of habit — if it was actually paid by UPI or bank transfer, it will wrongly reduce the petty cash balance and can never be reconciled against the real bank debit.',
+        ],
+        relatedIds: ['expenses-reconcile', 'expenses-pending', 'faq-reconciliation'],
+      },
+      {
+        id: 'expenses-pending',
+        title: 'Pending Items & Bundling',
+        summary: 'Capture small cash/UPI/online payments as they happen, then bundle several of them into one Day Book expense later.',
+        writeRoles: ['admin'],
+        steps: [
+          { text: 'Go to Expenses → Pending Items tab.' },
+          { text: 'Click "Add" to log a single small payment as it happens — date, amount, description, category, cost centre, and payment mode.' },
+          {
+            text: 'For several payments at once, use "Bulk add" — a spreadsheet-style grid where you can type or paste rows straight from Excel (Date, Description, Amount, Category).',
+          },
+          { text: 'Select several pending items with the same funding source (all Maintenance, or all belonging to the same corpus plan) and click "Bundle".' },
+          {
+            text: 'Review the bundle header — expense date, description, and payment mode default to the majority mode of the selected items — then adjust if needed and save.',
+            detail: 'Saving creates one Day Book expense (with its own voucher number) made up of the bundled items as line items.',
+          },
+          { text: 'Later, editing that bundled expense lets you tag each line item individually with its own paid date, vendor/staff payee, payment mode, and reference number.' },
+        ],
+        tips: [
+          'Attach a receipt photo when capturing a pending item — a paper-clip icon shows on items with attachments, and the photo carries over into the bundled expense.',
+          'Inside "Add Expense", "Add from pending" pulls waiting pending items directly into the form as line items instead of bundling them separately.',
+        ],
+        warnings: [
+          'You cannot mix maintenance items and corpus items (or items from two different corpus plans) in one bundle.',
+          'Double-check the bundle\'s suggested payment mode before saving — see Expense Statuses for why an incorrect "Cash" default is risky.',
+        ],
+        relatedIds: ['expenses-add', 'expenses-statuses', 'expenses-hub-spoke'],
       },
       {
         id: 'expenses-reconcile',
@@ -820,6 +942,98 @@ export const HELP_SECTIONS: HelpSection[] = [
     ],
   },
   {
+    id: 'finance',
+    title: 'Fixed Deposits',
+    icon: 'PiggyBank',
+    route: '/finance',
+    items: [
+      {
+        id: 'finance-what',
+        title: 'Tracking Fixed Deposits',
+        summary: 'The Fixed Deposits page tracks the society\'s bank FDs — principal, interest rate, maturity date, and interest earned once matured.',
+        examples: [
+          {
+            label: 'KPI cards',
+            description: 'Total principal currently locked in active FDs, the nearest upcoming maturity date (with days remaining, or overdue if past due), and cumulative interest earned across matured deposits.',
+          },
+        ],
+        tips: [
+          'Toggle the list between "Active" and "All" deposits to see matured/closed ones too.',
+          'An active deposit past its maturity date is highlighted so it doesn\'t get forgotten.',
+        ],
+        relatedIds: ['finance-add', 'finance-matured'],
+      },
+      {
+        id: 'finance-add',
+        title: 'Adding a Fixed Deposit',
+        summary: 'Record a new FD when the society opens one, optionally linking it to the bank debit that funded it.',
+        writeRoles: ['admin'],
+        steps: [
+          { text: 'Click "Add Deposit" on the Fixed Deposits page.' },
+          { text: 'Enter the deposit number, bank, principal amount, interest rate, opened date, and maturity date.' },
+          { text: 'Choose the source of funds — Surplus, Corpus, or Other.' },
+          { text: 'Optionally link the deposit to the matching unmatched bank debit (DR) transaction from the statement, for reconciliation.' },
+        ],
+        relatedIds: ['finance-what', 'finance-matured'],
+      },
+      {
+        id: 'finance-matured',
+        title: 'Marking a Deposit Matured',
+        summary: 'Record the actual payout when an FD matures — the page shows an expected amount for reference, but the actual figure from the bank is what gets saved.',
+        writeRoles: ['admin'],
+        steps: [
+          { text: 'Click "Mark Matured" on the deposit\'s row.' },
+          { text: 'Enter the matured date and the actual maturity amount credited by the bank.' },
+          { text: 'Optionally link the matching unmatched bank credit (CR) transaction from the statement.' },
+        ],
+        tips: [
+          'The expected maturity amount shown is a simple-interest estimate — always enter the real amount the bank actually paid, since it may differ slightly (compounding, TDS deducted, etc.).',
+        ],
+        relatedIds: ['finance-what', 'finance-add'],
+      },
+    ],
+  },
+  {
+    id: 'announcements',
+    title: 'Announcements',
+    icon: 'Megaphone',
+    route: '/announcements',
+    items: [
+      {
+        id: 'announcements-what',
+        title: 'The Notice Board',
+        summary: 'A simple notice feed for residents — events, utility interruptions, maintenance notices, governance and finance updates.',
+        examples: [
+          {
+            label: 'Tags',
+            description: 'Each announcement is tagged Event, Utility, Maintenance, Governance, or Finance, shown as a coloured badge.',
+          },
+        ],
+        tips: [
+          'Everyone can see this page, including Owner-role residents (it appears as "Notices" in their simplified nav) — it\'s one of the few pages residents have access to.',
+          'Pinned announcements always show at the top, above the regular feed.',
+        ],
+        relatedIds: ['announcements-manage'],
+      },
+      {
+        id: 'announcements-manage',
+        title: 'Posting an Announcement',
+        summary: 'Only Admin can compose, pin, or delete announcements — Committee sees the feed read-only, same as everyone else.',
+        writeRoles: ['admin'],
+        steps: [
+          { text: 'Click "New announcement" on the Announcements page.' },
+          { text: 'Enter a title, the body text, and pick a tag (Event / Utility / Maintenance / Governance / Finance).' },
+          { text: 'Check "Pin to top" if it should stay above the regular feed (e.g. an urgent notice).' },
+          { text: 'Click Post.' },
+        ],
+        warnings: [
+          'Unlike most other pages, this is Admin-only to write — Committee members can read but not post, pin, or delete announcements.',
+        ],
+        relatedIds: ['announcements-what'],
+      },
+    ],
+  },
+  {
     id: 'flats',
     title: 'Flats & Residents',
     icon: 'Users',
@@ -828,18 +1042,19 @@ export const HELP_SECTIONS: HelpSection[] = [
       {
         id: 'flats-grid',
         title: 'Flat Master Grid',
-        summary: 'Full list of all units with flat code, block, type, BHK, terrace, maintenance rate, and corpus target.',
+        summary: 'Full list of all units with flat code, block, type, BHK, terrace, maintenance rate, and live corpus target/balance.',
         examples: [
           {
             label: 'Columns explained',
-            description: 'Flat code (e.g. A-101), Block (A–E), Unit type (Apartment / Penthouse / Shop), BHK, P.T. (private terrace — Y/N), Rate/mo (current maintenance rate), Corpus target (total corpus obligation for the active plan).',
+            description: 'Flat code (e.g. A-101), Block (A–E), Unit type (Apartment / Penthouse / Shop), BHK, P.T. (private terrace — Y/N), Rate/mo (current maintenance rate), Corpus Target (this flat\'s target across all active/draft corpus plans), Corpus Balance (how much of that target is still unpaid).',
           },
         ],
         tips: [
           'Click any column header to sort. Use the search box to find a specific flat or owner name.',
           'AG Grid allows you to resize columns by dragging the column header border.',
+          'Corpus Target and Corpus Balance are computed live from the current corpus plan(s) — they show "—" for a flat with no active or draft corpus plan, not zero.',
         ],
-        relatedIds: ['flats-rate-change', 'flats-residents'],
+        relatedIds: ['flats-rate-change', 'flats-residents', 'flats-dues-whatsapp', 'corpus-statuses'],
       },
       {
         id: 'flats-rate-change',
@@ -897,10 +1112,62 @@ export const HELP_SECTIONS: HelpSection[] = [
           { text: 'Click Edit to update any resident details. Changes are recorded in the audit log.' },
         ],
         tips: [
-          'The UPI ID stored here appears in the WhatsApp reminder message generated from the Dues page.',
-          'Keep phone numbers up to date — they are the primary contact for payment reminders.',
+          'The UPI ID stored here appears in the WhatsApp reminder message generated from the Dues page or from a flat\'s own detail panel.',
+          'Keep phone numbers up to date — they are the primary contact for payment reminders, and only visible to Admin and Committee roles.',
         ],
-        relatedIds: ['dues-whatsapp', 'flats-grid'],
+        relatedIds: ['dues-whatsapp', 'flats-grid', 'flats-dues-whatsapp'],
+      },
+      {
+        id: 'flats-dues-whatsapp',
+        title: 'Dues & WhatsApp Reminder on a Flat\'s Detail Panel',
+        summary: 'Each flat\'s detail panel shows maintenance and corpus dues together, with a one-tap WhatsApp reminder button.',
+        roles: ['admin', 'committee'],
+        steps: [
+          { text: 'Click a flat row on the Flats & Residents grid to open its detail panel.' },
+          { text: 'The "Dues" card shows Maintenance outstanding and, if the flat is covered by an active/draft corpus plan, Corpus outstanding — plus a combined Total outstanding when both are due.' },
+          { text: 'If anything is outstanding, a "Send" button appears per resident with a phone number on file — tap it to open WhatsApp with a pre-filled reminder message.' },
+          { text: 'If no resident has a phone number saved, a "Copy reminder" button appears instead so you can paste the message manually.' },
+        ],
+        examples: [
+          {
+            label: 'What the WhatsApp message contains',
+            description: 'The combined outstanding amount, a line-by-line breakdown (Maintenance / Corpus), the society\'s UPI ID and bank details from Settings → General (with a UPI quick-pay link when available), and a closing note from the association.',
+          },
+        ],
+        tips: [
+          'This is the fastest way to chase a specific flat — it pulls the same live dues figures shown on the Dues and Corpus pages, so there\'s no need to jump between pages.',
+          'The Send/Copy reminder buttons only appear to Admin and Committee roles, matching who can see resident phone numbers.',
+        ],
+        warnings: [
+          'A flat with no active or draft corpus plan will only show Maintenance outstanding in this card — that\'s expected, not a bug.',
+        ],
+        relatedIds: ['flats-grid', 'flats-residents', 'dues-whatsapp', 'corpus-statuses'],
+      },
+    ],
+  },
+  {
+    id: 'owner-portal',
+    title: 'My Flat (Resident View)',
+    icon: 'Home',
+    route: '/my-flat',
+    items: [
+      {
+        id: 'owner-portal-what',
+        title: 'What Residents See',
+        summary: 'A read-only, single-flat summary — the entire "My Flat" / Owner Portal view for a resident\'s own unit.',
+        roles: ['admin', 'committee', 'auditor'],
+        examples: [
+          {
+            label: 'What\'s on the page',
+            description: 'Flat identity, a society-wide health strip (maintenance cleared %, corpus collected %, last expense), this flat\'s maintenance dues status with pending months, one card per active corpus plan with a progress bar, a "how your corpus is used" expense breakdown, any outstanding corpus arrears from closed plans, the society\'s UPI/bank payment details with a suggested payment remark, and a payment history table with per-payment receipt downloads.',
+          },
+        ],
+        tips: [
+          'This is what an Owner-role login sees as their home page (labelled "My Flat") — Owners never see the committee-facing Dues/Corpus/Flats pages.',
+          'A staff member (Admin/Committee/Auditor) who also has a flat assigned to them personally gets an extra "My Flat" nav item to see this same view for their own unit.',
+          'There is nothing to add, edit, or delete here — the only action is downloading a fiscal-year statement PDF.',
+        ],
+        relatedIds: ['users-roles', 'dues-statuses', 'corpus-progress'],
       },
     ],
   },
@@ -1115,6 +1382,10 @@ export const HELP_SECTIONS: HelpSection[] = [
             label: 'Auditor',
             description: 'View all data. Generate and download all reports. Strictly read-only — no mutations, no user management.',
           },
+          {
+            label: 'Owner (resident)',
+            description: 'A resident\'s self-service login — sees only their own flat\'s dues/corpus status, society announcements, and payment info, via an entirely separate simplified nav. Cannot see other flats or any committee page.',
+          },
         ],
         tips: [
           'Role badges are shown in the top-right of the app and in the sidebar footer.',
@@ -1129,7 +1400,7 @@ export const HELP_SECTIONS: HelpSection[] = [
         roles: ['admin'],
         writeRoles: ['admin'],
         steps: [
-          { text: 'Go to Settings → Users tab (or the /users page).' },
+          { text: 'Go to the Users page.' },
           { text: 'Click "Add User".' },
           {
             text: 'Enter the user\'s full name.',
@@ -1138,13 +1409,14 @@ export const HELP_SECTIONS: HelpSection[] = [
             text: 'Enter their 10-digit mobile number (no spaces or country code).',
             detail: 'The login email is auto-constructed: 9876543210 → 9876543210@lilac.com',
           },
-          { text: 'Set an initial password (share it securely with the user).' },
-          { text: 'Select the role: Admin, Committee, or Auditor.' },
-          { text: 'Click "Create User". The user can log in immediately.' },
+          { text: 'Select the role: Admin, Committee, Auditor, or Owner (resident self-service).' },
+          { text: 'If the role is Owner, or the user should have "My Flat" access, assign their flat.' },
+          { text: 'Click "Create User". A password is generated automatically — copy it or send it via the pre-filled WhatsApp link — and the user can log in immediately.' },
         ],
         tips: [
           'The new user\'s email is always <mobile>@lilac.com. They cannot change it.',
           'You can have multiple Admin users — useful when there is more than one treasurer.',
+          'A non-Owner user (admin/committee/auditor) who also has a flat assigned to them personally gets an extra "My Flat" nav item to see their own flat\'s status.',
         ],
         warnings: [
           'Share passwords securely (in person or via an encrypted channel). Do not send passwords over SMS or WhatsApp.',
@@ -1171,18 +1443,20 @@ export const HELP_SECTIONS: HelpSection[] = [
       {
         id: 'users-password',
         title: 'Password Reset',
-        summary: 'There is no self-service password reset. Admin must delete and recreate the user account.',
+        summary: 'Admin can generate a new password for anyone in-place. Anyone can also change their own password from My Profile.',
         roles: ['admin'],
         writeRoles: ['admin'],
         steps: [
-          { text: 'Go to the Users page and find the user who needs a new password.' },
-          { text: 'Click Delete on the user row. Confirm deletion.' },
-          { text: 'Click "Add User" and recreate the account with the same mobile number and a new password.' },
-          { text: 'Share the new password securely with the user.' },
+          { text: 'Go to the Users page and click Edit (pencil) on the user who needs a new password.' },
+          { text: 'Click "Generate new password" in the edit dialog.' },
+          { text: 'Share the new credentials with the user securely (the dialog offers a copy button and a pre-filled WhatsApp link).' },
+        ],
+        tips: [
+          'This resets the password in place — the account, and everything tied to it (their expenses, edits, audit log entries), is untouched. There\'s no need to delete and recreate the user.',
+          'Any logged-in user — any role — can also change their own password anytime from the sidebar → My Profile → Change password, without needing an admin.',
         ],
         warnings: [
-          'Deleting a user does not delete any data they entered. All expenses, transactions, and audit log entries remain intact.',
-          'The user cannot log in during the brief period between deletion and recreation.',
+          'Share passwords securely (in person or via an encrypted channel). Do not send passwords over SMS or unencrypted chat.',
         ],
         relatedIds: ['users-add', 'login'],
       },
