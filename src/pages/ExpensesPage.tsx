@@ -4105,7 +4105,7 @@ function PendingItemDialog({ item, onClose }: { item?: PendingItem; onClose: () 
       notes:          item.notes ?? '',
     } : {
       paid_date:    new Date().toISOString().slice(0, 10),
-      payment_mode: 'Cash',
+      payment_mode: 'Online',
       payee_type:   'Other',
       cost_center:  'Common',
     },
@@ -4390,7 +4390,7 @@ function BundleDialog({ items, onClose, onBundled }: { items: PendingItem[]; onC
 
   const maxDate = items.reduce((m, i) => i.paid_date > m ? i.paid_date : m, items[0]?.paid_date ?? new Date().toISOString().slice(0,10))
   const modeFreq = items.reduce<Record<string, number>>((acc, i) => { acc[i.payment_mode] = (acc[i.payment_mode] ?? 0) + 1; return acc }, {})
-  const commonMode = (Object.entries(modeFreq).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'Cash') as BundleHeaderForm['payment_mode']
+  const commonMode = (Object.entries(modeFreq).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'Online') as BundleHeaderForm['payment_mode']
   const dateRange = (() => {
     const dates = items.map(i => i.paid_date).sort()
     const fmt = (d: string) => `${new Date(d).getDate()} ${new Date(d).toLocaleString('en', { month: 'short' })}`
