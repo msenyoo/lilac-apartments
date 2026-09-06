@@ -2,11 +2,13 @@ import { useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AgGridReact } from 'ag-grid-react'
 import type { ColDef } from 'ag-grid-community'
-import { Edit2, Ruler, UserMinus, UserPlus, Pencil, Trash2, Contact, X } from 'lucide-react'
+import { Edit2, Ruler, UserMinus, UserPlus, Pencil, Trash2, Contact, X, MessageCircle, Check } from 'lucide-react'
 import { supabase, Flat, Resident, Transaction } from '@/lib/supabase'
 import { formatDateDMY } from '@/lib/date'
 import { formatINR, getLegacyMappings, LegacyMapping, guessSenderIdType } from '@/lib/tagger'
 import { useRoleCtx } from '@/contexts/RoleContext'
+import { fetchFlatContactsByCode } from '@/lib/contacts'
+import { WhatsAppSendButtons } from '@/components/WhatsAppSendButtons'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog'
 import { toast } from 'sonner'
@@ -60,11 +62,13 @@ export default function FlatsPage() {
 
 // ── FLATS TAB ─────────────────────────────────────────────────
 function FlatsTab() {
-  const { isAdmin } = useRoleCtx()
+  const { isAdmin, role } = useRoleCtx()
+  const canSeePhone = isAdmin || role === 'committee'
   const qc = useQueryClient()
   const [selected, setSelected] = useState<Flat | null>(null)
   const [editRate, setEditRate] = useState(false)
   const [editArea, setEditArea] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   const { data: flats, isLoading } = useQuery({
     queryKey: ['flats-full'],
@@ -84,6 +88,94 @@ function FlatsTab() {
     },
     enabled: !!selected,
   })
+
+  // flats.corpus_target is a stale legacy column frozen at 2024 seed values — the live
+  // per-flat target lives on corpus_plan_flats (via v_corpus_tracker), scoped to whichever
+  // corpus plan(s) are currently active/draft, same source the Corpus page and reports use.
+  const { data: corpusEntries } = useQuery({
+    queryKey: ['flat-corpus-entries', selected?.code],
+    queryFn: async () => {
+      if (!selected) return []
+      const { data } = await supabase.from('v_corpus_tracker')
+        .select('corpus_target, balance')
+        .eq('flat_code', selected.code)
+      return data ?? []
+    },
+    enabled: !!selected,
+  })
+  const hasActiveCorpusPlan = (corpusEntries ?? []).length > 0
+  const corpusTarget  = (corpusEntries ?? []).reduce((s, e) => s + (e.corpus_target ?? 0), 0)
+  const corpusBalance = (corpusEntries ?? []).reduce((s, e) => s + (e.balance ?? 0), 0)
+
+  const { data: duesEntry } = useQuery({
+    queryKey: ['flat-dues-entry', selected?.code],
+    queryFn: async () => {
+      if (!selected) return null
+      const { data } = await supabase.from('v_dues_tracker')
+        .select('total_outstanding')
+        .eq('flat_code', selected.code)
+        .maybeSingle()
+      return data
+    },
+    enabled: !!selected,
+  })
+  const duesOutstanding = duesEntry ? Number(duesEntry.total_outstanding) : 0
+  const combinedOutstanding = Math.max(0, duesOutstanding) + Math.max(0, corpusBalance)
+
+  const { data: appSettings } = useQuery({
+    queryKey: ['app-settings'],
+    queryFn: async () => {
+      const { data } = await supabase.from('app_settings').select('*')
+      return Object.fromEntries((data ?? []).map((s: any) => [s.key, s.value]))
+    },
+  })
+
+  const { data: contacts } = useQuery({
+    queryKey: ['flat-contacts', selected?.code],
+    queryFn: () => fetchFlatContactsByCode(selected!.code),
+    enabled: !!selected && canSeePhone,
+  })
+
+  function buildReminderText() {
+    if (!selected) return ''
+    const asOf = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+    const lines = [
+      `*Lilac Apartments – Payment Reminder*`,
+      ``,
+      `*Flat ${selected.code} · ${asOf}*`,
+      ``,
+      `Dear Resident,`,
+      ``,
+      `This is a gentle reminder that your outstanding maintenance & corpus dues are currently *${formatINR(combinedOutstanding)}*:`,
+      ``,
+    ]
+    if (duesOutstanding > 0) lines.push(`• Maintenance: ${formatINR(duesOutstanding)}`)
+    if (corpusBalance > 0)   lines.push(`• Corpus: ${formatINR(corpusBalance)}`)
+    const upi  = appSettings?.collection_upi
+    const bank = appSettings?.collection_bank
+    if (upi || bank) {
+      lines.push(``, `*Pay via:*`)
+      if (upi) {
+        lines.push(`UPI ID: \`${upi}\``)
+        const payUrl = `upi://pay?pa=${upi}&pn=${encodeURIComponent('Lilac Apartment Association')}&am=${combinedOutstanding}&cu=INR`
+        lines.push(``, `*Quick Pay* (supported on some devices):`, `\`${payUrl}\``)
+      }
+      if (bank) lines.push(``, `Bank: ${bank}`)
+    }
+    lines.push(
+      ``,
+      `We'd appreciate it if you could clear the dues at your earliest convenience. Thank you for your cooperation!`,
+      ``,
+      `— *The Lilac Apartment Association, Rajakilpakkam*`,
+    )
+    return lines.join('\n')
+  }
+
+  async function handleCopyReminder() {
+    await navigator.clipboard.writeText(buildReminderText())
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2500)
+  }
 
   const { data: flatsLite } = useQuery({
     queryKey: ['flats-lite'],
@@ -152,13 +244,38 @@ function FlatsTab() {
                     <Detail label="BHK"         value={selected.bhk_type ?? '—'} />
                     <Detail label="Private terrace" value={selected.has_private_terrace ? 'Yes' : 'No'} />
                     <Detail label="Current rate" value={formatINR(selected.maintenance_amt) + '/mo'} />
-                    <Detail label="Corpus target" value={formatINR(selected.corpus_target)} />
+                    <Detail label="Corpus target" value={hasActiveCorpusPlan ? formatINR(corpusTarget) : 'No active plan'} />
+                    {hasActiveCorpusPlan && (
+                      <Detail label="Corpus balance" value={corpusBalance > 0 ? formatINR(corpusBalance) : '✓ Clear'} />
+                    )}
                   </div>
                   {isAdmin && (
                     <button onClick={() => setEditRate(true)}
                       className="w-full btn-secondary text-sm flex items-center justify-center gap-1.5">
                       <Edit2 size={13} /> Change maintenance rate
                     </button>
+                  )}
+                </div>
+
+                {/* Dues */}
+                <div className="surface !p-4 flex flex-col gap-3">
+                  <h4 className="font-medium text-sm">Dues</h4>
+                  <div className="space-y-1.5 text-sm">
+                    <Detail label="Maintenance outstanding" value={duesOutstanding > 0 ? formatINR(duesOutstanding) : '✓ Clear'} />
+                  </div>
+                  {combinedOutstanding > 0 && (
+                    <div className="flex gap-2">
+                      {canSeePhone && (!contacts || contacts.length === 0) && (
+                        <button onClick={handleCopyReminder}
+                          className="flex-1 flex items-center justify-center gap-2 py-2 rounded-[10px] border font-medium text-[13px] transition-colors"
+                          style={{ borderColor: 'var(--ink-200)', background: '#fff', color: 'var(--ink-700)' }}>
+                          {copied
+                            ? <><Check size={14} /> Copied!</>
+                            : <><MessageCircle size={14} /> Copy reminder</>}
+                        </button>
+                      )}
+                      {canSeePhone && <WhatsAppSendButtons contacts={contacts ?? []} text={buildReminderText()} />}
+                    </div>
                   )}
                 </div>
 
